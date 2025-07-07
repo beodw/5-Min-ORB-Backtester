@@ -172,18 +172,16 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
 
 
   useEffect(() => {
-    if (windowedData.length === 0) {
-      // If there's no data in the window, don't change the Y-domain.
-      // This prevents expensive calculations and keeps the scale stable when panning into empty space.
-      return;
-    }
-    
+    if (aggregatedData.length === 0 && !openingRange) return;
+
     let min = Infinity;
     let max = -Infinity;
 
-    for (const d of windowedData) {
+    if (windowedData.length > 0) {
+      for (const d of windowedData) {
         if (d.low < min) min = d.low;
         if (d.high > max) max = d.high;
+      }
     }
     
     if (openingRange) {
@@ -197,7 +195,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
 
     const padding = (max - min) * 0.1 || 10;
     setYDomain([min - padding, max + padding]);
-  }, [windowedData, openingRange]);
+  }, [windowedData, openingRange, aggregatedData.length]);
 
   const xTimeDomain = useMemo(() => {
     if (!aggregatedData || aggregatedData.length === 0) return [0, 0];
