@@ -26,12 +26,10 @@ export default function AlgoInsightsPage() {
     const getOffsetInMinutes = (timeZone: string): number => {
         try {
             const now = new Date();
-            // Create dates in UTC and the target timezone to calculate the difference
             const utcDate = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }));
             const tzDate = new Date(now.toLocaleString('en-US', { timeZone }));
             return (tzDate.getTime() - utcDate.getTime()) / 60000;
         } catch (e) {
-            // Some obscure timezones might not be supported everywhere
             return NaN;
         }
     };
@@ -58,17 +56,14 @@ export default function AlgoInsightsPage() {
     setTimezones(tzData);
 
     const savedTimeZone = localStorage.getItem('algo-insights-timezone');
-    // Ensure the saved timezone is a valid one before setting it
     if (savedTimeZone && Intl.supportedValuesOf('timeZone').includes(savedTimeZone)) {
         setTimeZone(savedTimeZone);
     } else {
-        // Fallback to user's local timezone if nothing is saved or it's invalid
         setTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
     }
   }, []);
 
   useEffect(() => {
-    // Persist the timezone to localStorage whenever it changes
     if (timeZone) {
         localStorage.setItem('algo-insights-timezone', timeZone);
     }
@@ -87,7 +82,7 @@ export default function AlgoInsightsPage() {
         stopLoss: stopLoss,
         takeProfit: takeProfit,
         entryIndex: chartData.dataIndex,
-        widthInPoints: 100, // Visual width, doesn't affect simulation logic
+        widthInPoints: 100,
         position: placingToolType,
       };
       
@@ -135,36 +130,53 @@ export default function AlgoInsightsPage() {
   };
 
   const handleDateSelect = (date: Date | undefined) => {
-    if (date) {
-        const endOfDay = new Date(date);
-        endOfDay.setHours(23, 59, 59, 999);
-        setSelectedDate(endOfDay);
+    if (date && timeZone) {
+      // To handle timezones correctly, we find midnight of the *next* day in the target timezone,
+      // then subtract one millisecond. This is a robust way to handle Daylight Saving Time changes.
+      
+      // 1. Get the next calendar day from what the user picked.
+      const nextDay = new Date(date);
+      nextDay.setDate(date.getDate() + 1);
+
+      // 2. Format the next day into a YYYY/MM/DD string, which is a less ambiguous format for the Date constructor.
+      const year = nextDay.getFullYear();
+      const month = nextDay.getMonth() + 1; // JS months are 0-indexed
+      const day = nextDay.getDate();
+      const nextDayStr = `${year}/${month}/${day}`;
+
+      // 3. Create a Date object for midnight of the next day. The key is to combine the date string
+      // with a generic time string and then use `toLocaleString` to have the JS engine
+      // calculate the correct date/time in the target zone.
+      const tempDate = new Date(`${nextDayStr}, 00:00:00`);
+      const tzDateString = tempDate.toLocaleString("en-US", { timeZone });
+      const finalNextDay = new Date(tzDateString);
+
+      // 4. Subtract one millisecond to get 23:59:59.999 on the *selected* day in the correct timezone.
+      const endOfDay = new Date(finalNextDay.getTime() - 1);
+      
+      setSelectedDate(endOfDay);
     } else {
         setSelectedDate(undefined);
     }
   };
   
   const handleNextCandle = () => {
-    const getDuration = (tf: string): number => { // returns duration in milliseconds
+    const getDuration = (tf: string): number => {
       switch (tf) {
         case '1m': return 60 * 1000;
         case '30m': return 30 * 60 * 1000;
         case '1H': return 60 * 60 * 1000;
         case '4H': return 4 * 60 * 60 * 1000;
         case '1D': return 24 * 60 * 60 * 1000;
-        default: return 24 * 60 * 60 * 1000; // Default to 1 Day
+        default: return 24 * 60 * 60 * 1000;
       }
     };
 
     setSelectedDate(currentDate => {
-      // If no date is selected, start from the first data point.
       const startDate = currentDate || (mockPriceData.length > 0 ? mockPriceData[0].date : new Date());
-      
       const newDate = new Date(startDate.getTime() + getDuration(timeframe));
-      
       const lastAvailableDate = mockPriceData[mockPriceData.length - 1].date;
 
-      // Ensure the new date does not exceed the last available data point.
       if (newDate > lastAvailableDate) {
         return lastAvailableDate;
       }
