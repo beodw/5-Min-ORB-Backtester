@@ -5,6 +5,7 @@ export interface PriceData {
   high: number;
   low: number;
   close: number;
+  wick: [number, number];
 }
 
 // Added to fix a type error in InteractiveChart

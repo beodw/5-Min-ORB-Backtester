@@ -11,7 +11,8 @@ function generateMockPriceData(numPoints = 500): PriceData[] {
     date.setDate(date.getDate() + i);
 
     const open = lastClose + (Math.random() - 0.5) * 2;
-    const close = open + (Math.random() - 0.5) * 5;
+    const volatility = Math.random() * 5 + 1; // Ensure some movement
+    const close = open + (Math.random() - 0.5) * volatility;
     
     const high = Math.max(open, close) + Math.random() * 2;
     const low = Math.min(open, close) - Math.random() * 2;
@@ -22,6 +23,7 @@ function generateMockPriceData(numPoints = 500): PriceData[] {
       high,
       low,
       close,
+      wick: [low, high],
     });
 
     lastClose = close;

@@ -11,6 +11,8 @@ interface RiskRewardToolProps {
   onRemove: (id: string) => void;
   data: PriceData[];
   chartContainer: HTMLDivElement;
+  xDomain: [number, number];
+  yDomain: [number, number];
 }
 
 const X_AXIS_MARGIN_LEFT = 60;
@@ -18,7 +20,7 @@ const X_AXIS_MARGIN_RIGHT = 20;
 const Y_AXIS_MARGIN_TOP = 5;
 const Y_AXIS_MARGIN_BOTTOM = 20;
 
-export function RiskRewardTool({ tool, onUpdate, onRemove, data, chartContainer }: RiskRewardToolProps) {
+export function RiskRewardTool({ tool, onUpdate, onRemove, data, chartContainer, xDomain, yDomain }: RiskRewardToolProps) {
   const [dragState, setDragState] = useState({
     active: false,
     type: 'none', // 'body', 'top', 'bottom', 'left', 'right'
@@ -36,34 +38,23 @@ export function RiskRewardTool({ tool, onUpdate, onRemove, data, chartContainer 
     containerHeight,
     plotWidth,
     plotHeight,
-    maxPrice,
-    priceRange,
-    pointsCount,
   } = useMemo(() => {
+    if (!chartContainer) return { containerWidth: 0, containerHeight: 0, plotWidth: 0, plotHeight: 0 };
     const { width, height } = chartContainer.getBoundingClientRect();
     const pWidth = width - X_AXIS_MARGIN_LEFT - X_AXIS_MARGIN_RIGHT;
     const pHeight = height - Y_AXIS_MARGIN_TOP - Y_AXIS_MARGIN_BOTTOM;
-    
-    const lows = data.map(d => d.low);
-    const highs = data.map(d => d.high);
-    const minP = Math.min(...lows);
-    const maxP = Math.max(...highs);
     
     return {
       containerWidth: width,
       containerHeight: height,
       plotWidth: pWidth,
       plotHeight: pHeight,
-      minPrice: minP,
-      maxPrice: maxP,
-      priceRange: maxP - minP,
-      pointsCount: data.length,
     };
-  }, [chartContainer, data]);
+  }, [chartContainer]);
 
-  // If dimensions are not valid, don't render the tool.
-  // This prevents calculation errors (NaN) if the chart isn't ready
-  // or if the price data has no volatility.
+  const [minPrice, maxPrice] = yDomain;
+  const priceRange = maxPrice - minPrice;
+
   if (plotHeight <= 0 || priceRange <= 0) {
     return null;
   }
@@ -78,8 +69,12 @@ export function RiskRewardTool({ tool, onUpdate, onRemove, data, chartContainer 
   }, [maxPrice, plotHeight, priceRange]);
 
   const indexToX = useCallback((index: number) => {
-    return X_AXIS_MARGIN_LEFT + (index / (pointsCount - 1)) * plotWidth;
-  }, [plotWidth, pointsCount]);
+    const [domainStart, domainEnd] = xDomain;
+    const domainWidth = domainEnd - domainStart;
+    if (domainWidth <= 0) return 0;
+    const relativePosition = (index - domainStart) / domainWidth;
+    return X_AXIS_MARGIN_LEFT + relativePosition * plotWidth;
+  }, [xDomain, plotWidth]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -87,14 +82,13 @@ export function RiskRewardTool({ tool, onUpdate, onRemove, data, chartContainer 
       
       const chartRect = chartContainer.getBoundingClientRect();
 
-      // Vertical drag logic
       const deltaY = e.clientY - dragState.initialY;
       const priceDelta = (deltaY / plotHeight) * priceRange * -1;
       
-      // Horizontal drag logic
-      const deltaX = e.clientX - dragState.initialX;
-      const indexPerPixel = plotWidth > 0 ? (pointsCount - 1) / plotWidth : 0;
-      const indexDelta = deltaX * indexPerPixel;
+      const [domainStart, domainEnd] = xDomain;
+      const domainWidth = domainEnd - domainStart;
+      const indexPerPixel = plotWidth > 0 ? domainWidth / plotWidth : 0;
+      const indexDelta = (e.clientX - dragState.initialX) * indexPerPixel;
 
       switch (dragState.type) {
         case 'body':
@@ -162,7 +156,7 @@ export function RiskRewardTool({ tool, onUpdate, onRemove, data, chartContainer 
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [dragState, tool, onUpdate, yToPrice, plotHeight, priceRange, chartContainer, plotWidth, pointsCount]);
+  }, [dragState, tool, onUpdate, yToPrice, priceToY, plotHeight, priceRange, chartContainer, plotWidth, xDomain]);
 
 
   const handleMouseDown = (e: React.MouseEvent, type: string) => {
@@ -184,8 +178,10 @@ export function RiskRewardTool({ tool, onUpdate, onRemove, data, chartContainer 
     const entry = priceToY(tool.entryPrice);
     const stop = priceToY(tool.stopLoss);
     const profit = priceToY(tool.takeProfit);
+    
     const left = indexToX(tool.entryIndex);
-    const right = indexToX(Math.min(data.length - 1, tool.entryIndex + tool.widthInPoints));
+    const rightEdgeIndex = Math.min(data.length - 1, tool.entryIndex + tool.widthInPoints);
+    const right = indexToX(rightEdgeIndex);
     
     return { 
       entryY: entry, 
@@ -197,6 +193,11 @@ export function RiskRewardTool({ tool, onUpdate, onRemove, data, chartContainer 
       bottomHandleY: Math.max(profit, stop),
     };
   }, [tool, priceToY, indexToX, data.length]);
+
+  const endOfToolIndex = tool.entryIndex + tool.widthInPoints;
+  if (endOfToolIndex < xDomain[0] || tool.entryIndex > xDomain[1]) {
+      return null;
+  }
 
   const rrRatio = tool.entryPrice - tool.stopLoss !== 0 ? Math.abs((tool.takeProfit - tool.entryPrice) / (tool.entryPrice - tool.stopLoss)) : Infinity;
 
