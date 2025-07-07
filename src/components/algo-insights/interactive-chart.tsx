@@ -152,82 +152,63 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
     }
   }, [endDate, aggregatedData.length]);
 
-
-  const visibleData = useMemo(() => {
+  useEffect(() => {
     const [start, end] = xDomain;
     const boundedStart = Math.max(0, Math.floor(start));
-    const boundedEnd = Math.ceil(end);
-    return aggregatedData.slice(boundedStart, boundedEnd);
-  }, [aggregatedData, xDomain]);
-  
-  useEffect(() => {
-    if (visibleData.length === 0) {
-      // Don't update the domain if there's no visible data.
-      // This happens when panning into empty space, and we want the Y-axis to remain stable.
+    const boundedEnd = Math.min(Math.ceil(end), aggregatedData.length);
+    
+    const visibleDataSlice = aggregatedData.slice(boundedStart, boundedEnd);
+    
+    if (visibleDataSlice.length === 0) {
       return;
     }
     
     let min = Infinity;
     let max = -Infinity;
 
-    for (const d of visibleData) {
+    for (const d of visibleDataSlice) {
         if (d.low < min) min = d.low;
         if (d.high > max) max = d.high;
     }
     
     if (min === Infinity || max === -Infinity) {
-      return; // Should not happen with the length check, but for safety
+      return;
     }
 
     const padding = (max - min) * 0.1 || 10;
     setYDomain([min - padding, max + padding]);
-  }, [visibleData]);
+  }, [xDomain, aggregatedData]);
 
   const xTimeDomain = useMemo(() => {
     if (!aggregatedData || aggregatedData.length === 0) return [0, 0];
     
-    // Handle cases with single data point to prevent NaN errors
-    if (aggregatedData.length === 1) {
-        const singlePointTime = aggregatedData[0].date.getTime();
-        return [singlePointTime - 60000, singlePointTime + 60000]; // Pad with 1 minute
-    }
-
-    if (visibleData.length === 0) { // Handle case where view is outside data range
-        const [start, end] = xDomain;
-        const interval = aggregatedData[1].date.getTime() - aggregatedData[0].date.getTime();
-        const startTime = aggregatedData[0].date.getTime() + start * interval;
-        const endTime = aggregatedData[0].date.getTime() + end * interval;
-        return [startTime, endTime];
-    }
-
-    const firstVisibleTime = visibleData[0].date.getTime();
-    const lastVisibleTime = visibleData[visibleData.length - 1].date.getTime();
+    const [start, end] = xDomain;
     
-    const [domainStart, domainEnd] = xDomain;
-    const visibleStartIndex = Math.max(0, Math.floor(domainStart));
-    const visibleEndIndex = Math.ceil(domainEnd);
+    const firstPointTime = aggregatedData[0].date.getTime();
+    
+    // Estimate interval, handle case with 1 or 0 points
+    const interval = aggregatedData.length > 1 
+      ? aggregatedData[1].date.getTime() - firstPointTime
+      : 60000; // Default to 1 minute if not calculable
 
-    const timePerIndex = (lastVisibleTime - firstVisibleTime) / (visibleData.length -1 || 1);
+    const startTime = firstPointTime + start * interval;
+    const endTime = firstPointTime + end * interval;
 
-    const extrapolatedStartTime = firstVisibleTime - (visibleStartIndex - domainStart) * timePerIndex;
-    const extrapolatedEndTime = lastVisibleTime + (domainEnd - visibleEndIndex) * timePerIndex;
+    return [startTime, endTime];
 
-    return [extrapolatedStartTime, extrapolatedEndTime];
-
-  }, [aggregatedData, visibleData, xDomain]);
+  }, [aggregatedData, xDomain]);
 
 
   const handleClick = (e: any) => {
-    if (e && e.activeTooltipIndex !== undefined && e.activeTooltipIndex >= 0) {
-      const payload = e.activePayload?.[0]?.payload;
-      if (payload) {
-        const dataIndex = Math.floor(xDomain[0]) + e.activeTooltipIndex;
-        onChartClick({
-          close: payload.close,
-          date: new Date(payload.date),
-          dataIndex: dataIndex,
-        });
-      }
+    if (e && e.activeTooltipIndex !== undefined && e.activeTooltipIndex >= 0 && e.activePayload?.[0]?.payload) {
+        const dataIndex = aggregatedData.findIndex(d => d.date === e.activePayload[0].payload.date);
+        if (dataIndex !== -1) {
+            onChartClick({
+              close: e.activePayload[0].payload.close,
+              date: new Date(e.activePayload[0].payload.date),
+              dataIndex: dataIndex,
+            });
+        }
     }
   };
 
@@ -323,22 +304,12 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
     if (isNaN(date.getTime())) return '';
     
     const [start, end] = xDomain;
-    const endIdx = Math.min(Math.ceil(end - 1), aggregatedData.length - 1);
-    const startIdx = Math.max(0, Math.floor(start));
+    const timePerIndex = aggregatedData.length > 1 
+      ? aggregatedData[1].date.getTime() - aggregatedData[0].date.getTime() 
+      : 60000;
     
-    const firstDate = aggregatedData[startIdx]?.date;
-    const lastDate = aggregatedData[endIdx]?.date;
-
-    if (!firstDate || !lastDate) {
-        // Fallback for when we're viewing empty space
-        if (aggregatedData.length > 1) {
-            const timeDiff = (end - start) * (aggregatedData[1].date.getTime() - aggregatedData[0].date.getTime());
-            if (timeDiff > 3 * 24 * 60 * 60 * 1000) return date.toLocaleDateString([], { month: 'short', day: 'numeric', timeZone });
-        }
-        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone });
-    }
-
-    const visibleRangeInMinutes = (lastDate.getTime() - firstDate.getTime()) / (1000 * 60);
+    const visibleRangeInMs = (end - start) * timePerIndex;
+    const visibleRangeInMinutes = visibleRangeInMs / 60000;
 
     if (visibleRangeInMinutes > 3 * 24 * 60) {
       return date.toLocaleDateString([], { month: 'short', day: 'numeric', timeZone });
@@ -354,7 +325,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
       const data = payload[0].payload;
       return (
         <div className="p-2 bg-card border border-border rounded-lg shadow-lg text-sm">
-          <p className="label font-bold text-foreground">{`${new Date(label).toLocaleString([], {
+          <p className="label font-bold text-foreground">{`${new Date(data.date).toLocaleString([], {
               year: 'numeric',
               month: 'short',
               day: 'numeric',
@@ -391,7 +362,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
         </div>
       ) : (
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={visibleData} onClick={handleClick} margin={{ top: 10, right: 30, left: 0, bottom: 10 }}>
+        <ComposedChart data={aggregatedData} onClick={handleClick} margin={{ top: 10, right: 30, left: 0, bottom: 10 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border) / 0.5)" />
           <XAxis
             dataKey="date"
