@@ -13,6 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Calendar } from "@/components/ui/calendar";
+import { Input } from "@/components/ui/input";
 
 export default function AlgoInsightsPage() {
   const [rrTools, setRrTools] = useState<RRToolType[]>([]);
@@ -21,6 +22,7 @@ export default function AlgoInsightsPage() {
   const [timeZone, setTimeZone] = useState<string>('');
   const [timezones, setTimezones] = useState<{ value: string; label: string }[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
+  const [sessionStartTime, setSessionStartTime] = useState('09:30');
 
   useEffect(() => {
     const getOffsetInMinutes = (timeZone: string): number => {
@@ -61,6 +63,11 @@ export default function AlgoInsightsPage() {
     } else {
         setTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
     }
+
+    const savedSessionStart = localStorage.getItem('algo-insights-session-start');
+    if (savedSessionStart) {
+        setSessionStartTime(savedSessionStart);
+    }
   }, []);
 
   useEffect(() => {
@@ -68,6 +75,12 @@ export default function AlgoInsightsPage() {
         localStorage.setItem('algo-insights-timezone', timeZone);
     }
   }, [timeZone]);
+
+  useEffect(() => {
+    if (sessionStartTime) {
+        localStorage.setItem('algo-insights-session-start', sessionStartTime);
+    }
+  }, [sessionStartTime]);
 
 
   const handleChartClick = (chartData: { close: number; date: Date, dataIndex: number }) => {
@@ -229,6 +242,15 @@ export default function AlgoInsightsPage() {
                                   </ScrollArea>
                                 </SelectContent>
                             </Select>
+                        </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor="session-start">Session Start Time</Label>
+                            <Input
+                                id="session-start"
+                                type="time"
+                                value={sessionStartTime}
+                                onChange={(e) => setSessionStartTime(e.target.value)}
+                            />
                         </div>
                     </div>
                 </PopoverContent>
