@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 interface InteractiveChartProps {
   data: PriceData[];
   trades: Trade[];
-  onChartClick: (data: { price: number; date: Date, dataIndex: number }) => void;
+  onChartClick: (data: { close: number; date: Date, dataIndex: number }) => void;
   rrTools: RRToolType[];
   onUpdateTool: (tool: RRToolType) => void;
   onRemoveTool: (id: string) => void;
@@ -34,7 +34,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
       const payload = e.activePayload?.[0]?.payload;
       if (payload) {
         onChartClick({
-          price: payload.close, // Use close price for placing tools
+          close: payload.close, // Use close price for placing tools
           date: new Date(payload.date),
           dataIndex: e.activeTooltipIndex,
         });

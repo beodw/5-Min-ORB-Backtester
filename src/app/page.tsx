@@ -13,9 +13,9 @@ export default function AlgoInsightsPage() {
   const [rrTools, setRrTools] = useState<RRToolType[]>([]);
   const [placingToolType, setPlacingToolType] = useState<'long' | 'short' | null>(null);
 
-  const handleChartClick = (chartData: { price: number; date: Date, dataIndex: number }) => {
+  const handleChartClick = (chartData: { close: number; date: Date, dataIndex: number }) => {
     if (placingToolType) {
-      const entryPrice = chartData.price;
+      const entryPrice = chartData.close;
       const stopLoss = placingToolType === 'long' ? entryPrice * 0.98 : entryPrice * 1.02; // Default 2%
       const takeProfit = placingToolType === 'long' ? entryPrice * 1.04 : entryPrice * 0.96; // Default 4% (1:2 RR)
       
