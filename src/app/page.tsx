@@ -1,41 +1,23 @@
 
 "use client";
 
-import { useState, useEffect, startTransition } from "react";
-import { Bot, LineChart as LineChartIcon, History, Target, X, Play, ArrowUp, ArrowDown } from "lucide-react";
+import { useState, startTransition } from "react";
+import { Bot, Target, X, Play, ArrowUp, ArrowDown } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { InteractiveChart } from "@/components/algo-insights/interactive-chart";
-import { PerformanceMetrics } from "@/components/algo-insights/performance-metrics";
-import { EquityCurveChart } from "@/components/algo-insights/equity-curve-chart";
-import { TradeHistoryTable } from "@/components/algo-insights/trade-history-table";
 import { ReportDisplay } from "@/components/algo-insights/report-display";
 import { mockPriceData } from "@/lib/mock-data";
 import { simulateTrade, calculatePerformanceMetrics } from "@/lib/backtesting";
 import { generateReportAction } from "@/app/actions";
-import type { Trade, PerformanceMetrics as PerformanceMetricsType, RiskRewardTool as RRToolType } from "@/types";
+import type { Trade, RiskRewardTool as RRToolType } from "@/types";
 
 export default function AlgoInsightsPage() {
   const [trades, setTrades] = useState<Trade[]>([]);
-  const [metrics, setMetrics] = useState<PerformanceMetricsType>({
-    totalProfitLoss: 0,
-    winRate: 0,
-    maxDrawdown: 0,
-    totalTrades: 0,
-    averageProfit: 0,
-    averageLoss: 0,
-    profitFactor: 0,
-  });
   const [aiReport, setAiReport] = useState<string>("");
   const [isReportLoading, setIsReportLoading] = useState(false);
   const [rrTools, setRrTools] = useState<RRToolType[]>([]);
   const [placingToolType, setPlacingToolType] = useState<'long' | 'short' | null>(null);
-
-  useEffect(() => {
-    const newMetrics = calculatePerformanceMetrics(trades);
-    setMetrics(newMetrics);
-  }, [trades]);
 
   const handleChartClick = (chartData: { price: number; date: Date, dataIndex: number }) => {
     if (placingToolType) {
@@ -70,12 +52,6 @@ export default function AlgoInsightsPage() {
     setRrTools([]);
   };
 
-  const handleClearTrades = () => {
-    setTrades([]);
-    setAiReport("");
-    handleClearTools();
-  };
-
   const handleSimulateAll = () => {
     if (rrTools.length === 0) return;
     
@@ -98,6 +74,8 @@ export default function AlgoInsightsPage() {
   const handleGenerateReport = async () => {
     setIsReportLoading(true);
     setAiReport("");
+    
+    const metrics = calculatePerformanceMetrics(trades);
 
     const tradeHistoryString = JSON.stringify(
       trades.map((t) => ({
@@ -203,30 +181,20 @@ export default function AlgoInsightsPage() {
                     )}
                 </CardContent>
             </Card>
-           <PerformanceMetrics metrics={metrics} onClearTrades={handleClearTrades} />
           <Card className="flex-1 flex flex-col bg-card/80 backdrop-blur-sm">
-             <CardContent className="p-4 flex-1 flex flex-col">
-              <Tabs defaultValue="equity" className="flex-1 flex flex-col">
-                <TabsList className="grid w-full grid-cols-3 bg-secondary/30">
-                  <TabsTrigger value="equity"><LineChartIcon className="w-4 h-4 mr-2"/>Equity</TabsTrigger>
-                  <TabsTrigger value="history"><History className="w-4 h-4 mr-2"/>History</TabsTrigger>
-                  <TabsTrigger value="report"><Bot className="w-4 h-4 mr-2"/>AI Report</TabsTrigger>
-                </TabsList>
-                <TabsContent value="equity" className="flex-1 mt-4">
-                    <EquityCurveChart trades={trades} />
-                </TabsContent>
-                <TabsContent value="history" className="flex-1 mt-4 overflow-hidden">
-                    <TradeHistoryTable trades={trades} />
-                </TabsContent>
-                <TabsContent value="report" className="flex-1 mt-4 flex flex-col">
-                    <ReportDisplay
-                      onGenerate={handleGenerateReport}
-                      report={aiReport}
-                      isLoading={isReportLoading}
-                      hasTrades={trades.length > 0}
-                    />
-                </TabsContent>
-              </Tabs>
+             <CardHeader>
+                <CardTitle className="font-headline text-xl flex items-center gap-2">
+                    <Bot className="w-5 h-5"/>
+                    AI Report
+                </CardTitle>
+            </CardHeader>
+            <CardContent className="flex-1 flex flex-col">
+                <ReportDisplay
+                  onGenerate={handleGenerateReport}
+                  report={aiReport}
+                  isLoading={isReportLoading}
+                  hasTrades={trades.length > 0}
+                />
             </CardContent>
           </Card>
         </aside>
