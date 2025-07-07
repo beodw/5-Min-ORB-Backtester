@@ -26,6 +26,7 @@ interface InteractiveChartProps {
   isPlacingRR: boolean;
   timeframe: string;
   timeZone: string;
+  endDate?: Date;
 }
 
 const Candlestick = (props: any) => {
@@ -56,12 +57,21 @@ const Candlestick = (props: any) => {
 };
 
 
-export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdateTool, onRemoveTool, isPlacingRR, timeframe, timeZone }: InteractiveChartProps) {
+export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdateTool, onRemoveTool, isPlacingRR, timeframe, timeZone, endDate }: InteractiveChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
+
+  const filteredData = useMemo(() => {
+    if (!endDate) {
+      return data;
+    }
+    const endOfDay = new Date(endDate);
+    endOfDay.setHours(23, 59, 59, 999);
+    return data.filter(point => point.date <= endOfDay);
+  }, [data, endDate]);
   
   const aggregatedData = useMemo(() => {
-    if (timeframe === '1m' || !data || data.length === 0) {
-      return data;
+    if (timeframe === '1m' || !filteredData || filteredData.length === 0) {
+      return filteredData;
     }
 
     const getIntervalMinutes = (tf: string): number => {
@@ -75,12 +85,12 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
     };
 
     const interval = getIntervalMinutes(timeframe) * 60 * 1000; // interval in milliseconds
-    if (interval <= 60000) return data;
+    if (interval <= 60000) return filteredData;
 
     const result: PriceData[] = [];
     let currentCandle: PriceData | null = null;
 
-    for (const point of data) {
+    for (const point of filteredData) {
       const pointTime = point.date.getTime();
       const bucketTimestamp = Math.floor(pointTime / interval) * interval;
       
@@ -108,14 +118,16 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
     }
     
     return result;
-  }, [data, timeframe]);
+  }, [filteredData, timeframe]);
   
   const [xDomain, setXDomain] = useState<[number, number]>([0, aggregatedData.length > 1 ? aggregatedData.length - 1 : 1]);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState<{ x: number, domain: [number, number] } | null>(null);
 
   useEffect(() => {
-    setXDomain([0, aggregatedData.length > 1 ? aggregatedData.length - 1 : 1]);
+    const newEnd = aggregatedData.length > 1 ? aggregatedData.length - 1 : 1;
+    const newStart = Math.max(0, newEnd - (xDomain[1] - xDomain[0])); // Maintain zoom level
+    setXDomain([newStart, newEnd]);
   }, [aggregatedData]);
 
   const visibleData = useMemo(() => {
@@ -326,6 +338,8 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
             interval="preserveStartEnd"
             minTickGap={80}
             xAxisId="main"
+            domain={['dataMin', 'dataMax']}
+            type="number"
           />
           <YAxis
             orientation="right"
@@ -340,7 +354,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
           />
           <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'hsl(var(--accent))', strokeWidth: 1, strokeDasharray: '3 3' }}/>
           
-          <Bar dataKey={(d) => [d.low, d.high]} shape={<Candlestick />} isAnimationActive={false} xAxisId="main" yAxisId="main"/>
+          <Bar dataKey="wick" shape={<Candlestick />} isAnimationActive={false} xAxisId="main" yAxisId="main"/>
 
           {trades.map((trade) => (
             <ReferenceDot

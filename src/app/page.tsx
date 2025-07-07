@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Download, ArrowUp, ArrowDown, Settings } from "lucide-react";
+import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InteractiveChart } from "@/components/algo-insights/interactive-chart";
 import { mockPriceData } from "@/lib/mock-data";
@@ -11,6 +11,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Calendar } from "@/components/ui/calendar";
+import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 
 export default function AlgoInsightsPage() {
   const [rrTools, setRrTools] = useState<RRToolType[]>([]);
@@ -18,6 +21,7 @@ export default function AlgoInsightsPage() {
   const [timeframe, setTimeframe] = useState('1D');
   const [timeZone, setTimeZone] = useState<string>('');
   const [timezones, setTimezones] = useState<{ value: string; label: string }[]>([]);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>();
 
   useEffect(() => {
     const getOffsetInMinutes = (timeZone: string): number => {
@@ -176,6 +180,34 @@ export default function AlgoInsightsPage() {
                                 </SelectContent>
                             </Select>
                         </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor="date">End Date</Label>
+                             <Popover>
+                                <PopoverTrigger asChild>
+                                <Button
+                                    variant={"outline"}
+                                    className={cn(
+                                    "w-full justify-start text-left font-normal",
+                                    !selectedDate && "text-muted-foreground"
+                                    )}
+                                >
+                                    <CalendarIcon className="mr-2 h-4 w-4" />
+                                    {selectedDate ? format(selectedDate, "PPP") : <span>Pick a date</span>}
+                                </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0">
+                                <Calendar
+                                    mode="single"
+                                    selected={selectedDate}
+                                    onSelect={setSelectedDate}
+                                    initialFocus
+                                    disabled={(date) =>
+                                        date > new Date() || date < new Date("1900-01-01")
+                                      }
+                                />
+                                </PopoverContent>
+                            </Popover>
+                        </div>
                     </div>
                 </PopoverContent>
             </Popover>
@@ -194,6 +226,7 @@ export default function AlgoInsightsPage() {
                 isPlacingRR={!!placingToolType}
                 timeframe={timeframe}
                 timeZone={timeZone}
+                endDate={selectedDate}
             />
         </div>
 
