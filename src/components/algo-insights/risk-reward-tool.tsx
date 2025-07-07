@@ -21,11 +21,14 @@ const Y_AXIS_MARGIN_BOTTOM = 20;
 export function RiskRewardTool({ tool, onUpdate, onRemove, data, chartContainer }: RiskRewardToolProps) {
   const [dragState, setDragState] = useState({
     active: false,
-    type: 'none', // 'body', 'top', 'bottom'
+    type: 'none', // 'body', 'top', 'bottom', 'left', 'right'
     initialY: 0,
+    initialX: 0,
     initialEntryPrice: 0,
     initialStopLoss: 0,
     initialTakeProfit: 0,
+    initialWidthInPoints: 0,
+    initialEntryIndex: 0,
   });
 
   const {
@@ -74,35 +77,71 @@ export function RiskRewardTool({ tool, onUpdate, onRemove, data, chartContainer 
       if (!dragState.active) return;
       
       const chartRect = chartContainer.getBoundingClientRect();
+
+      // Vertical drag logic
       const deltaY = e.clientY - dragState.initialY;
       const priceDelta = (deltaY / plotHeight) * priceRange * -1;
+      
+      // Horizontal drag logic
+      const deltaX = e.clientX - dragState.initialX;
+      const indexPerPixel = plotWidth > 0 ? (pointsCount - 1) / plotWidth : 0;
+      const indexDelta = deltaX * indexPerPixel;
 
-      if (dragState.type === 'body') {
-        onUpdate({
-          ...tool,
-          entryPrice: dragState.initialEntryPrice + priceDelta,
-          stopLoss: dragState.initialStopLoss + priceDelta,
-          takeProfit: dragState.initialTakeProfit + priceDelta,
-        });
-      } else if (dragState.type === 'top') {
-        const newPrice = yToPrice(e.clientY - chartRect.top);
-        if (tool.position === 'long') {
-          onUpdate({ ...tool, takeProfit: Math.max(tool.entryPrice, newPrice) });
-        } else { // short
-          onUpdate({ ...tool, stopLoss: Math.max(tool.entryPrice, newPrice) });
+      switch (dragState.type) {
+        case 'body':
+          onUpdate({
+            ...tool,
+            entryPrice: dragState.initialEntryPrice + priceDelta,
+            stopLoss: dragState.initialStopLoss + priceDelta,
+            takeProfit: dragState.initialTakeProfit + priceDelta,
+          });
+          break;
+        case 'top': {
+          const newPrice = yToPrice(e.clientY - chartRect.top);
+          if (tool.position === 'long') {
+            onUpdate({ ...tool, takeProfit: Math.max(tool.entryPrice, newPrice) });
+          } else { // short
+            onUpdate({ ...tool, stopLoss: Math.max(tool.entryPrice, newPrice) });
+          }
+          break;
         }
-      } else if (dragState.type === 'bottom') {
-        const newPrice = yToPrice(e.clientY - chartRect.top);
-        if (tool.position === 'long') {
-          onUpdate({ ...tool, stopLoss: Math.min(tool.entryPrice, newPrice) });
-        } else { // short
-          onUpdate({ ...tool, takeProfit: Math.min(tool.entryPrice, newPrice) });
+        case 'bottom': {
+          const newPrice = yToPrice(e.clientY - chartRect.top);
+          if (tool.position === 'long') {
+            onUpdate({ ...tool, stopLoss: Math.min(tool.entryPrice, newPrice) });
+          } else { // short
+            onUpdate({ ...tool, takeProfit: Math.min(tool.entryPrice, newPrice) });
+          }
+          break;
+        }
+        case 'right': {
+            const newWidth = Math.max(1, Math.round(dragState.initialWidthInPoints + indexDelta));
+            onUpdate({
+                ...tool,
+                widthInPoints: newWidth,
+            });
+            break;
+        }
+        case 'left': {
+            const rightEdgeIndex = dragState.initialEntryIndex + dragState.initialWidthInPoints;
+            let newEntryIndex = Math.round(dragState.initialEntryIndex + indexDelta);
+            newEntryIndex = Math.min(newEntryIndex, rightEdgeIndex - 1);
+            newEntryIndex = Math.max(0, newEntryIndex);
+            
+            const newWidth = rightEdgeIndex - newEntryIndex;
+
+            onUpdate({
+                ...tool,
+                entryIndex: newEntryIndex,
+                widthInPoints: newWidth,
+            });
+            break;
         }
       }
     };
 
     const handleMouseUp = () => {
-      setDragState({ ...dragState, active: false });
+      setDragState((prev) => ({ ...prev, active: false, type: 'none' }));
     };
 
     if (dragState.active) {
@@ -114,7 +153,7 @@ export function RiskRewardTool({ tool, onUpdate, onRemove, data, chartContainer 
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [dragState, tool, onUpdate, yToPrice, plotHeight, priceRange, chartContainer]);
+  }, [dragState, tool, onUpdate, yToPrice, plotHeight, priceRange, chartContainer, plotWidth, pointsCount]);
 
 
   const handleMouseDown = (e: React.MouseEvent, type: string) => {
@@ -123,9 +162,12 @@ export function RiskRewardTool({ tool, onUpdate, onRemove, data, chartContainer 
       active: true,
       type: type,
       initialY: e.clientY,
+      initialX: e.clientX,
       initialEntryPrice: tool.entryPrice,
       initialStopLoss: tool.stopLoss,
       initialTakeProfit: tool.takeProfit,
+      initialWidthInPoints: tool.widthInPoints,
+      initialEntryIndex: tool.entryIndex,
     });
   };
 
@@ -141,7 +183,7 @@ export function RiskRewardTool({ tool, onUpdate, onRemove, data, chartContainer 
       topY: tool.position === 'long' ? profit : stop,
       bottomY: tool.position === 'long' ? stop : profit,
       leftX: left, 
-      widthX: right - left,
+      widthX: Math.max(0, right - left),
       topHandleY: Math.min(profit, stop),
       bottomHandleY: Math.max(profit, stop),
     };
@@ -168,7 +210,7 @@ export function RiskRewardTool({ tool, onUpdate, onRemove, data, chartContainer 
           width: widthX,
           height: Math.max(0, profitZoneHeight),
           backgroundColor: 'hsla(120, 100%, 50%, 0.15)', // accent color
-          border: '2px dashed hsla(120, 100%, 50%, 0.7)',
+          border: '1px dashed hsla(120, 100%, 50%, 0.7)',
         }}
       />
       {/* Loss Zone */}
@@ -180,7 +222,7 @@ export function RiskRewardTool({ tool, onUpdate, onRemove, data, chartContainer 
           width: widthX,
           height: Math.max(0, lossZoneHeight),
           backgroundColor: 'hsla(0, 84.2%, 60.2%, 0.15)', // destructive color
-          border: '2px dashed hsla(0, 84.2%, 60.2%, 0.7)',
+          border: '1px dashed hsla(0, 84.2%, 60.2%, 0.7)',
         }}
       />
       
@@ -196,6 +238,26 @@ export function RiskRewardTool({ tool, onUpdate, onRemove, data, chartContainer 
         onMouseDown={(e) => handleMouseDown(e, 'bottom')} 
         className="absolute w-full h-2 cursor-ns-resize pointer-events-auto"
         style={{ transform: `translate(0, ${bottomHandleY - 1}px)`}}
+      />
+
+      {/* Left Handle */}
+      <div
+        onMouseDown={(e) => handleMouseDown(e, 'left')} 
+        className="absolute h-full w-2 cursor-col-resize pointer-events-auto"
+        style={{ 
+          transform: `translate(${leftX - 1}px, ${topHandleY}px)`,
+          height: Math.max(0, bottomHandleY - topHandleY)
+        }}
+      />
+      
+      {/* Right Handle */}
+      <div
+        onMouseDown={(e) => handleMouseDown(e, 'right')} 
+        className="absolute h-full w-2 cursor-col-resize pointer-events-auto"
+        style={{
+          transform: `translate(${leftX + widthX - 1}px, ${topHandleY}px)`,
+          height: Math.max(0, bottomHandleY - topHandleY)
+        }}
       />
       
        <div
