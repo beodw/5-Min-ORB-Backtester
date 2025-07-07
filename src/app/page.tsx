@@ -26,9 +26,6 @@ export default function AlgoInsightsPage() {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
   const [sessionStartTime, setSessionStartTime] = useState('09:30');
 
-  const removeOpeningRangeMarkers = () => {
-    setPriceMarkers(prev => prev.filter(m => m.id !== 'or-high' && m.id !== 'or-low'));
-  };
   
   useEffect(() => {
     const getOffsetInMinutes = (timeZone: string): number => {
@@ -74,6 +71,24 @@ export default function AlgoInsightsPage() {
     if (savedSessionStart) {
         setSessionStartTime(savedSessionStart);
     }
+
+    const savedRrTools = localStorage.getItem('algo-insights-rr-tools');
+    if (savedRrTools) {
+      try {
+        setRrTools(JSON.parse(savedRrTools));
+      } catch (e) {
+        console.error("Failed to parse rrTools from localStorage", e);
+      }
+    }
+
+    const savedPriceMarkers = localStorage.getItem('algo-insights-price-markers');
+    if (savedPriceMarkers) {
+      try {
+        setPriceMarkers(JSON.parse(savedPriceMarkers));
+      } catch (e) {
+        console.error("Failed to parse priceMarkers from localStorage", e);
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -87,6 +102,14 @@ export default function AlgoInsightsPage() {
         localStorage.setItem('algo-insights-session-start', sessionStartTime);
     }
   }, [sessionStartTime]);
+
+  useEffect(() => {
+    localStorage.setItem('algo-insights-rr-tools', JSON.stringify(rrTools));
+  }, [rrTools]);
+
+  useEffect(() => {
+    localStorage.setItem('algo-insights-price-markers', JSON.stringify(priceMarkers));
+  }, [priceMarkers]);
 
 
   const handleChartClick = (chartData: { close: number; date: Date, dataIndex: number }) => {
@@ -158,6 +181,10 @@ export default function AlgoInsightsPage() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const removeOpeningRangeMarkers = () => {
+    setPriceMarkers(prev => prev.filter(m => m.id !== 'or-high' && m.id !== 'or-low'));
   };
 
   const handleDateSelect = (date: Date | undefined) => {
@@ -239,16 +266,16 @@ export default function AlgoInsightsPage() {
                 if (i + 4 < mockPriceData.length) {
                     const rangeSlice = mockPriceData.slice(i, i + 5);
                     
-                    let high = rangeSlice[0].high;
-                    let low = rangeSlice[0].low;
+                    let high = -Infinity;
+                    let low = Infinity;
 
-                    for (let j = 1; j < rangeSlice.length; j++) {
-                        high = Math.max(high, rangeSlice[j].high);
-                        low = Math.min(low, rangeSlice[j].low);
+                    for (const candle of rangeSlice) {
+                        high = Math.max(high, candle.high);
+                        low = Math.min(low, candle.low);
                     }
                     
-                    const highMarker: PriceMarker = { id: 'or-high', price: high, label: 'OR High' };
-                    const lowMarker: PriceMarker = { id: 'or-low', price: low, label: 'OR Low' };
+                    const highMarker: PriceMarker = { id: 'or-high', price: high, label: 'OR High', isDeletable: true };
+                    const lowMarker: PriceMarker = { id: 'or-low', price: low, label: 'OR Low', isDeletable: true };
 
                     setPriceMarkers(prev => {
                       const filtered = prev.filter(m => m.id !== 'or-high' && m.id !== 'or-low');
