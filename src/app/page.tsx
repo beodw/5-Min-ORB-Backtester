@@ -71,24 +71,6 @@ export default function AlgoInsightsPage() {
     if (savedSessionStart) {
         setSessionStartTime(savedSessionStart);
     }
-
-    const savedRrTools = localStorage.getItem('algo-insights-rr-tools');
-    if (savedRrTools) {
-      try {
-        setRrTools(JSON.parse(savedRrTools));
-      } catch (e) {
-        console.error("Failed to parse rrTools from localStorage", e);
-      }
-    }
-
-    const savedPriceMarkers = localStorage.getItem('algo-insights-price-markers');
-    if (savedPriceMarkers) {
-      try {
-        setPriceMarkers(JSON.parse(savedPriceMarkers));
-      } catch (e) {
-        console.error("Failed to parse priceMarkers from localStorage", e);
-      }
-    }
   }, []);
 
   useEffect(() => {
@@ -102,14 +84,6 @@ export default function AlgoInsightsPage() {
         localStorage.setItem('algo-insights-session-start', sessionStartTime);
     }
   }, [sessionStartTime]);
-
-  useEffect(() => {
-    localStorage.setItem('algo-insights-rr-tools', JSON.stringify(rrTools));
-  }, [rrTools]);
-
-  useEffect(() => {
-    localStorage.setItem('algo-insights-price-markers', JSON.stringify(priceMarkers));
-  }, [priceMarkers]);
 
 
   const handleChartClick = (chartData: { close: number; date: Date, dataIndex: number }) => {
@@ -189,6 +163,7 @@ export default function AlgoInsightsPage() {
 
   const handleDateSelect = (date: Date | undefined) => {
     if (date && timeZone) {
+      setPriceMarkers(prev => prev.filter(m => m.id !== 'or-high' && m.id !== 'or-low'));
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
       const day = String(date.getDate()).padStart(2, '0');
@@ -199,7 +174,6 @@ export default function AlgoInsightsPage() {
       
       const tempDate = new Date(dateTimeString);
       const tzDateString = tempDate.toLocaleString("en-US", { timeZone });
-      const finalDate = new Date(tzDateString);
       
       const utcDate = new Date(date.toLocaleString('en-US', {timeZone: 'UTC'}));
       const tzDate = new Date(date.toLocaleString('en-US', {timeZone}));
@@ -215,6 +189,7 @@ export default function AlgoInsightsPage() {
   };
   
   const handleNextCandle = () => {
+    setPriceMarkers(prev => prev.filter(m => m.id !== 'or-high' && m.id !== 'or-low'));
     const getDuration = (tf: string): number => {
       switch (tf) {
         case '1m': return 60 * 1000;
@@ -282,7 +257,7 @@ export default function AlgoInsightsPage() {
                       return [...filtered, highMarker, lowMarker];
                     });
                 } else {
-                    removeOpeningRangeMarkers();
+                    setPriceMarkers(prev => prev.filter(m => m.id !== 'or-high' && m.id !== 'or-low'));
                 }
                 
                 setSelectedDate(pointDate);
@@ -290,7 +265,7 @@ export default function AlgoInsightsPage() {
             }
         }
     }
-    removeOpeningRangeMarkers();
+    setPriceMarkers(prev => prev.filter(m => m.id !== 'or-high' && m.id !== 'or-low'));
   };
   
   const handlePlaceLong = () => {
@@ -315,13 +290,14 @@ export default function AlgoInsightsPage() {
       <header className="flex items-center justify-between p-4 border-b border-border shadow-md">
         <div className="flex items-center gap-2">
            <div className="p-2 bg-primary rounded-lg">
-             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6 text-primary-foreground">
-                <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm-1.14 15.31L12 11.22l1.14 6.09h-2.28zm1.14-9.31a1.5 1.5 0 1 1-1.5 1.5 1.5 1.5 0 0 1 1.5-1.5z" />
-                <path d="M7.5 11.5h-1a1.5 1.5 0 0 0 0 3h1a1.5 1.5 0 0 0 0-3zm10 0h-1a1.5 1.5 0 0 0 0 3h1a1.5 1.5 0 0 0 0-3z" />
+             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6 text-primary-foreground">
+                <path d="M4 8h16"/>
+                <path d="M4 12h16"/>
+                <path d="M12 4v16l4-4"/>
               </svg>
            </div>
           <h1 className="text-2xl font-bold font-headline text-foreground">
-            Algo Insights
+            5 Minute ORB Backtester
           </h1>
         </div>
         <div className="flex items-center gap-4">
