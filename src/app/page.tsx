@@ -20,7 +20,7 @@ export default function AlgoInsightsPage() {
   const [placingToolType, setPlacingToolType] = useState<'long' | 'short' | null>(null);
   const [priceMarkers, setPriceMarkers] = useState<PriceMarker[]>([]);
   const [isPlacingPriceMarker, setIsPlacingPriceMarker] = useState(false);
-  const [timeframe, setTimeframe] = useState('1D');
+  const [timeframe, setTimeframe] = useState('1m');
   const [timeZone, setTimeZone] = useState<string>('');
   const [timezones, setTimezones] = useState<{ value: string; label: string }[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
@@ -238,8 +238,14 @@ export default function AlgoInsightsPage() {
             if (pointHour === sessionHour && pointMinute === sessionMinute) {
                 if (i + 4 < mockPriceData.length) {
                     const rangeSlice = mockPriceData.slice(i, i + 5);
-                    const high = Math.max(...rangeSlice.map(p => p.high));
-                    const low = Math.min(...rangeSlice.map(p => p.low));
+                    
+                    let high = rangeSlice[0].high;
+                    let low = rangeSlice[0].low;
+
+                    for (let j = 1; j < rangeSlice.length; j++) {
+                        high = Math.max(high, rangeSlice[j].high);
+                        low = Math.min(low, rangeSlice[j].low);
+                    }
                     
                     const highMarker: PriceMarker = { id: 'or-high', price: high, label: 'OR High' };
                     const lowMarker: PriceMarker = { id: 'or-low', price: low, label: 'OR Low' };
@@ -481,5 +487,3 @@ export default function AlgoInsightsPage() {
     </div>
   );
 }
-
-    
