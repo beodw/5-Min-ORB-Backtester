@@ -9,8 +9,7 @@ import {
   YAxis,
   Tooltip,
   ReferenceDot,
-  Bar,
-  ErrorBar,
+  Line,
 } from "recharts";
 import type { PriceData, Trade, RiskRewardTool as RRToolType } from "@/types";
 import { RiskRewardTool } from "./risk-reward-tool";
@@ -26,14 +25,6 @@ interface InteractiveChartProps {
   onRemoveTool: (id: string) => void;
   isPlacingRR: boolean;
 }
-
-const CandleBody = (props: any) => {
-    const { x, y, width, height, payload } = props;
-    const isRising = payload.close > payload.open;
-    const color = isRising ? 'hsl(var(--accent))' : 'hsl(var(--destructive))';
-    return <rect x={x} y={y} width={width} height={height} fill={color} stroke={color} />;
-};
-
 
 export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdateTool, onRemoveTool, isPlacingRR }: InteractiveChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -97,9 +88,12 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
           />
           <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'hsl(var(--accent))', strokeWidth: 1, strokeDasharray: '3 3' }}/>
           
-          <Bar dataKey={['open', 'close']} shape={<CandleBody/>}>
-            <ErrorBar dataKey="wick" width={0} strokeWidth={1} stroke="hsl(var(--foreground))" direction="y" />
-          </Bar>
+          {/* Add invisible lines to scale Y-axis correctly to high/low */}
+          <Line dataKey="high" stroke="transparent" dot={false} activeDot={false} />
+          <Line dataKey="low" stroke="transparent" dot={false} activeDot={false} />
+
+          {/* This is the visible line chart based on the close price */}
+          <Line type="monotone" dataKey="close" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
 
           {trades.map((trade) => (
             <ReferenceDot

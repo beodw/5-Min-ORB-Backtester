@@ -22,7 +22,6 @@ function generateMockPriceData(numPoints = 500): PriceData[] {
       high,
       low,
       close,
-      wick: [low, high],
     });
 
     lastClose = close;
