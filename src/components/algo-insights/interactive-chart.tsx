@@ -59,8 +59,14 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
   const chartContainerRef = useRef<HTMLDivElement>(null);
 
   const aggregatedData = useMemo(() => {
-    if (timeframe === '1m' || !data || data.length === 0) {
-      return data;
+    if (!data || data.length === 0) {
+      return [];
+    }
+
+    const filteredByDate = endDate ? data.filter(point => point.date <= endDate) : data;
+
+    if (timeframe === '1m') {
+      return filteredByDate;
     }
 
     const getIntervalMinutes = (tf: string): number => {
@@ -73,15 +79,13 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
       }
     };
 
-    const interval = getIntervalMinutes(timeframe) * 60 * 1000; // interval in milliseconds
-    if (interval <= 60000) return data;
+    const interval = getIntervalMinutes(timeframe) * 60 * 1000;
+    if (interval <= 60000) return filteredByDate;
 
     const result: PriceData[] = [];
     let currentCandle: PriceData | null = null;
     
-    const filteredForAggregation = endDate ? data.filter(point => point.date <= endDate) : data;
-
-    for (const point of filteredForAggregation) {
+    for (const point of filteredByDate) {
       const pointTime = point.date.getTime();
       const bucketTimestamp = Math.floor(pointTime / interval) * interval;
       
@@ -119,7 +123,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
   const windowedData = useMemo(() => {
     if (!aggregatedData.length) return [];
     const [start, end] = xDomain;
-    const buffer = 100; // Add a buffer of 100 candles on each side
+    const buffer = 100;
     const startIndex = Math.max(0, Math.floor(start) - buffer);
     const endIndex = Math.min(aggregatedData.length, Math.ceil(end) + buffer);
     
@@ -132,30 +136,34 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
     let targetIndex: number;
 
     if (endDate) {
-      targetIndex = aggregatedData.findIndex(p => p.date >= endDate);
-      if (targetIndex === -1) {
-        targetIndex = aggregatedData.length - 1;
+      // Find the last available candle within the endDate
+      let foundIndex = -1;
+      for(let i = aggregatedData.length - 1; i >= 0; i--) {
+        if(aggregatedData[i].date <= endDate) {
+          foundIndex = i;
+          break;
+        }
       }
+      targetIndex = foundIndex !== -1 ? foundIndex : aggregatedData.length - 1;
+
     } else {
-      targetIndex = aggregatedData.length -1;
+      targetIndex = aggregatedData.length - 1;
     }
     
-    const domainWidth = xDomain[1] - xDomain[0];
+    const domainWidth = 100; // Default view width
     const newEnd = targetIndex + (domainWidth * 0.2); // position end of data 20% from the right edge
     const newStart = newEnd - domainWidth;
 
     setXDomain(prev => {
-      const isInitialLoad = prev[0] === 0 && prev[1] === 100;
-      if (isInitialLoad || endDate) {
+      const isInitialLoadOrDateChange = (prev[0] === 0 && prev[1] === 100) || endDate;
+      if (isInitialLoadOrDateChange) {
          return [newStart > 0 ? newStart : 0, newEnd];
       }
-
       // Auto-pan if new candle is off-screen
       if (aggregatedData.length - 1 > prev[1]) {
         const panAmount = (aggregatedData.length - 1) - prev[1];
         return [prev[0] + panAmount + 1, prev[1] + panAmount + 1];
       }
-
       return prev;
     });
 
@@ -163,22 +171,21 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
 
 
   useEffect(() => {
-    const [start, end] = xDomain;
-    const boundedStart = Math.max(0, Math.floor(start));
-    const boundedEnd = Math.min(Math.ceil(end), aggregatedData.length);
-    
-    const visibleDataSlice = aggregatedData.slice(boundedStart, boundedEnd);
-    
-    if (visibleDataSlice.length === 0) {
+    if (windowedData.length === 0) {
       return;
     }
     
     let min = Infinity;
     let max = -Infinity;
 
-    for (const d of visibleDataSlice) {
+    for (const d of windowedData) {
         if (d.low < min) min = d.low;
         if (d.high > max) max = d.high;
+    }
+    
+    if (openingRange) {
+        min = Math.min(min, openingRange.low);
+        max = Math.max(max, openingRange.high);
     }
     
     if (min === Infinity || max === -Infinity) {
@@ -187,7 +194,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
 
     const padding = (max - min) * 0.1 || 10;
     setYDomain([min - padding, max + padding]);
-  }, [xDomain, aggregatedData]);
+  }, [windowedData, openingRange]);
 
   const xTimeDomain = useMemo(() => {
     if (!aggregatedData || aggregatedData.length === 0) return [0, 0];
@@ -362,7 +369,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
       onMouseLeave={handleMouseLeave}
       style={{ cursor: isPlacingRR ? 'crosshair' : (isDragging ? 'grabbing' : 'grab') }}
     >
-      {!aggregatedData || aggregatedData.length === 0 ? (
+      {!windowedData || windowedData.length === 0 ? (
         <div className="flex items-center justify-center w-full h-full text-muted-foreground">
           No data available for the selected time range.
         </div>
@@ -421,6 +428,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
                 stroke="hsl(var(--primary))"
                 strokeDasharray="4 4"
                 strokeWidth={1}
+                ifOverflow="extendDomain"
                 label={{ 
                   value: openingRange.high.toFixed(2), 
                   position: 'right', 
@@ -436,6 +444,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
                 stroke="hsl(var(--primary))"
                 strokeDasharray="4 4"
                 strokeWidth={1}
+                ifOverflow="extendDomain"
                 label={{ 
                   value: openingRange.low.toFixed(2), 
                   position: 'right', 
