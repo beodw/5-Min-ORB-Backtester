@@ -10,9 +10,8 @@ import {
   Tooltip,
   ReferenceDot,
   Bar,
-  ReferenceLine,
 } from "recharts";
-import type { PriceData, Trade, RiskRewardTool as RRToolType, OpeningRange, PriceMarker as PriceMarkerType } from "@/types";
+import type { PriceData, Trade, RiskRewardTool as RRToolType, PriceMarker as PriceMarkerType } from "@/types";
 import { RiskRewardTool } from "./risk-reward-tool";
 import { PriceMarker } from "./price-marker";
 import { useMemo, useRef, useState, useCallback, useEffect } from "react";
@@ -32,7 +31,6 @@ interface InteractiveChartProps {
   timeframe: string;
   timeZone: string;
   endDate?: Date;
-  openingRange: OpeningRange | null;
 }
 
 const Candlestick = (props: any) => {
@@ -72,8 +70,7 @@ export function InteractiveChart({
     onRemovePriceMarker,
     timeframe, 
     timeZone, 
-    endDate, 
-    openingRange 
+    endDate
 }: InteractiveChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
 
@@ -198,23 +195,30 @@ export function InteractiveChart({
       }
     }
     
-    if (openingRange) {
-        min = Math.min(min, openingRange.low);
-        max = Math.max(max, openingRange.high);
+    for (const marker of priceMarkers) {
+      min = Math.min(min, marker.price);
+      max = Math.max(max, marker.price);
     }
     
     if (min === Infinity || max === -Infinity) {
-      if (openingRange) {
-        min = openingRange.low;
-        max = openingRange.high;
-      } else {
-        return; 
-      }
+       if (priceMarkers.length > 0) {
+         for (const marker of priceMarkers) {
+            min = Math.min(min, marker.price);
+            max = Math.max(max, marker.price);
+         }
+       } else {
+         return; // No data, do not update domain.
+       }
     }
 
     const padding = (max - min) * 0.1 || 10;
-    setYDomain([min - padding, max + padding]);
-  }, [windowedData, openingRange]);
+    const newYDomain: [number, number] = [min - padding, max + padding];
+    
+    // Only update if the domain has meaningfully changed, to prevent loops
+    if (newYDomain[0] !== yDomain[0] || newYDomain[1] !== yDomain[1]) {
+        setYDomain(newYDomain);
+    }
+  }, [windowedData, priceMarkers, yDomain]);
 
   const xDataDomain = useMemo(() => {
     if (!aggregatedData.length) return [0, 0];
@@ -447,45 +451,6 @@ export function InteractiveChart({
               yAxisId="main"
             />
           ))}
-
-          {openingRange && (
-            <>
-              <ReferenceLine
-                y={openingRange.high}
-                yAxisId="main"
-                xAxisId="main"
-                stroke="hsl(var(--primary))"
-                strokeDasharray="4 4"
-                strokeWidth={1}
-                ifOverflow="extendDomain"
-                label={{ 
-                  value: openingRange.high.toFixed(2), 
-                  position: 'right', 
-                  fill: 'hsl(var(--primary-foreground))', 
-                  fontSize: 10,
-                  dy: -5,
-                  dx: 5
-                }}
-              />
-              <ReferenceLine
-                y={openingRange.low}
-                yAxisId="main"
-                xAxisId="main"
-                stroke="hsl(var(--primary))"
-                strokeDasharray="4 4"
-                strokeWidth={1}
-                ifOverflow="extendDomain"
-                label={{ 
-                  value: openingRange.low.toFixed(2), 
-                  position: 'right', 
-                  fill: 'hsl(var(--primary-foreground))',
-                  fontSize: 10,
-                  dy: 5,
-                  dx: 5
-                }}
-              />
-            </>
-          )}
 
         </ComposedChart>
       </ResponsiveContainer>

@@ -30,6 +30,8 @@ export interface RiskRewardTool {
 export interface PriceMarker {
   id: string;
   price: number;
+  label?: string;
+  isDeletable?: boolean;
 }
 
 export interface OpeningRange {

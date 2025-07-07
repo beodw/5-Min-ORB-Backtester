@@ -46,9 +46,11 @@ export function PriceMarker({ marker, onRemove, chartContainer, yDomain }: Price
   
   const yPosition = priceToY(marker.price);
   
-  if (yPosition < 0 || yPosition > containerHeight) {
+  if (yPosition < Y_AXIS_MARGIN_TOP || yPosition > containerHeight - Y_AXIS_MARGIN_BOTTOM) {
     return null;
   }
+  
+  const isDeletable = marker.isDeletable !== false;
 
   return (
     <div
@@ -58,16 +60,17 @@ export function PriceMarker({ marker, onRemove, chartContainer, yDomain }: Price
       onMouseLeave={() => setIsHovered(false)}
     >
       <div 
-        className="h-px border-t border-dashed border-ring absolute top-1/2 -translate-y-1/2" 
+        className="h-px border-t border-dashed border-primary absolute top-1/2 -translate-y-1/2" 
         style={{ left: X_AXIS_MARGIN_LEFT, width: plotWidth }}
       />
       <div 
-        className="absolute top-1/2 -translate-y-1/2 bg-card px-1.5 py-0.5 rounded text-xs text-ring pointer-events-none"
+        className="absolute top-1/2 -translate-y-1/2 bg-card px-1.5 py-0.5 rounded text-xs text-primary pointer-events-none flex items-center"
         style={{ left: plotWidth + 8 }}
       >
+        {marker.label && <span className="font-semibold mr-2 text-primary/80">{marker.label}</span>}
         {marker.price.toFixed(2)}
       </div>
-      {isHovered && (
+      {isHovered && isDeletable && (
         <button
           onClick={(e) => { e.stopPropagation(); onRemove(marker.id); }}
           className="absolute top-1/2 -translate-y-1/2 bg-card rounded-full p-0.5 text-foreground z-10"

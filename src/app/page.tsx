@@ -6,7 +6,7 @@ import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, Chevr
 import { Button } from "@/components/ui/button";
 import { InteractiveChart } from "@/components/algo-insights/interactive-chart";
 import { mockPriceData } from "@/lib/mock-data";
-import type { RiskRewardTool as RRToolType, OpeningRange, PriceMarker } from "@/types";
+import type { RiskRewardTool as RRToolType, PriceMarker } from "@/types";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -25,8 +25,11 @@ export default function AlgoInsightsPage() {
   const [timezones, setTimezones] = useState<{ value: string; label: string }[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
   const [sessionStartTime, setSessionStartTime] = useState('09:30');
-  const [openingRange, setOpeningRange] = useState<OpeningRange | null>(null);
 
+  const removeOpeningRangeMarkers = () => {
+    setPriceMarkers(prev => prev.filter(m => m.id !== 'or-high' && m.id !== 'or-low'));
+  };
+  
   useEffect(() => {
     const getOffsetInMinutes = (timeZone: string): number => {
         try {
@@ -108,6 +111,7 @@ export default function AlgoInsightsPage() {
       const newMarker: PriceMarker = {
         id: `pm-${Date.now()}`,
         price: chartData.close,
+        isDeletable: true,
       };
       setPriceMarkers(prev => [...prev, newMarker]);
       setIsPlacingPriceMarker(false);
@@ -157,31 +161,20 @@ export default function AlgoInsightsPage() {
   };
 
   const handleDateSelect = (date: Date | undefined) => {
-    setOpeningRange(null);
+    removeOpeningRangeMarkers();
     if (date && timeZone) {
-      // Create a string in 'YYYY-MM-DD' format from the selected date.
-      // This avoids timezone issues with the Date constructor.
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
       const day = String(date.getDate()).padStart(2, '0');
       const dateString = `${year}-${month}-${day}`;
   
-      // Construct a date string representing the end of that day in the selected timezone.
-      // This is less ambiguous than using Date objects which can be affected by the browser's timezone.
       const timeString = `23:59:59`;
       const dateTimeString = `${dateString}T${timeString}`;
       
-      // We can't directly use new Date(dateTimeString) as it assumes local timezone.
-      // A robust way is to construct the date in UTC and then adjust.
-      // However, a simpler way that works for recharts is to find the timestamp.
-      // For this specific use case, we create a temporary date object
-      // that when formatted into the selected timezone gives us the correct local time parts.
-      // Then we can get its real timestamp.
       const tempDate = new Date(dateTimeString);
       const tzDateString = tempDate.toLocaleString("en-US", { timeZone });
       const finalDate = new Date(tzDateString);
-
-      // Let's try a more robust way to avoid ambiguity.
+      
       const utcDate = new Date(date.toLocaleString('en-US', {timeZone: 'UTC'}));
       const tzDate = new Date(date.toLocaleString('en-US', {timeZone}));
       const offset = tzDate.getTime() - utcDate.getTime();
@@ -196,7 +189,7 @@ export default function AlgoInsightsPage() {
   };
   
   const handleNextCandle = () => {
-    setOpeningRange(null);
+    removeOpeningRangeMarkers();
     const getDuration = (tf: string): number => {
       switch (tf) {
         case '1m': return 60 * 1000;
@@ -249,9 +242,16 @@ export default function AlgoInsightsPage() {
                     const rangeSlice = mockPriceData.slice(i, i + 5);
                     const high = Math.max(...rangeSlice.map(p => p.high));
                     const low = Math.min(...rangeSlice.map(p => p.low));
-                    setOpeningRange({ high, low });
+                    
+                    const highMarker: PriceMarker = { id: 'or-high', price: high, label: 'OR High', isDeletable: false };
+                    const lowMarker: PriceMarker = { id: 'or-low', price: low, label: 'OR Low', isDeletable: false };
+
+                    setPriceMarkers(prev => {
+                      const filtered = prev.filter(m => m.id !== 'or-high' && m.id !== 'or-low');
+                      return [...filtered, highMarker, lowMarker];
+                    });
                 } else {
-                    setOpeningRange(null);
+                    removeOpeningRangeMarkers();
                 }
                 
                 setSelectedDate(pointDate);
@@ -259,7 +259,7 @@ export default function AlgoInsightsPage() {
             }
         }
     }
-    setOpeningRange(null);
+    removeOpeningRangeMarkers();
   };
   
   const handlePlaceLong = () => {
@@ -355,7 +355,6 @@ export default function AlgoInsightsPage() {
                 timeframe={timeframe}
                 timeZone={timeZone}
                 endDate={selectedDate}
-                openingRange={openingRange}
             />
         </div>
 
