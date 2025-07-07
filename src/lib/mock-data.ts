@@ -2,23 +2,30 @@ import type { PriceData } from '@/types';
 
 function generateMockPriceData(numPoints = 500): PriceData[] {
   const data: PriceData[] = [];
-  let lastPrice = 100;
+  let lastClose = 100;
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - numPoints);
 
   for (let i = 0; i < numPoints; i++) {
     const date = new Date(startDate);
     date.setDate(date.getDate() + i);
+
+    const open = lastClose;
+    // Add some volatility
+    const close = open + (Math.random() - 0.5) * 5; 
     
-    // Simple random walk for the price
-    const newPrice = lastPrice + (Math.random() - 0.49) * 4;
-    
+    const high = Math.max(open, close) + Math.random() * 2;
+    const low = Math.min(open, close) - Math.random() * 2;
+
     data.push({
       date,
-      price: newPrice,
+      open,
+      high,
+      low,
+      close,
     });
 
-    lastPrice = newPrice;
+    lastClose = close;
   }
   return data;
 }
