@@ -25,6 +25,7 @@ interface InteractiveChartProps {
   onRemoveTool: (id: string) => void;
   isPlacingRR: boolean;
   timeframe: string;
+  timeZone: string;
 }
 
 const Candlestick = (props: any) => {
@@ -55,7 +56,7 @@ const Candlestick = (props: any) => {
 };
 
 
-export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdateTool, onRemoveTool, isPlacingRR, timeframe }: InteractiveChartProps) {
+export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdateTool, onRemoveTool, isPlacingRR, timeframe, timeZone }: InteractiveChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   
   const aggregatedData = useMemo(() => {
@@ -268,20 +269,27 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
     const visibleRangeInMinutes = (lastDate.getTime() - firstDate.getTime()) / (1000 * 60);
 
     if (visibleRangeInMinutes > 3 * 24 * 60) {
-      return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+      return date.toLocaleDateString([], { month: 'short', day: 'numeric', timeZone });
     }
     if (visibleRangeInMinutes > 24 * 60) {
-      return date.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      return date.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone });
     }
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  }, [xDomain, aggregatedData]);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone });
+  }, [xDomain, aggregatedData, timeZone]);
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (
         <div className="p-2 bg-card border border-border rounded-lg shadow-lg text-sm">
-          <p className="label font-bold text-foreground">{`${new Date(label).toLocaleString()}`}</p>
+          <p className="label font-bold text-foreground">{`${new Date(label).toLocaleString([], {
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              timeZone
+            })}`}</p>
           <p>Open: <span className="font-mono text-primary">{data.open.toFixed(2)}</span></p>
           <p>High: <span className="font-mono text-primary">{data.high.toFixed(2)}</span></p>
           <p>Low: <span className="font-mono text-primary">{data.low.toFixed(2)}</span></p>

@@ -1,18 +1,28 @@
 "use client";
 
-import { useState } from "react";
-import { Download, ArrowUp, ArrowDown } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Download, ArrowUp, ArrowDown, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InteractiveChart } from "@/components/algo-insights/interactive-chart";
 import { mockPriceData } from "@/lib/mock-data";
 import type { RiskRewardTool as RRToolType } from "@/types";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Label } from "@/components/ui/label";
 
 export default function AlgoInsightsPage() {
   const [rrTools, setRrTools] = useState<RRToolType[]>([]);
   const [placingToolType, setPlacingToolType] = useState<'long' | 'short' | null>(null);
   const [timeframe, setTimeframe] = useState('1D');
+  const [timeZone, setTimeZone] = useState<string>('');
+  const [timezones, setTimezones] = useState<string[]>([]);
+
+  useEffect(() => {
+    // This runs only on the client to avoid hydration errors
+    setTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    setTimezones(Intl.supportedValuesOf('timeZone'));
+  }, []);
 
   const handleChartClick = (chartData: { close: number; date: Date, dataIndex: number }) => {
     if (placingToolType) {
@@ -87,6 +97,38 @@ export default function AlgoInsightsPage() {
             Algo Insights
           </h1>
         </div>
+        <div>
+            <Popover>
+                <PopoverTrigger asChild>
+                    <Button variant="ghost" size="icon">
+                        <Settings className="h-5 w-5" />
+                    </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80 mr-4">
+                    <div className="grid gap-4">
+                        <div className="space-y-2">
+                            <h4 className="font-medium leading-none">Settings</h4>
+                            <p className="text-sm text-muted-foreground">
+                                Adjust chart display options.
+                            </p>
+                        </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor="timezone">Timezone</Label>
+                            <Select value={timeZone} onValueChange={setTimeZone} disabled={!timezones.length}>
+                                <SelectTrigger id="timezone" className="w-full">
+                                    <SelectValue placeholder="Select timezone" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {timezones.map(tz => (
+                                        <SelectItem key={tz} value={tz}>{tz.replace(/_/g, ' ')}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                </PopoverContent>
+            </Popover>
+        </div>
       </header>
 
       <main className="flex-1 relative">
@@ -100,6 +142,7 @@ export default function AlgoInsightsPage() {
                 onRemoveTool={handleRemoveTool}
                 isPlacingRR={!!placingToolType}
                 timeframe={timeframe}
+                timeZone={timeZone}
             />
         </div>
 
