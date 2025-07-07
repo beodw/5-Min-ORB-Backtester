@@ -161,7 +161,6 @@ export default function AlgoInsightsPage() {
   };
 
   const handleDateSelect = (date: Date | undefined) => {
-    removeOpeningRangeMarkers();
     if (date && timeZone) {
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -189,7 +188,6 @@ export default function AlgoInsightsPage() {
   };
   
   const handleNextCandle = () => {
-    removeOpeningRangeMarkers();
     const getDuration = (tf: string): number => {
       switch (tf) {
         case '1m': return 60 * 1000;
@@ -243,8 +241,8 @@ export default function AlgoInsightsPage() {
                     const high = Math.max(...rangeSlice.map(p => p.high));
                     const low = Math.min(...rangeSlice.map(p => p.low));
                     
-                    const highMarker: PriceMarker = { id: 'or-high', price: high, label: 'OR High', isDeletable: false };
-                    const lowMarker: PriceMarker = { id: 'or-low', price: low, label: 'OR Low', isDeletable: false };
+                    const highMarker: PriceMarker = { id: 'or-high', price: high, label: 'OR High' };
+                    const lowMarker: PriceMarker = { id: 'or-low', price: low, label: 'OR Low' };
 
                     setPriceMarkers(prev => {
                       const filtered = prev.filter(m => m.id !== 'or-high' && m.id !== 'or-low');
@@ -483,3 +481,5 @@ export default function AlgoInsightsPage() {
     </div>
   );
 }
+
+    
