@@ -161,7 +161,8 @@ export function RiskRewardTool({ tool, onUpdate, onRemove, data, chartContainer 
     >
       {/* Profit Zone */}
       <div
-        className="absolute"
+        onMouseDown={(e) => handleMouseDown(e, 'body')}
+        className="absolute pointer-events-auto cursor-move"
         style={{
           transform: `translate(${leftX}px, ${profitZoneY}px)`,
           width: widthX,
@@ -172,7 +173,8 @@ export function RiskRewardTool({ tool, onUpdate, onRemove, data, chartContainer 
       />
       {/* Loss Zone */}
       <div
-        className="absolute"
+        onMouseDown={(e) => handleMouseDown(e, 'body')}
+        className="absolute pointer-events-auto cursor-move"
         style={{
           transform: `translate(${leftX}px, ${lossZoneY}px)`,
           width: widthX,
