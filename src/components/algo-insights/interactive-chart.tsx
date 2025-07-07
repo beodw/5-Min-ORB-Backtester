@@ -3,13 +3,13 @@
 
 import {
   ResponsiveContainer,
-  LineChart,
+  ComposedChart,
   CartesianGrid,
   XAxis,
   YAxis,
   Tooltip,
-  Line,
   ReferenceDot,
+  Bar,
 } from "recharts";
 import type { PriceData, Trade, RiskRewardTool as RRToolType } from "@/types";
 import { RiskRewardTool } from "./risk-reward-tool";
@@ -26,25 +26,42 @@ interface InteractiveChartProps {
   isPlacingRR: boolean;
 }
 
+// Custom shape for the candle body
+const CandleBody = (props: any) => {
+  const { x, y, width, height, payload } = props;
+  const { open, close } = payload;
+  const isUp = close > open;
+  const color = isUp ? 'hsl(var(--accent))' : 'hsl(var(--destructive))';
+  return <rect x={x} y={y} width={width} height={height} fill={color} />;
+};
+
+
 export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdateTool, onRemoveTool, isPlacingRR }: InteractiveChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
 
   const handleClick = (e: any) => {
     if (e && e.activeTooltipIndex !== undefined) {
-      onChartClick({
-        price: e.activePayload[0].value,
-        date: new Date(e.activeLabel),
-        dataIndex: e.activeTooltipIndex,
-      });
+      const payload = e.activePayload?.[0]?.payload;
+      if (payload) {
+        onChartClick({
+          price: payload.close, // Use close price for placing tool
+          date: new Date(e.activeLabel),
+          dataIndex: e.activeTooltipIndex,
+        });
+      }
     }
   };
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
+      const data = payload[0].payload;
       return (
-        <div className="p-2 bg-card border border-border rounded-lg shadow-lg">
+        <div className="p-2 bg-card border border-border rounded-lg shadow-lg text-sm">
           <p className="label font-bold text-foreground">{`Date: ${new Date(label).toLocaleDateString()}`}</p>
-          <p className="intro text-primary">{`Price: $${payload[0].value.toFixed(2)}`}</p>
+          <p>Open: <span className="font-mono text-primary">${data.open.toFixed(2)}</span></p>
+          <p>High: <span className="font-mono text-primary">${data.high.toFixed(2)}</span></p>
+          <p>Low: <span className="font-mono text-primary">${data.low.toFixed(2)}</span></p>
+          <p>Close: <span className="font-mono text-primary">${data.close.toFixed(2)}</span></p>
         </div>
       );
     }
@@ -60,7 +77,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
       )}
     >
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} onClick={handleClick} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+        <ComposedChart data={data} onClick={handleClick} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border) / 0.5)" />
           <XAxis
             dataKey="date"
@@ -77,15 +94,13 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
             axisLine={false}
             tickFormatter={(value) => `$${value}`}
             domain={['dataMin', 'dataMax']}
+            allowDataOverflow={true}
           />
           <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'hsl(var(--accent))', strokeWidth: 1, strokeDasharray: '3 3' }}/>
-          <Line
-            type="monotone"
-            dataKey="price"
-            stroke="hsl(var(--primary))"
-            strokeWidth={2}
-            dot={false}
-          />
+          
+          <Bar dataKey={['low', 'high']} fill="hsl(var(--foreground))" barSize={1} />
+          <Bar dataKey={['open', 'close']} maxBarSize={10} shape={<CandleBody />} />
+
           {trades.map((trade) => (
             <ReferenceDot
               key={trade.id}
@@ -96,7 +111,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
               stroke="hsl(var(--card))"
             />
           ))}
-        </LineChart>
+        </ComposedChart>
       </ResponsiveContainer>
       {chartContainerRef.current && rrTools.map(tool => (
         <RiskRewardTool 

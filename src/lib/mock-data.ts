@@ -2,7 +2,7 @@ import type { PriceData } from '@/types';
 
 function generateMockPriceData(numPoints = 500): PriceData[] {
   const data: PriceData[] = [];
-  let price = 100;
+  let lastClose = 100;
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - numPoints);
 
@@ -10,17 +10,20 @@ function generateMockPriceData(numPoints = 500): PriceData[] {
     const date = new Date(startDate);
     date.setDate(date.getDate() + i);
 
-    // Create a trend with some seasonality and noise
-    const trend = i * 0.1;
-    const seasonality = Math.sin(i / 20) * 10;
-    const noise = (Math.random() - 0.5) * 8;
+    const open = lastClose + (Math.random() - 0.5) * 2;
+    const close = open + (Math.random() - 0.5) * 5;
+    const high = Math.max(open, close) + Math.random() * 3;
+    const low = Math.min(open, close) - Math.random() * 3;
     
-    price = 100 + trend + seasonality + noise;
-
     data.push({
       date,
-      price: Math.max(10, price), // Ensure price doesn't go below a certain threshold
+      open: Math.max(10, open),
+      high: Math.max(10, high),
+      low: Math.max(10, low),
+      close: Math.max(10, close),
     });
+
+    lastClose = data[data.length - 1].close;
   }
   return data;
 }
