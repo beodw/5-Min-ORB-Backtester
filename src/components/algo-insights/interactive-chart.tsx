@@ -118,16 +118,18 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
     return result;
   }, [filteredData, timeframe]);
   
-  const [xDomain, setXDomain] = useState<[number, number]>([0, aggregatedData.length > 1 ? aggregatedData.length - 1 : 1]);
+  const [xDomain, setXDomain] = useState<[number, number]>([0, 100]);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState<{ x: number, domain: [number, number] } | null>(null);
 
   useEffect(() => {
     const initialVisibleCandles = 100;
-    const end = aggregatedData.length > 1 ? aggregatedData.length - 1 : 1;
+    const rightPadding = 20; // Show some empty space on the right
+    const end = (aggregatedData.length > 1 ? (aggregatedData.length -1 + rightPadding) : (1 + rightPadding));
     const start = Math.max(0, end - initialVisibleCandles);
     setXDomain([start, end]);
-  }, []);
+  }, [aggregatedData.length]);
+
 
   const visibleData = useMemo(() => {
     const [start, end] = xDomain;
@@ -153,18 +155,31 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
   }, [visibleData, aggregatedData]);
 
   const xTimeDomain = useMemo(() => {
-    if (!visibleData || visibleData.length === 0) return [0, 0];
-    const first = visibleData[0]?.date?.getTime();
-    const last = visibleData[visibleData.length - 1]?.date?.getTime();
-    if (!first || !last) return [0, 0];
+    if (!aggregatedData || aggregatedData.length === 0) return [0, 0];
 
-    if (first === last) {
-      // Pad by one minute on each side if only one data point is visible
-      const oneMinute = 60 * 1000;
-      return [first - oneMinute, last + oneMinute];
-    }
-    return [first, last];
-  }, [visibleData]);
+    const [start, end] = xDomain;
+
+    const interval = aggregatedData.length > 1 
+      ? aggregatedData[1].date.getTime() - aggregatedData[0].date.getTime() 
+      : 60 * 1000; // Assume 1 min interval
+
+    const lastDataPoint = aggregatedData[aggregatedData.length - 1];
+    if (!lastDataPoint) return [0, 0];
+    
+    const lastDataPointTime = lastDataPoint.date.getTime();
+
+    const getExtrapolatedTime = (index: number) => {
+        const point = aggregatedData[index];
+        if (point) return point.date.getTime();
+        
+        return lastDataPointTime + (index - (aggregatedData.length - 1)) * interval;
+    };
+    
+    const startTime = getExtrapolatedTime(Math.floor(start));
+    const endTime = getExtrapolatedTime(Math.ceil(end));
+
+    return [startTime, endTime];
+  }, [aggregatedData, xDomain]);
 
 
   const handleClick = (e: any) => {
@@ -198,31 +213,23 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
     
     const zoomFactor = 1.1;
     let newDomainWidth = e.deltaY < 0 ? domainWidth / zoomFactor : domainWidth * zoomFactor;
-
-    if (newDomainWidth > aggregatedData.length) {
-      newDomainWidth = aggregatedData.length;
-    }
   
     let newStart = mouseIndex - (mouseIndex - domainStart) * (newDomainWidth / domainWidth);
     let newEnd = newStart + newDomainWidth;
     
-    // Clamp the domain
-    if (newDomainWidth < 10) { // Minimum zoom level (10 data points)
+    // Clamp the domain for minimum zoom
+    if (newDomainWidth < 10) { 
       newDomainWidth = 10;
       const center = mouseIndex;
       newStart = center - newDomainWidth / 2;
       newEnd = center + newDomainWidth / 2;
     }
     
+    // Only clamp the start of the domain
     if (newStart < 0) {
+        newEnd -= newStart; 
         newStart = 0;
-        newEnd = newStart + newDomainWidth;
     }
-    if (newEnd > aggregatedData.length) {
-        newEnd = aggregatedData.length;
-        newStart = newEnd - newDomainWidth;
-    }
-     if (newStart < 0) { newStart = 0; }
   
     setXDomain([newStart, newEnd]);
   };
@@ -254,14 +261,10 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
     let newStart = start - deltaIndex;
     let newEnd = end - deltaIndex;
 
-    // Clamp to boundaries
+    // Clamp to left boundary only
     if (newStart < 0) {
       newStart = 0;
       newEnd = newStart + domainWidth;
-    }
-    if (newEnd > aggregatedData.length) {
-      newEnd = aggregatedData.length;
-      newStart = newEnd - domainWidth;
     }
     
     setXDomain([newStart, newEnd]);
