@@ -12,7 +12,7 @@ import {
   Bar,
   ReferenceLine,
 } from "recharts";
-import type { PriceData, Trade, RiskRewardTool as RRToolType, OpeningRange } from "@/types";
+import type { PriceData, Trade, RiskRewardTool as RRToolType, OpeningRange, PriceMarker } from "@/types";
 import { RiskRewardTool } from "./risk-reward-tool";
 import { useMemo, useRef, useState, useCallback, useEffect } from "react";
 import { cn } from "@/lib/utils";
@@ -25,6 +25,8 @@ interface InteractiveChartProps {
   onUpdateTool: (tool: RRToolType) => void;
   onRemoveTool: (id: string) => void;
   isPlacingRR: boolean;
+  isPlacingPriceMarker: boolean;
+  priceMarkers: PriceMarker[];
   timeframe: string;
   timeZone: string;
   endDate?: Date;
@@ -55,7 +57,7 @@ const Candlestick = (props: any) => {
 };
 
 
-export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdateTool, onRemoveTool, isPlacingRR, timeframe, timeZone, endDate, openingRange }: InteractiveChartProps) {
+export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdateTool, onRemoveTool, isPlacingRR, isPlacingPriceMarker, priceMarkers, timeframe, timeZone, endDate, openingRange }: InteractiveChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
 
   const aggregatedData = useMemo(() => {
@@ -63,7 +65,6 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
       return [];
     }
   
-    // Always filter by endDate first.
     const filteredByDate = endDate ? data.filter(point => point.date <= endDate) : data;
   
     if (timeframe === '1m') {
@@ -137,7 +138,6 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
     let targetIndex: number;
 
     if (endDate) {
-      // Find the last available candle within the endDate
       let foundIndex = -1;
       for(let i = aggregatedData.length - 1; i >= 0; i--) {
         if(aggregatedData[i].date <= endDate) {
@@ -151,8 +151,8 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
       targetIndex = aggregatedData.length - 1;
     }
     
-    const domainWidth = 100; // Default view width
-    const newEnd = targetIndex + (domainWidth * 0.2); // position end of data 20% from the right edge
+    const domainWidth = 100;
+    const newEnd = targetIndex + (domainWidth * 0.2);
     const newStart = newEnd - domainWidth;
 
     setXDomain(prev => {
@@ -160,7 +160,6 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
       if (isInitialLoadOrDateChange) {
          return [newStart > 0 ? newStart : 0, newEnd];
       }
-      // Auto-pan if new candle is off-screen
       if (aggregatedData.length - 1 > prev[1]) {
         const panAmount = (aggregatedData.length - 1) - prev[1];
         return [prev[0] + panAmount + 1, prev[1] + panAmount + 1];
@@ -172,8 +171,6 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
 
 
   useEffect(() => {
-    if (aggregatedData.length === 0 && !openingRange) return;
-
     let min = Infinity;
     let max = -Infinity;
 
@@ -190,12 +187,18 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
     }
     
     if (min === Infinity || max === -Infinity) {
-      return;
+      if (openingRange) {
+        // Fallback if there's no candle data but there is an opening range
+        min = openingRange.low;
+        max = openingRange.high;
+      } else {
+        return; // No data to base domain on
+      }
     }
 
     const padding = (max - min) * 0.1 || 10;
     setYDomain([min - padding, max + padding]);
-  }, [windowedData, openingRange, aggregatedData.length]);
+  }, [windowedData, openingRange]);
 
   const xTimeDomain = useMemo(() => {
     if (!aggregatedData || aggregatedData.length === 0) return [0, 0];
@@ -267,7 +270,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
   };
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (isPlacingRR || !chartContainerRef.current) return;
+    if (isPlacingRR || isPlacingPriceMarker || !chartContainerRef.current) return;
     e.preventDefault();
     setIsDragging(true);
     setDragStart({
@@ -304,7 +307,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
     if (!chartContainerRef.current) return;
     setIsDragging(false);
     setDragStart(null);
-    chartContainerRef.current.style.cursor = isPlacingRR ? 'crosshair' : 'grab';
+    chartContainerRef.current.style.cursor = isPlacingRR || isPlacingPriceMarker ? 'crosshair' : 'grab';
   };
   
   const handleMouseLeave = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -368,7 +371,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseLeave}
-      style={{ cursor: isPlacingRR ? 'crosshair' : (isDragging ? 'grabbing' : 'grab') }}
+      style={{ cursor: isPlacingRR || isPlacingPriceMarker ? 'crosshair' : (isDragging ? 'grabbing' : 'grab') }}
     >
       {!aggregatedData || aggregatedData.length === 0 ? (
         <div className="flex items-center justify-center w-full h-full text-muted-foreground">
@@ -457,6 +460,26 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
               />
             </>
           )}
+
+          {priceMarkers.map(marker => (
+            <ReferenceLine
+              key={marker.id}
+              y={marker.price}
+              yAxisId="main"
+              stroke="hsl(var(--ring))"
+              strokeDasharray="2 2"
+              strokeWidth={1}
+              ifOverflow="extendDomain"
+              label={{
+                value: marker.price.toFixed(2),
+                position: 'right',
+                fill: 'hsl(var(--ring))',
+                fontSize: 10,
+                dy: -5,
+                dx: 5,
+              }}
+            />
+          ))}
 
         </ComposedChart>
       </ResponsiveContainer>

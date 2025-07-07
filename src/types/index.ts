@@ -27,9 +27,12 @@ export interface RiskRewardTool {
   position: 'long' | 'short';
 }
 
+export interface PriceMarker {
+  id: string;
+  price: number;
+}
+
 export interface OpeningRange {
   high: number;
   low: number;
 }
-
-    

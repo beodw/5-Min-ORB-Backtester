@@ -2,11 +2,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, ChevronRight, ChevronsRight } from "lucide-react";
+import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, ChevronRight, ChevronsRight, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InteractiveChart } from "@/components/algo-insights/interactive-chart";
 import { mockPriceData } from "@/lib/mock-data";
-import type { RiskRewardTool as RRToolType, OpeningRange } from "@/types";
+import type { RiskRewardTool as RRToolType, OpeningRange, PriceMarker } from "@/types";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -18,6 +18,8 @@ import { Input } from "@/components/ui/input";
 export default function AlgoInsightsPage() {
   const [rrTools, setRrTools] = useState<RRToolType[]>([]);
   const [placingToolType, setPlacingToolType] = useState<'long' | 'short' | null>(null);
+  const [priceMarkers, setPriceMarkers] = useState<PriceMarker[]>([]);
+  const [isPlacingPriceMarker, setIsPlacingPriceMarker] = useState(false);
   const [timeframe, setTimeframe] = useState('1D');
   const [timeZone, setTimeZone] = useState<string>('');
   const [timezones, setTimezones] = useState<{ value: string; label: string }[]>([]);
@@ -102,6 +104,13 @@ export default function AlgoInsightsPage() {
       
       setRrTools(prevTools => [...prevTools, newTool]);
       setPlacingToolType(null);
+    } else if (isPlacingPriceMarker) {
+      const newMarker: PriceMarker = {
+        id: `pm-${Date.now()}`,
+        price: chartData.close,
+      };
+      setPriceMarkers(prev => [...prev, newMarker]);
+      setIsPlacingPriceMarker(false);
     }
   };
   
@@ -146,27 +155,18 @@ export default function AlgoInsightsPage() {
   const handleDateSelect = (date: Date | undefined) => {
     setOpeningRange(null);
     if (date && timeZone) {
-      // To handle timezones correctly, we find midnight of the *next* day in the target timezone,
-      // then subtract one millisecond. This is a robust way to handle Daylight Saving Time changes.
-      
-      // 1. Get the next calendar day from what the user picked.
       const nextDay = new Date(date);
       nextDay.setDate(date.getDate() + 1);
 
-      // 2. Format the next day into a YYYY/MM/DD string, which is a less ambiguous format for the Date constructor.
       const year = nextDay.getFullYear();
-      const month = nextDay.getMonth() + 1; // JS months are 0-indexed
+      const month = nextDay.getMonth() + 1;
       const day = nextDay.getDate();
       const nextDayStr = `${year}/${month}/${day}`;
 
-      // 3. Create a Date object for midnight of the next day. The key is to combine the date string
-      // with a generic time string and then use `toLocaleString` to have the JS engine
-      // calculate the correct date/time in the target zone.
       const tempDate = new Date(`${nextDayStr}, 00:00:00`);
       const tzDateString = tempDate.toLocaleString("en-US", { timeZone });
       const finalNextDay = new Date(tzDateString);
-
-      // 4. Subtract one millisecond to get 23:59:59.999 on the *selected* day in the correct timezone.
+      
       const endOfDay = new Date(finalNextDay.getTime() - 1);
       
       setSelectedDate(endOfDay);
@@ -206,15 +206,13 @@ export default function AlgoInsightsPage() {
 
     const startDate = selectedDate || mockPriceData[0].date;
     
-    // Find the index of the candle just after the current start date.
     const startIndex = mockPriceData.findIndex(p => p.date > startDate);
-    if (startIndex === -1) return; // Already at or after the last candle.
+    if (startIndex === -1) return;
 
     const [sessionHour, sessionMinute] = sessionStartTime.split(':').map(Number);
     const options = { hour: 'numeric', minute: 'numeric', hour12: false, timeZone };
     const formatter = new Intl.DateTimeFormat('en-US', options);
 
-    // Start searching from the next candle.
     for (let i = startIndex; i < mockPriceData.length; i++) {
         const pointDate = mockPriceData[i].date;
         
@@ -227,24 +225,39 @@ export default function AlgoInsightsPage() {
             const pointMinute = parseInt(minutePart.value, 10);
 
             if (pointHour === sessionHour && pointMinute === sessionMinute) {
-                // Found the next session open, now calculate the 5-min range
                 if (i + 4 < mockPriceData.length) {
                     const rangeSlice = mockPriceData.slice(i, i + 5);
                     const high = Math.max(...rangeSlice.map(p => p.high));
                     const low = Math.min(...rangeSlice.map(p => p.low));
                     setOpeningRange({ high, low });
                 } else {
-                    setOpeningRange(null); // Not enough data for a full 5-min range
+                    setOpeningRange(null);
                 }
                 
                 setSelectedDate(pointDate);
-                return; // Exit after finding the first match
+                return;
             }
         }
     }
-    // If no session is found, clear any existing range
     setOpeningRange(null);
   };
+  
+  const handlePlaceLong = () => {
+    setIsPlacingPriceMarker(false);
+    setPlacingToolType('long');
+  };
+
+  const handlePlaceShort = () => {
+    setIsPlacingPriceMarker(false);
+    setPlacingToolType('short');
+  };
+
+  const handlePlaceMarker = () => {
+    setPlacingToolType(null);
+    setIsPlacingPriceMarker(true);
+  };
+
+  const isPlacingAnything = !!placingToolType || isPlacingPriceMarker;
 
   return (
     <div className="flex flex-col h-screen bg-background text-foreground font-body">
@@ -316,6 +329,8 @@ export default function AlgoInsightsPage() {
                 onUpdateTool={handleUpdateTool}
                 onRemoveTool={handleRemoveTool}
                 isPlacingRR={!!placingToolType}
+                isPlacingPriceMarker={isPlacingPriceMarker}
+                priceMarkers={priceMarkers}
                 timeframe={timeframe}
                 timeZone={timeZone}
                 endDate={selectedDate}
@@ -389,7 +404,7 @@ export default function AlgoInsightsPage() {
                 <div className="flex justify-center gap-2">
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={() => setPlacingToolType('long')} disabled={!!placingToolType}>
+                            <Button variant="ghost" size="icon" onClick={handlePlaceLong} disabled={isPlacingAnything}>
                                 <ArrowUp className="w-5 h-5 text-accent"/>
                             </Button>
                         </TooltipTrigger>
@@ -399,7 +414,7 @@ export default function AlgoInsightsPage() {
                     </Tooltip>
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={() => setPlacingToolType('short')} disabled={!!placingToolType}>
+                            <Button variant="ghost" size="icon" onClick={handlePlaceShort} disabled={isPlacingAnything}>
                                 <ArrowDown className="w-5 h-5 text-destructive"/>
                             </Button>
                         </TooltipTrigger>
@@ -422,7 +437,23 @@ export default function AlgoInsightsPage() {
                   Download Report
               </Button>
             </div>
-            {placingToolType && (
+
+            <div className="flex flex-col items-center gap-2 bg-card/80 backdrop-blur-sm p-2 rounded-lg shadow-lg">
+                <TooltipProvider>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon" onClick={handlePlaceMarker} disabled={isPlacingAnything}>
+                                <Target className="w-5 h-5 text-foreground"/>
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="right">
+                            <p>Place Price Marker</p>
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
+            </div>
+
+            {isPlacingAnything && (
                 <div className="bg-card/80 backdrop-blur-sm p-2 rounded-lg text-center text-xs text-primary animate-pulse">
                     Click on the chart to place.
                 </div>
@@ -432,5 +463,3 @@ export default function AlgoInsightsPage() {
     </div>
   );
 }
-
-    
