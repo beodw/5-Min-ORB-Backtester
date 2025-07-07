@@ -37,15 +37,11 @@ const Candlestick = (props: any) => {
     const isGrowing = close > open;
     const color = isGrowing ? 'hsl(var(--accent))' : 'hsl(var(--destructive))';
     
-    // This is our scale function: pixels per price unit.
-    // We can only do this if there's a price range.
     const pixelsPerPrice = high !== low ? height / (high - low) : 0;
 
-    // Calculate the top of the candle body
     const bodyTopPrice = Math.max(open, close);
     const bodyTopY = y + (high - bodyTopPrice) * pixelsPerPrice;
     
-    // Calculate the height of the candle body
     const bodyHeight = Math.abs(open - close) * pixelsPerPrice;
 
     return (
@@ -123,34 +119,38 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState<{ x: number, domain: [number, number] } | null>(null);
 
-  useEffect(() => {
-    // Reset the view when the timeframe changes to show the latest data
-    const initialVisibleCandles = 100;
-    const rightPadding = 20;
-    const end = (aggregatedData.length > 0 ? (aggregatedData.length - 1 + rightPadding) : (1 + rightPadding));
-    const start = Math.max(0, end - initialVisibleCandles);
-    setXDomain([start, end]);
-  }, [timeframe, aggregatedData.length]);
+  const windowedData = useMemo(() => {
+    const [start, end] = xDomain;
+    const buffer = 100; // Add a buffer of 100 candles on each side
+    const startIndex = Math.max(0, Math.floor(start) - buffer);
+    const endIndex = Math.min(aggregatedData.length, Math.ceil(end) + buffer);
+    
+    return aggregatedData.slice(startIndex, endIndex);
+  }, [xDomain, aggregatedData]);
 
   useEffect(() => {
-    // Auto-scroll to new candle if it's added and is off-screen
     if (endDate) {
         const lastDataIndex = aggregatedData.length - 1;
         if (lastDataIndex < 0) return;
 
         setXDomain(prevDomain => {
             const [start, end] = prevDomain;
-            // If the last candle is outside the visible range (with padding)
             if (lastDataIndex > end - 20) {
                 const domainWidth = end - start;
-                const newEnd = lastDataIndex + 20; // Add some padding to the right
+                const newEnd = lastDataIndex + 20; 
                 const newStart = newEnd - domainWidth;
-                return [newStart, newEnd];
+                return [newStart > 0 ? newStart : 0, newEnd];
             }
-            return prevDomain; // Otherwise, don't auto-scroll
+            return prevDomain;
         });
+    } else {
+        const initialVisibleCandles = 100;
+        const rightPadding = 20;
+        const end = aggregatedData.length > 0 ? (aggregatedData.length - 1 + rightPadding) : (1 + rightPadding);
+        const start = Math.max(0, end - initialVisibleCandles);
+        setXDomain([start, end]);
     }
-  }, [endDate, aggregatedData.length]);
+  }, [endDate, aggregatedData.length, timeframe]);
 
   useEffect(() => {
     const [start, end] = xDomain;
@@ -186,10 +186,9 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
     
     const firstPointTime = aggregatedData[0].date.getTime();
     
-    // Estimate interval, handle case with 1 or 0 points
     const interval = aggregatedData.length > 1 
       ? aggregatedData[1].date.getTime() - firstPointTime
-      : 60000; // Default to 1 minute if not calculable
+      : 60000; 
 
     const startTime = firstPointTime + start * interval;
     const endTime = firstPointTime + end * interval;
@@ -218,8 +217,8 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
   
     const { left, width } = chartContainerRef.current.getBoundingClientRect();
     const mouseX = e.clientX - left;
-    const chartX = mouseX - 60; // Approximate adjustment for Y-axis margin
-    const plotWidth = width - 80; // Approximate plot width
+    const chartX = mouseX - 60;
+    const plotWidth = width - 80;
     
     if (chartX < 0 || chartX > plotWidth) return;
   
@@ -277,7 +276,6 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
     let newStart = start - deltaIndex;
     let newEnd = end - deltaIndex;
 
-    // Restore left boundary clamp
     if (newStart < 0) {
       newEnd = domainWidth;
       newStart = 0;
@@ -362,7 +360,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
         </div>
       ) : (
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={aggregatedData} onClick={handleClick} margin={{ top: 10, right: 30, left: 0, bottom: 10 }}>
+        <ComposedChart data={windowedData} onClick={handleClick} margin={{ top: 10, right: 30, left: 0, bottom: 10 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border) / 0.5)" />
           <XAxis
             dataKey="date"
