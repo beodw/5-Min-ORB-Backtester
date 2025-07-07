@@ -1,15 +1,17 @@
 import type { Trade, PriceData, PerformanceMetrics } from "@/types";
 
-const RISK_REWARD_RATIO = 2; // 1:2 Risk/Reward
-const STOP_LOSS_PERCENTAGE = 0.02; // 2% stop loss
-
-export function simulateTrade(entryIndex: number, priceData: PriceData[]): Trade | null {
+export function simulateTrade(
+  entryIndex: number,
+  priceData: PriceData[],
+  riskRewardRatio: number,
+  stopLossPercentage: number,
+): Trade | null {
   const entryData = priceData[entryIndex];
   if (!entryData) return null;
 
   const entryPrice = entryData.price;
-  const stopLossPrice = entryPrice * (1 - STOP_LOSS_PERCENTAGE);
-  const takeProfitPrice = entryPrice * (1 + STOP_LOSS_PERCENTAGE * RISK_REWARD_RATIO);
+  const stopLossPrice = entryPrice * (1 - stopLossPercentage);
+  const takeProfitPrice = entryPrice * (1 + stopLossPercentage * riskRewardRatio);
 
   for (let i = entryIndex + 1; i < priceData.length; i++) {
     const currentData = priceData[i];

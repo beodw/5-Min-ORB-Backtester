@@ -1,14 +1,15 @@
 "use client";
 
-import { useState, useMemo, useEffect, startTransition } from "react";
+import { useState, useEffect, startTransition } from "react";
 import { Bot, LineChart as LineChartIcon, History, Loader2 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { InteractiveChart } from "@/components/algo-insights/interactive-chart";
 import { PerformanceMetrics } from "@/components/algo-insights/performance-metrics";
 import { EquityCurveChart } from "@/components/algo-insights/equity-curve-chart";
 import { TradeHistoryTable } from "@/components/algo-insights/trade-history-table";
 import { ReportDisplay } from "@/components/algo-insights/report-display";
+import { StrategySettings } from "@/components/algo-insights/strategy-settings";
 import { mockPriceData } from "@/lib/mock-data";
 import { simulateTrade, calculatePerformanceMetrics } from "@/lib/backtesting";
 import { generateReportAction } from "@/app/actions";
@@ -27,6 +28,10 @@ export default function AlgoInsightsPage() {
   });
   const [aiReport, setAiReport] = useState<string>("");
   const [isReportLoading, setIsReportLoading] = useState(false);
+  const [strategySettings, setStrategySettings] = useState({
+    riskRewardRatio: 2,
+    stopLossPercentage: 0.02,
+  });
 
   useEffect(() => {
     const newMetrics = calculatePerformanceMetrics(trades);
@@ -34,7 +39,12 @@ export default function AlgoInsightsPage() {
   }, [trades]);
 
   const handleAddTrade = (tradeIndex: number) => {
-    const newTrade = simulateTrade(tradeIndex, mockPriceData);
+    const newTrade = simulateTrade(
+      tradeIndex,
+      mockPriceData,
+      strategySettings.riskRewardRatio,
+      strategySettings.stopLossPercentage
+    );
     if (newTrade) {
       setTrades((prevTrades) => [...prevTrades, newTrade].sort((a,b) => a.entryDate.getTime() - b.entryDate.getTime()));
     }
@@ -44,6 +54,11 @@ export default function AlgoInsightsPage() {
     setTrades([]);
     setAiReport("");
   };
+  
+  const handleSettingsChange = (newSettings: { riskRewardRatio: number; stopLossPercentage: number; }) => {
+    setStrategySettings(newSettings);
+    handleClearTrades();
+  }
 
   const handleGenerateReport = async () => {
     setIsReportLoading(true);
@@ -95,7 +110,7 @@ export default function AlgoInsightsPage() {
           <Card className="flex-1 flex flex-col bg-card/80 backdrop-blur-sm">
             <CardHeader>
               <CardTitle className="font-headline text-xl">Interactive Chart</CardTitle>
-              <p className="text-muted-foreground text-sm">Click on the chart to simulate a 'BUY' order.</p>
+              <CardDescription>Click on the chart to simulate a 'BUY' order.</CardDescription>
             </CardHeader>
             <CardContent className="flex-1 -mt-4">
               <InteractiveChart
@@ -108,6 +123,11 @@ export default function AlgoInsightsPage() {
         </div>
 
         <aside className="lg:col-span-1 flex flex-col gap-6">
+           <StrategySettings
+              riskRewardRatio={strategySettings.riskRewardRatio}
+              stopLossPercentage={strategySettings.stopLossPercentage}
+              onSettingsChange={handleSettingsChange}
+            />
            <PerformanceMetrics metrics={metrics} onClearTrades={handleClearTrades} />
           <Card className="flex-1 flex flex-col bg-card/80 backdrop-blur-sm">
              <CardContent className="p-4 flex-1 flex flex-col">
