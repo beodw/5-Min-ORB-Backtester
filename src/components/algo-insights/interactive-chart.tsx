@@ -26,28 +26,30 @@ interface InteractiveChartProps {
   isPlacingRR: boolean;
 }
 
-const Wick = (props: any) => {
-    const { x, y, width, height, payload } = props;
-    if (y === undefined || height === undefined) return null;
-    const { open, close } = payload;
-    const color = open < close ? 'hsl(var(--accent))' : 'hsl(var(--destructive))';
-    return <path d={`M ${x + width/2},${y} L ${x + width/2},${y + height}`} stroke={color} strokeWidth={1}/>;
-};
-
 const Candlestick = (props: any) => {
-    const { x, y, width, height, open, close } = props;
-    if (x === undefined || y === undefined || height < 0) return null;
-    const isGrowing = open < close;
+    const { x, y, width, height, payload } = props;
+    if (y === undefined || height <= 0 || !payload) return null;
+
+    const { open, high, low, close } = payload;
+    const isGrowing = close > open;
     const color = isGrowing ? 'hsl(var(--accent))' : 'hsl(var(--destructive))';
     
+    // This is our scale function: pixels per price unit.
+    // We can only do this if there's a price range.
+    const pixelsPerPrice = high !== low ? height / (high - low) : 0;
+
+    // Calculate the top of the candle body
+    const bodyTopPrice = Math.max(open, close);
+    const bodyTopY = y + (high - bodyTopPrice) * pixelsPerPrice;
+    
+    // Calculate the height of the candle body
+    const bodyHeight = Math.abs(open - close) * pixelsPerPrice;
+
     return (
-        <rect 
-            x={x}
-            y={y}
-            width={width}
-            height={height}
-            fill={color}
-        />
+        <g>
+            <path d={`M ${x + width / 2},${y} L ${x + width / 2},${y + height}`} stroke={color} strokeWidth={1} />
+            <rect x={x} y={bodyTopY} width={width} height={Math.max(1, bodyHeight)} fill={color} />
+        </g>
     );
 };
 
@@ -201,10 +203,10 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
       return (
         <div className="p-2 bg-card border border-border rounded-lg shadow-lg text-sm">
           <p className="label font-bold text-foreground">{`Date: ${new Date(label).toLocaleDateString()}`}</p>
-          <p>Open: <span className="font-mono text-primary">${data.open.toFixed(2)}</span></p>
-          <p>High: <span className="font-mono text-primary">${data.high.toFixed(2)}</span></p>
-          <p>Low: <span className="font-mono text-primary">${data.low.toFixed(2)}</span></p>
-          <p>Close: <span className="font-mono text-primary">${data.close.toFixed(2)}</span></p>
+          <p>Open: <span className="font-mono text-primary">{data.open.toFixed(2)}</span></p>
+          <p>High: <span className="font-mono text-primary">{data.high.toFixed(2)}</span></p>
+          <p>Low: <span className="font-mono text-primary">{data.low.toFixed(2)}</span></p>
+          <p>Close: <span className="font-mono text-primary">{data.close.toFixed(2)}</span></p>
         </div>
       );
     }
@@ -251,8 +253,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
           />
           <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'hsl(var(--accent))', strokeWidth: 1, strokeDasharray: '3 3' }}/>
           
-          <Bar dataKey="wick" shape={<Wick />} isAnimationActive={false} xAxisId="main" yAxisId="main"/>
-          <Bar dataKey={d => [d.open, d.close]} shape={<Candlestick />} isAnimationActive={false} xAxisId="main" yAxisId="main"/>
+          <Bar dataKey={(d) => [d.low, d.high]} shape={<Candlestick />} isAnimationActive={false} xAxisId="main" yAxisId="main"/>
 
           {trades.map((trade) => (
             <ReferenceDot
