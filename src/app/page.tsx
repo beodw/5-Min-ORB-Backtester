@@ -6,7 +6,7 @@ import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, Chevr
 import { Button } from "@/components/ui/button";
 import { InteractiveChart } from "@/components/algo-insights/interactive-chart";
 import { mockPriceData } from "@/lib/mock-data";
-import type { RiskRewardTool as RRToolType } from "@/types";
+import type { RiskRewardTool as RRToolType, OpeningRange } from "@/types";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -23,6 +23,7 @@ export default function AlgoInsightsPage() {
   const [timezones, setTimezones] = useState<{ value: string; label: string }[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
   const [sessionStartTime, setSessionStartTime] = useState('09:30');
+  const [openingRange, setOpeningRange] = useState<OpeningRange | null>(null);
 
   useEffect(() => {
     const getOffsetInMinutes = (timeZone: string): number => {
@@ -143,6 +144,7 @@ export default function AlgoInsightsPage() {
   };
 
   const handleDateSelect = (date: Date | undefined) => {
+    setOpeningRange(null);
     if (date && timeZone) {
       // To handle timezones correctly, we find midnight of the *next* day in the target timezone,
       // then subtract one millisecond. This is a robust way to handle Daylight Saving Time changes.
@@ -174,6 +176,7 @@ export default function AlgoInsightsPage() {
   };
   
   const handleNextCandle = () => {
+    setOpeningRange(null);
     const getDuration = (tf: string): number => {
       switch (tf) {
         case '1m': return 60 * 1000;
@@ -224,12 +227,23 @@ export default function AlgoInsightsPage() {
             const pointMinute = parseInt(minutePart.value, 10);
 
             if (pointHour === sessionHour && pointMinute === sessionMinute) {
-                // Found the next session open
+                // Found the next session open, now calculate the 5-min range
+                if (i + 4 < mockPriceData.length) {
+                    const rangeSlice = mockPriceData.slice(i, i + 5);
+                    const high = Math.max(...rangeSlice.map(p => p.high));
+                    const low = Math.min(...rangeSlice.map(p => p.low));
+                    setOpeningRange({ high, low });
+                } else {
+                    setOpeningRange(null); // Not enough data for a full 5-min range
+                }
+                
                 setSelectedDate(pointDate);
                 return; // Exit after finding the first match
             }
         }
     }
+    // If no session is found, clear any existing range
+    setOpeningRange(null);
   };
 
   return (
@@ -305,6 +319,7 @@ export default function AlgoInsightsPage() {
                 timeframe={timeframe}
                 timeZone={timeZone}
                 endDate={selectedDate}
+                openingRange={openingRange}
             />
         </div>
 

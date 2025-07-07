@@ -10,8 +10,9 @@ import {
   Tooltip,
   ReferenceDot,
   Bar,
+  ReferenceLine,
 } from "recharts";
-import type { PriceData, Trade, RiskRewardTool as RRToolType } from "@/types";
+import type { PriceData, Trade, RiskRewardTool as RRToolType, OpeningRange } from "@/types";
 import { RiskRewardTool } from "./risk-reward-tool";
 import { useMemo, useRef, useState, useCallback, useEffect } from "react";
 import { cn } from "@/lib/utils";
@@ -27,6 +28,7 @@ interface InteractiveChartProps {
   timeframe: string;
   timeZone: string;
   endDate?: Date;
+  openingRange: OpeningRange | null;
 }
 
 const Candlestick = (props: any) => {
@@ -53,19 +55,12 @@ const Candlestick = (props: any) => {
 };
 
 
-export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdateTool, onRemoveTool, isPlacingRR, timeframe, timeZone, endDate }: InteractiveChartProps) {
+export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdateTool, onRemoveTool, isPlacingRR, timeframe, timeZone, endDate, openingRange }: InteractiveChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
 
-  const filteredData = useMemo(() => {
-    if (!endDate) {
-      return data;
-    }
-    return data.filter(point => point.date <= endDate);
-  }, [data, endDate]);
-  
   const aggregatedData = useMemo(() => {
-    if (timeframe === '1m' || !filteredData || filteredData.length === 0) {
-      return filteredData;
+    if (timeframe === '1m' || !data || data.length === 0) {
+      return data;
     }
 
     const getIntervalMinutes = (tf: string): number => {
@@ -79,12 +74,14 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
     };
 
     const interval = getIntervalMinutes(timeframe) * 60 * 1000; // interval in milliseconds
-    if (interval <= 60000) return filteredData;
+    if (interval <= 60000) return data;
 
     const result: PriceData[] = [];
     let currentCandle: PriceData | null = null;
+    
+    const filteredForAggregation = endDate ? data.filter(point => point.date <= endDate) : data;
 
-    for (const point of filteredData) {
+    for (const point of filteredForAggregation) {
       const pointTime = point.date.getTime();
       const bucketTimestamp = Math.floor(pointTime / interval) * interval;
       
@@ -112,7 +109,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
     }
     
     return result;
-  }, [filteredData, timeframe]);
+  }, [data, timeframe, endDate]);
   
   const [xDomain, setXDomain] = useState<[number, number]>([0, 100]);
   const [yDomain, setYDomain] = useState<[number, number]>([0, 100]);
@@ -120,6 +117,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
   const [dragStart, setDragStart] = useState<{ x: number, domain: [number, number] } | null>(null);
 
   const windowedData = useMemo(() => {
+    if (!aggregatedData.length) return [];
     const [start, end] = xDomain;
     const buffer = 100; // Add a buffer of 100 candles on each side
     const startIndex = Math.max(0, Math.floor(start) - buffer);
@@ -129,28 +127,40 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
   }, [xDomain, aggregatedData]);
 
   useEffect(() => {
-    if (endDate) {
-        const lastDataIndex = aggregatedData.length - 1;
-        if (lastDataIndex < 0) return;
+    if (aggregatedData.length === 0) return;
 
-        setXDomain(prevDomain => {
-            const [start, end] = prevDomain;
-            if (lastDataIndex > end - 20) {
-                const domainWidth = end - start;
-                const newEnd = lastDataIndex + 20; 
-                const newStart = newEnd - domainWidth;
-                return [newStart > 0 ? newStart : 0, newEnd];
-            }
-            return prevDomain;
-        });
+    let targetIndex: number;
+
+    if (endDate) {
+      targetIndex = aggregatedData.findIndex(p => p.date >= endDate);
+      if (targetIndex === -1) {
+        targetIndex = aggregatedData.length - 1;
+      }
     } else {
-        const initialVisibleCandles = 100;
-        const rightPadding = 20;
-        const end = aggregatedData.length > 0 ? (aggregatedData.length - 1 + rightPadding) : (1 + rightPadding);
-        const start = Math.max(0, end - initialVisibleCandles);
-        setXDomain([start, end]);
+      targetIndex = aggregatedData.length -1;
     }
+    
+    const domainWidth = xDomain[1] - xDomain[0];
+    const newEnd = targetIndex + (domainWidth * 0.2); // position end of data 20% from the right edge
+    const newStart = newEnd - domainWidth;
+
+    setXDomain(prev => {
+      const isInitialLoad = prev[0] === 0 && prev[1] === 100;
+      if (isInitialLoad || endDate) {
+         return [newStart > 0 ? newStart : 0, newEnd];
+      }
+
+      // Auto-pan if new candle is off-screen
+      if (aggregatedData.length - 1 > prev[1]) {
+        const panAmount = (aggregatedData.length - 1) - prev[1];
+        return [prev[0] + panAmount + 1, prev[1] + panAmount + 1];
+      }
+
+      return prev;
+    });
+
   }, [endDate, aggregatedData.length, timeframe]);
+
 
   useEffect(() => {
     const [start, end] = xDomain;
@@ -237,13 +247,12 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
           const center = mouseIndex;
           newStart = center - newDomainWidth / 2;
         }
-
-        let newEnd = newStart + newDomainWidth;
         
         if (newStart < 0) {
-            newEnd -= newStart; 
-            newStart = 0;
+          newStart = 0;
         }
+        
+        let newEnd = newStart + newDomainWidth;
       
         return [newStart, newEnd];
     });
@@ -274,12 +283,11 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
     const deltaIndex = dx * indexPerPixel;
 
     let newStart = start - deltaIndex;
-    let newEnd = end - deltaIndex;
 
     if (newStart < 0) {
-      newEnd = domainWidth;
       newStart = 0;
     }
+    let newEnd = newStart + domainWidth;
     
     setXDomain([newStart, newEnd]);
   };
@@ -382,7 +390,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
             fontSize={12}
             tickLine={false}
             axisLine={false}
-            tickFormatter={(value) => value.toFixed(2)}
+            tickFormatter={(value) => typeof value === 'number' ? value.toFixed(2) : ''}
             domain={yDomain}
             allowDataOverflow={true}
             yAxisId="main"
@@ -404,6 +412,42 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
               yAxisId="main"
             />
           ))}
+
+          {openingRange && (
+            <>
+              <ReferenceLine
+                y={openingRange.high}
+                yAxisId="main"
+                stroke="hsl(var(--primary))"
+                strokeDasharray="4 4"
+                strokeWidth={1}
+                label={{ 
+                  value: openingRange.high.toFixed(2), 
+                  position: 'right', 
+                  fill: 'hsl(var(--primary-foreground))', 
+                  fontSize: 10,
+                  dy: -5,
+                  dx: 5
+                }}
+              />
+              <ReferenceLine
+                y={openingRange.low}
+                yAxisId="main"
+                stroke="hsl(var(--primary))"
+                strokeDasharray="4 4"
+                strokeWidth={1}
+                label={{ 
+                  value: openingRange.low.toFixed(2), 
+                  position: 'right', 
+                  fill: 'hsl(var(--primary-foreground))',
+                  fontSize: 10,
+                  dy: 5,
+                  dx: 5
+                }}
+              />
+            </>
+          )}
+
         </ComposedChart>
       </ResponsiveContainer>
       )}

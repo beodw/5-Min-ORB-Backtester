@@ -1,4 +1,5 @@
 
+
 export interface PriceData {
   date: Date;
   open: number;
@@ -24,4 +25,9 @@ export interface RiskRewardTool {
   entryIndex: number;
   widthInPoints: number;
   position: 'long' | 'short';
+}
+
+export interface OpeningRange {
+  high: number;
+  low: number;
 }
