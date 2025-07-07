@@ -9,11 +9,11 @@ import {
   YAxis,
   Tooltip,
   ReferenceDot,
-  Line,
+  Bar,
 } from "recharts";
 import type { PriceData, Trade, RiskRewardTool as RRToolType } from "@/types";
 import { RiskRewardTool } from "./risk-reward-tool";
-import { useRef } from "react";
+import { useMemo, useRef } from "react";
 import { cn } from "@/lib/utils";
 
 interface InteractiveChartProps {
@@ -26,6 +26,33 @@ interface InteractiveChartProps {
   isPlacingRR: boolean;
 }
 
+const Candlestick = (props: any) => {
+  const { x, width, yAxis, payload } = props;
+  const { open, close, high, low } = payload;
+
+  if (!yAxis || typeof yAxis.scale !== 'function') {
+    return null;
+  }
+  
+  const closeY = yAxis.scale(close);
+  const openY = yAxis.scale(open);
+  const highY = yAxis.scale(high);
+  const lowY = yAxis.scale(low);
+
+  const isUp = close >= open;
+  const color = isUp ? 'hsl(var(--accent))' : 'hsl(var(--destructive))';
+  const bodyHeight = Math.max(1, Math.abs(closeY - openY));
+  const bodyY = Math.min(closeY, openY);
+
+  return (
+    <g>
+      <line x1={x + width / 2} y1={highY} x2={x + width / 2} y2={lowY} stroke={color} strokeWidth={1} />
+      <rect x={x} y={bodyY} width={width} height={bodyHeight} fill={color} />
+    </g>
+  );
+};
+
+
 export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdateTool, onRemoveTool, isPlacingRR }: InteractiveChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
 
@@ -34,7 +61,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
       const payload = e.activePayload?.[0]?.payload;
       if (payload) {
         onChartClick({
-          close: payload.close, // Use close price for placing tools
+          close: payload.close,
           date: new Date(payload.date),
           dataIndex: e.activeTooltipIndex,
         });
@@ -57,6 +84,17 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
     }
     return null;
   };
+  
+  const yDomain = useMemo(() => {
+    if (!data || data.length === 0) return [0, 100];
+    const lows = data.map(d => d.low);
+    const highs = data.map(d => d.high);
+    const min = Math.min(...lows);
+    const max = Math.max(...highs);
+    const padding = (max - min) * 0.1;
+    return [min - padding, max + padding];
+  }, [data]);
+
 
   return (
     <div 
@@ -82,18 +120,13 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
             fontSize={12}
             tickLine={false}
             axisLine={false}
-            tickFormatter={(value) => `$${value}`}
-            domain={['dataMin - 5', 'dataMax + 5']}
+            tickFormatter={(value) => `$${value.toFixed(2)}`}
+            domain={yDomain}
             allowDataOverflow={true}
           />
           <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'hsl(var(--accent))', strokeWidth: 1, strokeDasharray: '3 3' }}/>
           
-          {/* Add invisible lines to scale Y-axis correctly to high/low */}
-          <Line dataKey="high" stroke="transparent" dot={false} activeDot={false} />
-          <Line dataKey="low" stroke="transparent" dot={false} activeDot={false} />
-
-          {/* This is the visible line chart based on the close price */}
-          <Line type="monotone" dataKey="close" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+          <Bar dataKey="close" shape={<Candlestick />} />
 
           {trades.map((trade) => (
             <ReferenceDot
