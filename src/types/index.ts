@@ -1,7 +1,10 @@
 
 export interface PriceData {
   date: Date;
-  price: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
 }
 
 // Added to fix a type error in InteractiveChart
