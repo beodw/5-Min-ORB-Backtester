@@ -58,6 +58,13 @@ export function RiskRewardTool({ tool, onUpdate, onRemove, data, chartContainer 
     };
   }, [chartContainer, data]);
 
+  // If dimensions are not valid, don't render the tool.
+  // This prevents calculation errors (NaN) if the chart isn't ready
+  // or if the price data has no volatility.
+  if (plotHeight <= 0 || priceRange <= 0) {
+    return null;
+  }
+
   const yToPrice = useCallback((y: number) => {
     return maxPrice - ((y - Y_AXIS_MARGIN_TOP) / plotHeight) * priceRange;
   }, [maxPrice, plotHeight, priceRange]);
