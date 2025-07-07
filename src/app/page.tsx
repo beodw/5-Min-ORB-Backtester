@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Download, Target, X, ArrowUp, ArrowDown } from "lucide-react";
+import { Download, Target, ArrowUp, ArrowDown } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { InteractiveChart } from "@/components/algo-insights/interactive-chart";
-import { ReportDisplay } from "@/components/algo-insights/report-display";
 import { mockPriceData } from "@/lib/mock-data";
 import type { RiskRewardTool as RRToolType } from "@/types";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export default function AlgoInsightsPage() {
   const [rrTools, setRrTools] = useState<RRToolType[]>([]);
@@ -40,10 +40,6 @@ export default function AlgoInsightsPage() {
 
   const handleRemoveTool = (id: string) => {
     setRrTools(prevTools => prevTools.filter(t => t.id !== id));
-  };
-
-  const handleClearTools = () => {
-    setRrTools([]);
   };
 
   const handleExportCsv = () => {
@@ -105,59 +101,55 @@ export default function AlgoInsightsPage() {
             />
         </div>
 
-        <aside className="absolute top-4 left-4 z-10 w-[350px] flex flex-col gap-6">
+        <aside className="absolute top-4 left-4 z-10 flex flex-col items-start gap-4">
             <Card className="bg-card/80 backdrop-blur-sm">
-                <CardHeader>
+                <CardHeader className="pb-4">
                     <CardTitle className="font-headline text-xl flex items-center gap-2">
                         <Target className="w-5 h-5"/>
                         Trading Tools
                     </CardTitle>
-                    <CardDescription>
-                        {placingToolType ? `Click on the chart to place a ${placingToolType} position.` : "Use the tools to define trade setups."}
-                    </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div className="grid grid-cols-2 gap-2">
-                        <Button onClick={() => setPlacingToolType('long')} disabled={!!placingToolType}>
-                            <ArrowUp className="mr-2 text-accent"/> Place Long
-                        </Button>
-                        <Button onClick={() => setPlacingToolType('short')} disabled={!!placingToolType}>
-                            <ArrowDown className="mr-2 text-destructive"/> Place Short
-                        </Button>
-                    </div>
-
+                    <TooltipProvider>
+                      <div className="flex justify-center gap-2">
+                          <Tooltip>
+                              <TooltipTrigger asChild>
+                                  <Button variant="outline" size="icon" onClick={() => setPlacingToolType('long')} disabled={!!placingToolType}>
+                                      <ArrowUp className="w-5 h-5 text-accent"/>
+                                  </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                  <p>Place Long Position</p>
+                              </TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                              <TooltipTrigger asChild>
+                                  <Button variant="outline" size="icon" onClick={() => setPlacingToolType('short')} disabled={!!placingToolType}>
+                                      <ArrowDown className="w-5 h-5 text-destructive"/>
+                                  </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                  <p>Place Short Position</p>
+                              </TooltipContent>
+                          </Tooltip>
+                      </div>
+                    </TooltipProvider>
                     {placingToolType && (
-                        <div className="text-center text-sm text-primary mt-2 animate-pulse">
-                            Placing {placingToolType} tool... Click on the chart.
-                        </div>
-                    )}
-                    
-                    {rrTools.length > 0 && (
-                        <div className="border-t border-border pt-4 mt-4 space-y-2">
-                           <p className="text-sm text-center text-muted-foreground">{rrTools.length} tool(s) placed.</p>
-                            <div className="grid grid-cols-1 gap-2 pt-2">
-                                <Button variant="outline" onClick={handleClearTools}>
-                                    <X className="mr-2"/> Clear All Tools
-                                </Button>
-                            </div>
+                        <div className="text-center text-xs text-primary mt-2 animate-pulse">
+                            Click on the chart to place.
                         </div>
                     )}
                 </CardContent>
             </Card>
-          <Card className="flex-1 flex flex-col bg-card/80 backdrop-blur-sm">
-             <CardHeader>
-                <CardTitle className="font-headline text-xl flex items-center gap-2">
-                    <Download className="w-5 h-5"/>
-                    Export Report
-                </CardTitle>
-            </CardHeader>
-            <CardContent className="flex-1 flex flex-col">
-                <ReportDisplay
-                  onExport={handleExportCsv}
-                  hasTools={rrTools.length > 0}
-                />
-            </CardContent>
-          </Card>
+            <Button
+                variant="ghost" 
+                onClick={handleExportCsv} 
+                disabled={rrTools.length === 0}
+                className="bg-card/80 backdrop-blur-sm text-foreground hover:bg-card/90"
+            >
+                <Download className="mr-2 h-4 w-4" />
+                Download Report
+            </Button>
         </aside>
       </main>
     </div>
