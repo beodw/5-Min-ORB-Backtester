@@ -244,7 +244,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
             fontSize={12}
             tickLine={false}
             axisLine={false}
-            tickFormatter={(value) => `$${value.toFixed(2)}`}
+            tickFormatter={(value) => value.toFixed(2)}
             domain={yDomain}
             allowDataOverflow={true}
             yAxisId="main"

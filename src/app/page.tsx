@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Download, Target, ArrowUp, ArrowDown } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Download, ArrowUp, ArrowDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InteractiveChart } from "@/components/algo-insights/interactive-chart";
 import { mockPriceData } from "@/lib/mock-data";
 import type { RiskRewardTool as RRToolType } from "@/types";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function AlgoInsightsPage() {
   const [rrTools, setRrTools] = useState<RRToolType[]>([]);
@@ -101,47 +101,65 @@ export default function AlgoInsightsPage() {
             />
         </div>
 
-        <aside className="absolute top-4 left-4 z-10 flex flex-col items-start gap-4">
-            <div className="flex flex-col items-start gap-2">
-                <TooltipProvider>
-                  <div className="flex justify-center gap-2">
-                      <Tooltip>
-                          <TooltipTrigger asChild>
-                              <Button variant="outline" size="icon" onClick={() => setPlacingToolType('long')} disabled={!!placingToolType}>
-                                  <ArrowUp className="w-5 h-5 text-accent"/>
-                              </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                              <p>Place Long Position</p>
-                          </TooltipContent>
-                      </Tooltip>
-                      <Tooltip>
-                          <TooltipTrigger asChild>
-                              <Button variant="outline" size="icon" onClick={() => setPlacingToolType('short')} disabled={!!placingToolType}>
-                                  <ArrowDown className="w-5 h-5 text-destructive"/>
-                              </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                              <p>Place Short Position</p>
-                          </TooltipContent>
-                      </Tooltip>
-                  </div>
-                </TooltipProvider>
-                {placingToolType && (
-                    <div className="text-center text-xs text-primary mt-2 animate-pulse">
-                        Click on the chart to place.
-                    </div>
-                )}
+        <aside className="absolute top-4 left-4 z-10 flex flex-col items-start gap-2">
+            <div className="flex items-center gap-4 bg-card/80 backdrop-blur-sm p-2 rounded-lg shadow-lg">
+              <Select defaultValue="1D">
+                  <SelectTrigger className="w-[120px]">
+                      <SelectValue placeholder="Timeframe" />
+                  </SelectTrigger>
+                  <SelectContent>
+                      <SelectItem value="1m">1 Minute</SelectItem>
+                      <SelectItem value="30m">30 Minutes</SelectItem>
+                      <SelectItem value="1H">1 Hour</SelectItem>
+                      <SelectItem value="4H">4 Hours</SelectItem>
+                      <SelectItem value="1D">1 Day</SelectItem>
+                  </SelectContent>
+              </Select>
+
+              <div className="h-6 border-l border-border/50"></div>
+              
+              <TooltipProvider>
+                <div className="flex justify-center gap-2">
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon" onClick={() => setPlacingToolType('long')} disabled={!!placingToolType}>
+                                <ArrowUp className="w-5 h-5 text-accent"/>
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>Place Long Position</p>
+                        </TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon" onClick={() => setPlacingToolType('short')} disabled={!!placingToolType}>
+                                <ArrowDown className="w-5 h-5 text-destructive"/>
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>Place Short Position</p>
+                        </TooltipContent>
+                    </Tooltip>
+                </div>
+              </TooltipProvider>
+
+              <div className="h-6 border-l border-border/50"></div>
+
+              <Button
+                  variant="ghost" 
+                  onClick={handleExportCsv} 
+                  disabled={rrTools.length === 0}
+                  className="text-foreground"
+              >
+                  <Download className="mr-2 h-4 w-4" />
+                  Download Report
+              </Button>
             </div>
-            <Button
-                variant="ghost" 
-                onClick={handleExportCsv} 
-                disabled={rrTools.length === 0}
-                className="bg-card/80 backdrop-blur-sm text-foreground hover:bg-card/90"
-            >
-                <Download className="mr-2 h-4 w-4" />
-                Download Report
-            </Button>
+            {placingToolType && (
+                <div className="bg-card/80 backdrop-blur-sm p-2 rounded-lg text-center text-xs text-primary animate-pulse">
+                    Click on the chart to place.
+                </div>
+            )}
         </aside>
       </main>
     </div>
