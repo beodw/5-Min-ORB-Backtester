@@ -122,6 +122,10 @@ export default function AlgoInsightsPage() {
     setRrTools(prevTools => prevTools.filter(t => t.id !== id));
   };
 
+  const handleRemovePriceMarker = (id: string) => {
+    setPriceMarkers(prevMarkers => prevMarkers.filter(m => m.id !== id));
+  };
+
   const handleExportCsv = () => {
     if (rrTools.length === 0) return;
 
@@ -155,21 +159,37 @@ export default function AlgoInsightsPage() {
   const handleDateSelect = (date: Date | undefined) => {
     setOpeningRange(null);
     if (date && timeZone) {
-      const nextDay = new Date(date);
-      nextDay.setDate(date.getDate() + 1);
-
-      const year = nextDay.getFullYear();
-      const month = nextDay.getMonth() + 1;
-      const day = nextDay.getDate();
-      const nextDayStr = `${year}/${month}/${day}`;
-
-      const tempDate = new Date(`${nextDayStr}, 00:00:00`);
+      // Create a string in 'YYYY-MM-DD' format from the selected date.
+      // This avoids timezone issues with the Date constructor.
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const dateString = `${year}-${month}-${day}`;
+  
+      // Construct a date string representing the end of that day in the selected timezone.
+      // This is less ambiguous than using Date objects which can be affected by the browser's timezone.
+      const timeString = `23:59:59`;
+      const dateTimeString = `${dateString}T${timeString}`;
+      
+      // We can't directly use new Date(dateTimeString) as it assumes local timezone.
+      // A robust way is to construct the date in UTC and then adjust.
+      // However, a simpler way that works for recharts is to find the timestamp.
+      // For this specific use case, we create a temporary date object
+      // that when formatted into the selected timezone gives us the correct local time parts.
+      // Then we can get its real timestamp.
+      const tempDate = new Date(dateTimeString);
       const tzDateString = tempDate.toLocaleString("en-US", { timeZone });
-      const finalNextDay = new Date(tzDateString);
+      const finalDate = new Date(tzDateString);
+
+      // Let's try a more robust way to avoid ambiguity.
+      const utcDate = new Date(date.toLocaleString('en-US', {timeZone: 'UTC'}));
+      const tzDate = new Date(date.toLocaleString('en-US', {timeZone}));
+      const offset = tzDate.getTime() - utcDate.getTime();
       
-      const endOfDay = new Date(finalNextDay.getTime() - 1);
+      const endOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
+      const finalTimestamp = endOfDay.getTime() - offset;
       
-      setSelectedDate(endOfDay);
+      setSelectedDate(new Date(finalTimestamp));
     } else {
         setSelectedDate(undefined);
     }
@@ -331,6 +351,7 @@ export default function AlgoInsightsPage() {
                 isPlacingRR={!!placingToolType}
                 isPlacingPriceMarker={isPlacingPriceMarker}
                 priceMarkers={priceMarkers}
+                onRemovePriceMarker={handleRemovePriceMarker}
                 timeframe={timeframe}
                 timeZone={timeZone}
                 endDate={selectedDate}

@@ -12,8 +12,9 @@ import {
   Bar,
   ReferenceLine,
 } from "recharts";
-import type { PriceData, Trade, RiskRewardTool as RRToolType, OpeningRange, PriceMarker } from "@/types";
+import type { PriceData, Trade, RiskRewardTool as RRToolType, OpeningRange, PriceMarker as PriceMarkerType } from "@/types";
 import { RiskRewardTool } from "./risk-reward-tool";
+import { PriceMarker } from "./price-marker";
 import { useMemo, useRef, useState, useCallback, useEffect } from "react";
 import { cn } from "@/lib/utils";
 
@@ -26,7 +27,8 @@ interface InteractiveChartProps {
   onRemoveTool: (id: string) => void;
   isPlacingRR: boolean;
   isPlacingPriceMarker: boolean;
-  priceMarkers: PriceMarker[];
+  priceMarkers: PriceMarkerType[];
+  onRemovePriceMarker: (id: string) => void;
   timeframe: string;
   timeZone: string;
   endDate?: Date;
@@ -57,7 +59,22 @@ const Candlestick = (props: any) => {
 };
 
 
-export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdateTool, onRemoveTool, isPlacingRR, isPlacingPriceMarker, priceMarkers, timeframe, timeZone, endDate, openingRange }: InteractiveChartProps) {
+export function InteractiveChart({ 
+    data, 
+    trades, 
+    onChartClick, 
+    rrTools, 
+    onUpdateTool, 
+    onRemoveTool, 
+    isPlacingRR, 
+    isPlacingPriceMarker, 
+    priceMarkers, 
+    onRemovePriceMarker,
+    timeframe, 
+    timeZone, 
+    endDate, 
+    openingRange 
+}: InteractiveChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
 
   const aggregatedData = useMemo(() => {
@@ -66,7 +83,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
     }
   
     const filteredByDate = endDate ? data.filter(point => point.date <= endDate) : data;
-  
+    
     if (timeframe === '1m') {
       return filteredByDate;
     }
@@ -198,6 +215,14 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
     const padding = (max - min) * 0.1 || 10;
     setYDomain([min - padding, max + padding]);
   }, [windowedData, openingRange]);
+
+  const xDataDomain = useMemo(() => {
+    if (!aggregatedData.length) return [0, 0];
+    return [
+      aggregatedData[0].date.getTime(),
+      aggregatedData[aggregatedData.length - 1].date.getTime()
+    ];
+  }, [aggregatedData]);
 
   const xTimeDomain = useMemo(() => {
     if (!aggregatedData || aggregatedData.length === 0) return [0, 0];
@@ -462,30 +487,20 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
             </>
           )}
 
-          {priceMarkers.map(marker => (
-            <ReferenceLine
-              key={marker.id}
-              y={marker.price}
-              yAxisId="main"
-              xAxisId="main"
-              stroke="hsl(var(--ring))"
-              strokeDasharray="2 2"
-              strokeWidth={1}
-              ifOverflow="extendDomain"
-              label={{
-                value: marker.price.toFixed(2),
-                position: 'right',
-                fill: 'hsl(var(--ring))',
-                fontSize: 10,
-                dy: -5,
-                dx: 5,
-              }}
-            />
-          ))}
-
         </ComposedChart>
       </ResponsiveContainer>
       )}
+
+      {chartContainerRef.current && priceMarkers.map(marker => (
+        <PriceMarker 
+          key={marker.id}
+          marker={marker} 
+          onRemove={onRemovePriceMarker}
+          chartContainer={chartContainerRef.current!}
+          yDomain={yDomain}
+        />
+      ))}
+
       {chartContainerRef.current && rrTools.map(tool => (
         <RiskRewardTool 
           key={tool.id}
