@@ -62,13 +62,14 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
     if (!data || data.length === 0) {
       return [];
     }
-
+  
+    // Always filter by endDate first.
     const filteredByDate = endDate ? data.filter(point => point.date <= endDate) : data;
-
+  
     if (timeframe === '1m') {
       return filteredByDate;
     }
-
+  
     const getIntervalMinutes = (tf: string): number => {
       switch (tf) {
         case '30m': return 30;
@@ -78,10 +79,10 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
         default: return 1;
       }
     };
-
+  
     const interval = getIntervalMinutes(timeframe) * 60 * 1000;
     if (interval <= 60000) return filteredByDate;
-
+  
     const result: PriceData[] = [];
     let currentCandle: PriceData | null = null;
     
@@ -172,6 +173,8 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
 
   useEffect(() => {
     if (windowedData.length === 0) {
+      // If there's no data in the window, don't change the Y-domain.
+      // This prevents expensive calculations and keeps the scale stable when panning into empty space.
       return;
     }
     
@@ -369,7 +372,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
       onMouseLeave={handleMouseLeave}
       style={{ cursor: isPlacingRR ? 'crosshair' : (isDragging ? 'grabbing' : 'grab') }}
     >
-      {!windowedData || windowedData.length === 0 ? (
+      {!aggregatedData || aggregatedData.length === 0 ? (
         <div className="flex items-center justify-center w-full h-full text-muted-foreground">
           No data available for the selected time range.
         </div>
@@ -475,3 +478,5 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
     </div>
   );
 }
+
+    

@@ -31,3 +31,5 @@ export interface OpeningRange {
   high: number;
   low: number;
 }
+
+    

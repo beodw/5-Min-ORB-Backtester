@@ -432,3 +432,5 @@ export default function AlgoInsightsPage() {
     </div>
   );
 }
+
+    
