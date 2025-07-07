@@ -22,3 +22,12 @@ export interface PerformanceMetrics {
   averageProfit: number;
   averageLoss: number;
 }
+
+export interface RiskRewardTool {
+  id: string;
+  entryPrice: number;
+  stopLoss: number;
+  takeProfit: number;
+  entryIndex: number;
+  widthInPoints: number;
+}

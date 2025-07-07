@@ -1,19 +1,19 @@
 "use client";
 
 import { useState, useEffect, startTransition } from "react";
-import { Bot, LineChart as LineChartIcon, History, Loader2 } from "lucide-react";
+import { Bot, LineChart as LineChartIcon, History, Target, X, Play } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
 import { InteractiveChart } from "@/components/algo-insights/interactive-chart";
 import { PerformanceMetrics } from "@/components/algo-insights/performance-metrics";
 import { EquityCurveChart } from "@/components/algo-insights/equity-curve-chart";
 import { TradeHistoryTable } from "@/components/algo-insights/trade-history-table";
 import { ReportDisplay } from "@/components/algo-insights/report-display";
-import { StrategySettings } from "@/components/algo-insights/strategy-settings";
 import { mockPriceData } from "@/lib/mock-data";
 import { simulateTrade, calculatePerformanceMetrics } from "@/lib/backtesting";
 import { generateReportAction } from "@/app/actions";
-import type { Trade, PerformanceMetrics as PerformanceMetricsType } from "@/types";
+import type { Trade, PerformanceMetrics as PerformanceMetricsType, RiskRewardTool as RRToolType } from "@/types";
 
 export default function AlgoInsightsPage() {
   const [trades, setTrades] = useState<Trade[]>([]);
@@ -28,36 +28,52 @@ export default function AlgoInsightsPage() {
   });
   const [aiReport, setAiReport] = useState<string>("");
   const [isReportLoading, setIsReportLoading] = useState(false);
-  const [strategySettings, setStrategySettings] = useState({
-    riskRewardRatio: 2,
-    stopLossPercentage: 0.02,
-  });
+  const [rrTool, setRrTool] = useState<RRToolType | null>(null);
+  const [isPlacingRR, setIsPlacingRR] = useState(false);
 
   useEffect(() => {
     const newMetrics = calculatePerformanceMetrics(trades);
     setMetrics(newMetrics);
   }, [trades]);
 
-  const handleAddTrade = (tradeIndex: number) => {
-    const newTrade = simulateTrade(
-      tradeIndex,
-      mockPriceData,
-      strategySettings.riskRewardRatio,
-      strategySettings.stopLossPercentage
-    );
-    if (newTrade) {
-      setTrades((prevTrades) => [...prevTrades, newTrade].sort((a,b) => a.entryDate.getTime() - b.entryDate.getTime()));
+  const handleChartClick = (chartData: { price: number; date: Date, dataIndex: number }) => {
+    if (isPlacingRR) {
+      const entryPrice = chartData.price;
+      const stopLoss = entryPrice * 0.98; // Default 2%
+      const takeProfit = entryPrice * 1.04; // Default 4% (1:2 RR)
+      
+      setRrTool({
+        id: `rr-${Date.now()}`,
+        entryPrice: entryPrice,
+        stopLoss: stopLoss,
+        takeProfit: takeProfit,
+        entryIndex: chartData.dataIndex,
+        widthInPoints: 100, // Visual width, doesn't affect simulation logic
+      });
+      setIsPlacingRR(false);
     }
   };
 
   const handleClearTrades = () => {
     setTrades([]);
     setAiReport("");
+    setRrTool(null);
   };
-  
-  const handleSettingsChange = (newSettings: { riskRewardRatio: number; stopLossPercentage: number; }) => {
-    setStrategySettings(newSettings);
-    handleClearTrades();
+
+  const handleSimulateFromTool = () => {
+    if (!rrTool) return;
+    
+    const newTrade = simulateTrade(
+      rrTool.entryIndex,
+      mockPriceData,
+      rrTool.takeProfit,
+      rrTool.stopLoss,
+    );
+
+    if (newTrade) {
+      setTrades((prevTrades) => [...prevTrades, newTrade].sort((a,b) => a.entryDate.getTime() - b.entryDate.getTime()));
+    }
+    setRrTool(null); // Clear tool after simulating
   }
 
   const handleGenerateReport = async () => {
@@ -110,24 +126,61 @@ export default function AlgoInsightsPage() {
           <Card className="flex-1 flex flex-col bg-card/80 backdrop-blur-sm">
             <CardHeader>
               <CardTitle className="font-headline text-xl">Interactive Chart</CardTitle>
-              <CardDescription>Click on the chart to simulate a 'BUY' order.</CardDescription>
+              <CardDescription>
+                {isPlacingRR ? "Click on the chart to place the Risk/Reward tool." : "Use the Risk/Reward tool to define and simulate a trade."}
+              </CardDescription>
             </CardHeader>
             <CardContent className="flex-1 -mt-4">
               <InteractiveChart
                 data={mockPriceData}
                 trades={trades}
-                onAddTrade={handleAddTrade}
+                onChartClick={handleChartClick}
+                rrTool={rrTool}
+                setRrTool={setRrTool}
+                isPlacingRR={isPlacingRR}
               />
             </CardContent>
           </Card>
         </div>
 
         <aside className="lg:col-span-1 flex flex-col gap-6">
-           <StrategySettings
-              riskRewardRatio={strategySettings.riskRewardRatio}
-              stopLossPercentage={strategySettings.stopLossPercentage}
-              onSettingsChange={handleSettingsChange}
-            />
+            <Card className="bg-card/80 backdrop-blur-sm">
+                <CardHeader>
+                    <CardTitle className="font-headline text-xl flex items-center gap-2">
+                        <Target className="w-5 h-5"/>
+                        Trading Tools
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <Button onClick={() => setIsPlacingRR(true)} disabled={isPlacingRR || !!rrTool} className="w-full">
+                        <Target className="mr-2"/> Place Risk/Reward
+                    </Button>
+                    {rrTool && (
+                        <div className="border-t border-border pt-4 space-y-2">
+                           <div className="flex justify-between items-center text-sm p-2 bg-secondary/30 rounded-md">
+                               <span className="text-muted-foreground">Entry:</span>
+                               <span className="font-mono">${rrTool.entryPrice.toFixed(2)}</span>
+                           </div>
+                           <div className="flex justify-between items-center text-sm p-2 bg-secondary/30 rounded-md">
+                               <span className="text-muted-foreground">Take Profit:</span>
+                               <span className="font-mono text-accent">${rrTool.takeProfit.toFixed(2)}</span>
+                           </div>
+                            <div className="flex justify-between items-center text-sm p-2 bg-secondary/30 rounded-md">
+                               <span className="text-muted-foreground">Stop Loss:</span>
+                               <span className="font-mono text-destructive">${rrTool.stopLoss.toFixed(2)}</span>
+                           </div>
+                            <div className="grid grid-cols-2 gap-2 pt-2">
+                                <Button variant="outline" onClick={() => setRrTool(null)}>
+                                    <X className="mr-2"/> Clear
+                                </Button>
+                                <Button onClick={handleSimulateFromTool}>
+                                    <Play className="mr-2"/> Simulate
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
            <PerformanceMetrics metrics={metrics} onClearTrades={handleClearTrades} />
           <Card className="flex-1 flex flex-col bg-card/80 backdrop-blur-sm">
              <CardContent className="p-4 flex-1 flex flex-col">

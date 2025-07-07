@@ -3,15 +3,13 @@ import type { Trade, PriceData, PerformanceMetrics } from "@/types";
 export function simulateTrade(
   entryIndex: number,
   priceData: PriceData[],
-  riskRewardRatio: number,
-  stopLossPercentage: number,
+  takeProfitPrice: number,
+  stopLossPrice: number,
 ): Trade | null {
   const entryData = priceData[entryIndex];
   if (!entryData) return null;
 
   const entryPrice = entryData.price;
-  const stopLossPrice = entryPrice * (1 - stopLossPercentage);
-  const takeProfitPrice = entryPrice * (1 + stopLossPercentage * riskRewardRatio);
 
   for (let i = entryIndex + 1; i < priceData.length; i++) {
     const currentData = priceData[i];

@@ -10,18 +10,30 @@ import {
   Line,
   ReferenceDot,
 } from "recharts";
-import type { PriceData, Trade } from "@/types";
+import type { PriceData, Trade, RiskRewardTool as RRToolType } from "@/types";
+import { RiskRewardTool } from "./risk-reward-tool";
+import { useRef } from "react";
+import { cn } from "@/lib/utils";
 
 interface InteractiveChartProps {
   data: PriceData[];
   trades: Trade[];
-  onAddTrade: (index: number) => void;
+  onChartClick: (data: { price: number; date: Date, dataIndex: number }) => void;
+  rrTool: RRToolType | null;
+  setRrTool: (tool: RRToolType | null) => void;
+  isPlacingRR: boolean;
 }
 
-export function InteractiveChart({ data, trades, onAddTrade }: InteractiveChartProps) {
+export function InteractiveChart({ data, trades, onChartClick, rrTool, setRrTool, isPlacingRR }: InteractiveChartProps) {
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+
   const handleClick = (e: any) => {
-    if (e && e.activeTooltipIndex) {
-      onAddTrade(e.activeTooltipIndex);
+    if (e && e.activeTooltipIndex !== undefined) {
+      onChartClick({
+        price: e.activePayload[0].value,
+        date: new Date(e.activeLabel),
+        dataIndex: e.activeTooltipIndex,
+      });
     }
   };
 
@@ -38,7 +50,13 @@ export function InteractiveChart({ data, trades, onAddTrade }: InteractiveChartP
   };
 
   return (
-    <div className="w-full h-[350px] md:h-[500px] lg:h-full">
+    <div 
+      ref={chartContainerRef} 
+      className={cn(
+        "w-full h-[350px] md:h-[500px] lg:h-full relative",
+        isPlacingRR && "cursor-crosshair"
+      )}
+    >
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} onClick={handleClick} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border) / 0.5)" />
@@ -78,6 +96,14 @@ export function InteractiveChart({ data, trades, onAddTrade }: InteractiveChartP
           ))}
         </LineChart>
       </ResponsiveContainer>
+      {rrTool && chartContainerRef.current && (
+        <RiskRewardTool 
+          tool={rrTool} 
+          setTool={setRrTool} 
+          data={data}
+          chartContainer={chartContainerRef.current}
+        />
+      )}
     </div>
   );
 }
