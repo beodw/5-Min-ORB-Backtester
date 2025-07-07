@@ -11,9 +11,16 @@ function generateMockPriceData(numPoints = 500): PriceData[] {
     date.setDate(date.getDate() + i);
 
     const open = lastClose + (Math.random() - 0.5) * 2;
-    const close = open + (Math.random() - 0.5) * 5;
-    const high = Math.max(open, close) + Math.random() * 3;
-    const low = Math.min(open, close) - Math.random() * 3;
+    let close = open + (Math.random() - 0.5) * 5;
+
+    // Ensure close and open are never identical to prevent zero-height candles
+    if (open === close) {
+      close += 0.01;
+    }
+
+    // Ensure high is always greater than low
+    const high = Math.max(open, close) + Math.random() * 3 + 0.1;
+    const low = Math.min(open, close) - Math.random() * 3 - 0.1;
     
     data.push({
       date,
