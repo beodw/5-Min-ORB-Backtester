@@ -30,7 +30,7 @@ export function EquityCurveChart({ trades }: EquityCurveChartProps) {
     if (active && payload && payload.length) {
       return (
         <div className="p-2 bg-card border border-border rounded-lg shadow-lg">
-          <p className="label font-bold text-foreground">{label}</p>
+          <p className="label font-bold text-foreground">{payload[0].payload.name}</p>
           <p className="intro text-primary">{`Equity: $${payload[0].value.toFixed(2)}`}</p>
         </div>
       );
