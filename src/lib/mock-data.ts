@@ -33,4 +33,4 @@ function generateMockPriceData(numPoints = 5000): PriceData[] {
   return data;
 }
 
-export const mockPriceData = generateMockPriceData();
+export const mockPriceData = generateMockPriceData(43200);
