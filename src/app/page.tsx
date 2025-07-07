@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 export default function AlgoInsightsPage() {
   const [rrTools, setRrTools] = useState<RRToolType[]>([]);
   const [placingToolType, setPlacingToolType] = useState<'long' | 'short' | null>(null);
+  const [timeframe, setTimeframe] = useState('1D');
 
   const handleChartClick = (chartData: { close: number; date: Date, dataIndex: number }) => {
     if (placingToolType) {
@@ -98,12 +99,13 @@ export default function AlgoInsightsPage() {
                 onUpdateTool={handleUpdateTool}
                 onRemoveTool={handleRemoveTool}
                 isPlacingRR={!!placingToolType}
+                timeframe={timeframe}
             />
         </div>
 
         <aside className="absolute top-4 left-4 z-10 flex flex-col items-start gap-2">
             <div className="flex items-center gap-4 bg-card/80 backdrop-blur-sm p-2 rounded-lg shadow-lg">
-              <Select defaultValue="1D">
+              <Select value={timeframe} onValueChange={setTimeframe}>
                   <SelectTrigger className="w-[120px]">
                       <SelectValue placeholder="Timeframe" />
                   </SelectTrigger>

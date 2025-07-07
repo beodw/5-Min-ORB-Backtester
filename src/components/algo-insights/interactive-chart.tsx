@@ -13,7 +13,7 @@ import {
 } from "recharts";
 import type { PriceData, Trade, RiskRewardTool as RRToolType } from "@/types";
 import { RiskRewardTool } from "./risk-reward-tool";
-import { useMemo, useRef, useState, useCallback } from "react";
+import { useMemo, useRef, useState, useCallback, useEffect } from "react";
 import { cn } from "@/lib/utils";
 
 interface InteractiveChartProps {
@@ -24,6 +24,7 @@ interface InteractiveChartProps {
   onUpdateTool: (tool: RRToolType) => void;
   onRemoveTool: (id: string) => void;
   isPlacingRR: boolean;
+  timeframe: string;
 }
 
 const Candlestick = (props: any) => {
@@ -54,22 +55,78 @@ const Candlestick = (props: any) => {
 };
 
 
-export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdateTool, onRemoveTool, isPlacingRR }: InteractiveChartProps) {
+export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdateTool, onRemoveTool, isPlacingRR, timeframe }: InteractiveChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
-  const [xDomain, setXDomain] = useState<[number, number]>([0, data.length > 1 ? data.length - 1 : 1]);
+  
+  const aggregatedData = useMemo(() => {
+    if (timeframe === '1m' || !data || data.length === 0) {
+      return data;
+    }
+
+    const getIntervalMinutes = (tf: string): number => {
+      switch (tf) {
+        case '30m': return 30;
+        case '1H': return 60;
+        case '4H': return 240;
+        case '1D': return 1440; // 24 * 60
+        default: return 1;
+      }
+    };
+
+    const interval = getIntervalMinutes(timeframe) * 60 * 1000; // interval in milliseconds
+    if (interval <= 60000) return data;
+
+    const result: PriceData[] = [];
+    let currentCandle: PriceData | null = null;
+
+    for (const point of data) {
+      const pointTime = point.date.getTime();
+      const bucketTimestamp = Math.floor(pointTime / interval) * interval;
+      
+      if (!currentCandle || currentCandle.date.getTime() !== bucketTimestamp) {
+        if (currentCandle) {
+          result.push(currentCandle);
+        }
+        currentCandle = {
+          date: new Date(bucketTimestamp),
+          open: point.open,
+          high: point.high,
+          low: point.low,
+          close: point.close,
+          wick: [point.low, point.high],
+        };
+      } else {
+        currentCandle.high = Math.max(currentCandle.high, point.high);
+        currentCandle.low = Math.min(currentCandle.low, point.low);
+        currentCandle.close = point.close;
+        currentCandle.wick = [currentCandle.low, currentCandle.high];
+      }
+    }
+    if (currentCandle) {
+      result.push(currentCandle);
+    }
+    
+    return result;
+  }, [data, timeframe]);
+  
+  const [xDomain, setXDomain] = useState<[number, number]>([0, aggregatedData.length > 1 ? aggregatedData.length - 1 : 1]);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState<{ x: number, domain: [number, number] } | null>(null);
 
+  useEffect(() => {
+    setXDomain([0, aggregatedData.length > 1 ? aggregatedData.length - 1 : 1]);
+  }, [aggregatedData]);
+
   const visibleData = useMemo(() => {
     const [start, end] = xDomain;
-    return data.slice(Math.floor(start), Math.ceil(end));
-  }, [data, xDomain]);
+    return aggregatedData.slice(Math.floor(start), Math.ceil(end));
+  }, [aggregatedData, xDomain]);
   
   const yDomain = useMemo(() => {
     if (!visibleData || visibleData.length === 0) {
-        if(data.length === 0) return [0, 100];
-        const allLows = data.map(d => d.low);
-        const allHighs = data.map(d => d.high);
+        if(aggregatedData.length === 0) return [0, 100];
+        const allLows = aggregatedData.map(d => d.low);
+        const allHighs = aggregatedData.map(d => d.high);
         const min = Math.min(...allLows);
         const max = Math.max(...allHighs);
         const padding = (max - min) * 0.1;
@@ -81,7 +138,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
     const max = Math.max(...highs);
     const padding = (max - min) * 0.1 || 10;
     return [min - padding, max + padding];
-  }, [visibleData, data]);
+  }, [visibleData, aggregatedData]);
 
 
   const handleClick = (e: any) => {
@@ -116,8 +173,8 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
     const zoomFactor = 1.1;
     let newDomainWidth = e.deltaY < 0 ? domainWidth / zoomFactor : domainWidth * zoomFactor;
 
-    if (newDomainWidth > data.length) {
-      newDomainWidth = data.length;
+    if (newDomainWidth > aggregatedData.length) {
+      newDomainWidth = aggregatedData.length;
     }
   
     let newStart = mouseIndex - (mouseIndex - domainStart) * (newDomainWidth / domainWidth);
@@ -135,8 +192,8 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
         newStart = 0;
         newEnd = newStart + newDomainWidth;
     }
-    if (newEnd > data.length) {
-        newEnd = data.length;
+    if (newEnd > aggregatedData.length) {
+        newEnd = aggregatedData.length;
         newStart = newEnd - newDomainWidth;
     }
      if (newStart < 0) { newStart = 0; }
@@ -176,8 +233,8 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
       newStart = 0;
       newEnd = newStart + domainWidth;
     }
-    if (newEnd > data.length) {
-      newEnd = data.length;
+    if (newEnd > aggregatedData.length) {
+      newEnd = aggregatedData.length;
       newStart = newEnd - domainWidth;
     }
     
@@ -197,12 +254,34 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
     }
   };
 
+  const formatXAxis = useCallback((tickItem: any) => {
+    const date = new Date(tickItem);
+    const [start, end] = xDomain;
+    const endIdx = Math.min(Math.ceil(end - 1), aggregatedData.length - 1);
+    const startIdx = Math.max(0, Math.floor(start));
+    
+    const firstDate = aggregatedData[startIdx]?.date;
+    const lastDate = aggregatedData[endIdx]?.date;
+
+    if (!firstDate || !lastDate) return '';
+
+    const visibleRangeInMinutes = (lastDate.getTime() - firstDate.getTime()) / (1000 * 60);
+
+    if (visibleRangeInMinutes > 3 * 24 * 60) {
+      return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    }
+    if (visibleRangeInMinutes > 24 * 60) {
+      return date.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    }
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }, [xDomain, aggregatedData]);
+
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (
         <div className="p-2 bg-card border border-border rounded-lg shadow-lg text-sm">
-          <p className="label font-bold text-foreground">{`Date: ${new Date(label).toLocaleDateString()}`}</p>
+          <p className="label font-bold text-foreground">{`${new Date(label).toLocaleString()}`}</p>
           <p>Open: <span className="font-mono text-primary">{data.open.toFixed(2)}</span></p>
           <p>High: <span className="font-mono text-primary">{data.high.toFixed(2)}</span></p>
           <p>Low: <span className="font-mono text-primary">{data.low.toFixed(2)}</span></p>
@@ -231,7 +310,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border) / 0.5)" />
           <XAxis
             dataKey="date"
-            tickFormatter={(date) => new Date(date).toLocaleDateString()}
+            tickFormatter={formatXAxis}
             stroke="hsl(var(--muted-foreground))"
             fontSize={12}
             tickLine={false}
@@ -276,7 +355,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
           tool={tool} 
           onUpdate={onUpdateTool}
           onRemove={onRemoveTool}
-          data={data}
+          data={aggregatedData}
           chartContainer={chartContainerRef.current!}
           xDomain={xDomain}
           yDomain={yDomain}
