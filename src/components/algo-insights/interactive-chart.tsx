@@ -9,7 +9,7 @@ import {
   YAxis,
   Tooltip,
   ReferenceDot,
-  Bar,
+  Scatter,
 } from "recharts";
 import type { PriceData, Trade, RiskRewardTool as RRToolType } from "@/types";
 import { RiskRewardTool } from "./risk-reward-tool";
@@ -25,40 +25,6 @@ interface InteractiveChartProps {
   onRemoveTool: (id: string) => void;
   isPlacingRR: boolean;
 }
-
-const Candlestick = (props: any) => {
-  const { x, y, width, height, yAxis, payload } = props;
-  
-  if (!payload || !yAxis || typeof yAxis.scale !== 'function') {
-    return null;
-  }
-  
-  const { open, close, high, low } = payload;
-  
-  // Final check to prevent rendering with invalid data
-  if ([x, y, width, height, open, close, high, low].some(val => val === undefined || isNaN(val))) {
-    return null;
-  }
-
-  const isUp = close >= open;
-  const color = isUp ? 'hsl(var(--accent))' : 'hsl(var(--destructive))';
-  
-  const closeY = yAxis.scale(close);
-  const openY = yAxis.scale(open);
-  const highY = yAxis.scale(high);
-  const lowY = yAxis.scale(low);
-
-  const bodyHeight = Math.max(1, Math.abs(closeY - openY));
-  const bodyY = Math.min(closeY, openY);
-
-  return (
-    <g>
-      <line x1={x + width / 2} y1={highY} x2={x + width / 2} y2={lowY} stroke={color} strokeWidth={1} />
-      <rect x={x} y={bodyY} width={width} height={bodyHeight} fill={color} />
-    </g>
-  );
-};
-
 
 export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdateTool, onRemoveTool, isPlacingRR }: InteractiveChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -98,7 +64,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
     const highs = data.map(d => d.high);
     const min = Math.min(...lows);
     const max = Math.max(...highs);
-    const padding = (max - min) * 0.1;
+    const padding = (max - min) * 0.1; // 10% padding
     return [min - padding, max + padding];
   }, [data]);
 
@@ -135,9 +101,9 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
           />
           <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'hsl(var(--accent))', strokeWidth: 1, strokeDasharray: '3 3' }}/>
           
-          <Bar 
+          <Scatter 
             dataKey="close" 
-            shape={<Candlestick />}
+            fill="hsl(var(--primary))"
             xAxisId="main"
             yAxisId="main"
           />
