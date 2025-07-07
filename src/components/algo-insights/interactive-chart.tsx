@@ -59,7 +59,6 @@ const Candlestick = (props: any) => {
 
 export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdateTool, onRemoveTool, isPlacingRR, timeframe, timeZone, endDate }: InteractiveChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
-  const prevEndDate = useRef(endDate);
 
   const filteredData = useMemo(() => {
     if (!endDate) {
@@ -130,11 +129,11 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
     const end = (aggregatedData.length > 0 ? (aggregatedData.length - 1 + rightPadding) : (1 + rightPadding));
     const start = Math.max(0, end - initialVisibleCandles);
     setXDomain([start, end]);
-  }, [timeframe]);
+  }, [timeframe, aggregatedData.length]);
 
   useEffect(() => {
     // Auto-scroll to new candle if it's added and is off-screen
-    if (endDate && (!prevEndDate.current || endDate.getTime() !== prevEndDate.current.getTime())) {
+    if (endDate) {
         const lastDataIndex = aggregatedData.length - 1;
         if (lastDataIndex < 0) return;
 
@@ -150,7 +149,6 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
             return prevDomain; // Otherwise, don't auto-scroll
         });
     }
-    prevEndDate.current = endDate;
   }, [endDate, aggregatedData.length]);
 
 
@@ -162,47 +160,53 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
   }, [aggregatedData, xDomain]);
   
   const yDomain = useMemo(() => {
-    if (!visibleData || visibleData.length === 0) {
-        if(aggregatedData.length === 0) return [0, 100];
-        const allLows = aggregatedData.map(d => d.low);
-        const allHighs = aggregatedData.map(d => d.high);
-        const min = Math.min(...allLows);
-        const max = Math.max(...allHighs);
-        const padding = (max - min) * 0.1;
-        return [min - padding, max + padding];
+    const dataToProcess = (!visibleData || visibleData.length === 0) ? aggregatedData : visibleData;
+
+    if (dataToProcess.length === 0) {
+      return [0, 100];
     }
-    const lows = visibleData.map(d => d.low);
-    const highs = visibleData.map(d => d.high);
-    const min = Math.min(...lows);
-    const max = Math.max(...highs);
+    
+    let min = Infinity;
+    let max = -Infinity;
+
+    for (const d of dataToProcess) {
+        if (d.low < min) min = d.low;
+        if (d.high > max) max = d.high;
+    }
+    
+    if (min === Infinity || max === -Infinity) {
+      return [0, 100];
+    }
+
     const padding = (max - min) * 0.1 || 10;
     return [min - padding, max + padding];
   }, [visibleData, aggregatedData]);
 
   const xTimeDomain = useMemo(() => {
     if (!aggregatedData || aggregatedData.length === 0) return [0, 0];
+    if (visibleData.length === 0) { // Handle case where view is outside data range
+        const [start, end] = xDomain;
+        const interval = aggregatedData.length > 1 ? aggregatedData[1].date.getTime() - aggregatedData[0].date.getTime() : 60000;
+        const startTime = aggregatedData[0].date.getTime() + start * interval;
+        const endTime = aggregatedData[0].date.getTime() + end * interval;
+        return [startTime, endTime];
+    }
 
-    const [start, end] = xDomain;
-
-    const interval = aggregatedData.length > 1 
-      ? aggregatedData[1].date.getTime() - aggregatedData[0].date.getTime() 
-      : 60 * 1000; // Assume 1 min interval
-
-    const lastDataPoint = aggregatedData[aggregatedData.length - 1];
+    const firstVisibleTime = visibleData[0].date.getTime();
+    const lastVisibleTime = visibleData[visibleData.length - 1].date.getTime();
     
-    const getExtrapolatedTime = (index: number) => {
-        const point = aggregatedData[index];
-        if (point) return point.date.getTime();
-        if (!lastDataPoint) return new Date().getTime(); // Fallback
-        
-        return lastDataPoint.date.getTime() + (index - (aggregatedData.length - 1)) * interval;
-    };
-    
-    const startTime = getExtrapolatedTime(Math.floor(start));
-    const endTime = getExtrapolatedTime(Math.ceil(end));
+    const [domainStart, domainEnd] = xDomain;
+    const visibleStartIndex = Math.max(0, Math.floor(domainStart));
+    const visibleEndIndex = Math.ceil(domainEnd);
 
-    return [startTime, endTime];
-  }, [aggregatedData, xDomain]);
+    const timePerIndex = (lastVisibleTime - firstVisibleTime) / (visibleData.length -1 || 1);
+
+    const extrapolatedStartTime = firstVisibleTime - (visibleStartIndex - domainStart) * timePerIndex;
+    const extrapolatedEndTime = lastVisibleTime + (domainEnd - visibleEndIndex) * timePerIndex;
+
+    return [extrapolatedStartTime, extrapolatedEndTime];
+
+  }, [aggregatedData, visibleData, xDomain]);
 
 
   const handleClick = (e: any) => {
@@ -286,8 +290,8 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
 
     // Restore left boundary clamp
     if (newStart < 0) {
+      newEnd = domainWidth;
       newStart = 0;
-      newEnd = newStart + domainWidth;
     }
     
     setXDomain([newStart, newEnd]);
@@ -308,6 +312,8 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
 
   const formatXAxis = useCallback((tickItem: any) => {
     const date = new Date(tickItem);
+    if (isNaN(date.getTime())) return '';
+    
     const [start, end] = xDomain;
     const endIdx = Math.min(Math.ceil(end - 1), aggregatedData.length - 1);
     const startIdx = Math.max(0, Math.floor(start));
@@ -315,7 +321,12 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
     const firstDate = aggregatedData[startIdx]?.date;
     const lastDate = aggregatedData[endIdx]?.date;
 
-    if (!firstDate || !lastDate) return '';
+    if (!firstDate || !lastDate) {
+        // Fallback for when we're viewing empty space
+        const timeDiff = (end - start) * (aggregatedData.length > 1 ? aggregatedData[1].date.getTime() - aggregatedData[0].date.getTime() : 60000);
+        if (timeDiff > 3 * 24 * 60 * 60 * 1000) return date.toLocaleDateString([], { month: 'short', day: 'numeric', timeZone });
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone });
+    }
 
     const visibleRangeInMinutes = (lastDate.getTime() - firstDate.getTime()) / (1000 * 60);
 
