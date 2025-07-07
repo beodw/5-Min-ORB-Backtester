@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, ChevronRight, ChevronsRight, Target } from "lucide-react";
+import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, ChevronRight, ChevronsRight, Target, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InteractiveChart } from "@/components/algo-insights/interactive-chart";
 import { mockPriceData } from "@/lib/mock-data";
@@ -14,6 +14,17 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 export default function AlgoInsightsPage() {
   const [rrTools, setRrTools] = useState<RRToolType[]>([]);
@@ -127,6 +138,11 @@ export default function AlgoInsightsPage() {
     setPriceMarkers(prevMarkers => prevMarkers.filter(m => m.id !== id));
   };
 
+  const handleClearAllDrawings = () => {
+    setRrTools([]);
+    setPriceMarkers([]);
+  };
+
   const handleExportCsv = () => {
     if (rrTools.length === 0) return;
 
@@ -157,13 +173,8 @@ export default function AlgoInsightsPage() {
     document.body.removeChild(link);
   };
 
-  const removeOpeningRangeMarkers = () => {
-    setPriceMarkers(prev => prev.filter(m => m.id !== 'or-high' && m.id !== 'or-low'));
-  };
-
   const handleDateSelect = (date: Date | undefined) => {
     if (date && timeZone) {
-      setPriceMarkers(prev => prev.filter(m => m.id !== 'or-high' && m.id !== 'or-low'));
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
       const day = String(date.getDate()).padStart(2, '0');
@@ -173,7 +184,6 @@ export default function AlgoInsightsPage() {
       const dateTimeString = `${dateString}T${timeString}`;
       
       const tempDate = new Date(dateTimeString);
-      const tzDateString = tempDate.toLocaleString("en-US", { timeZone });
       
       const utcDate = new Date(date.toLocaleString('en-US', {timeZone: 'UTC'}));
       const tzDate = new Date(date.toLocaleString('en-US', {timeZone}));
@@ -189,7 +199,6 @@ export default function AlgoInsightsPage() {
   };
   
   const handleNextCandle = () => {
-    setPriceMarkers(prev => prev.filter(m => m.id !== 'or-high' && m.id !== 'or-low'));
     const getDuration = (tf: string): number => {
       switch (tf) {
         case '1m': return 60 * 1000;
@@ -486,7 +495,43 @@ export default function AlgoInsightsPage() {
                 </div>
             )}
         </aside>
+
+        <div className="absolute bottom-4 left-4 z-10">
+          <AlertDialog>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" size="icon" disabled={rrTools.length === 0 && priceMarkers.length === 0}>
+                      <Trash2 className="h-5 w-5" />
+                    </Button>
+                  </AlertDialogTrigger>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Clear all drawings</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This action cannot be undone. This will permanently delete all placed tools and markers from the chart.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={handleClearAllDrawings}>
+                  Continue
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+
       </main>
     </div>
   );
 }
+
+    
