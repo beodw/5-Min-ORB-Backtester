@@ -123,19 +123,11 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
   const [dragStart, setDragStart] = useState<{ x: number, domain: [number, number] } | null>(null);
 
   useEffect(() => {
-    const newEnd = aggregatedData.length > 1 ? aggregatedData.length - 1 : 1;
-    setXDomain(prevDomain => {
-      const domainWidth = prevDomain[1] - prevDomain[0];
-      const newStart = Math.max(0, newEnd - domainWidth);
-      
-      // Prevent re-render if domain hasn't changed. This is important to break loops.
-      if (prevDomain[0] === newStart && prevDomain[1] === newEnd) {
-        return prevDomain;
-      }
-      
-      return [newStart, newEnd];
-    });
-  }, [aggregatedData]);
+    const initialVisibleCandles = 100;
+    const end = aggregatedData.length > 1 ? aggregatedData.length - 1 : 1;
+    const start = Math.max(0, end - initialVisibleCandles);
+    setXDomain([start, end]);
+  }, []);
 
   const visibleData = useMemo(() => {
     const [start, end] = xDomain;
