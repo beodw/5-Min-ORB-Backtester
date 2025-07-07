@@ -133,6 +133,16 @@ export default function AlgoInsightsPage() {
     link.click();
     document.body.removeChild(link);
   };
+
+  const handleDateSelect = (date: Date | undefined) => {
+    if (date) {
+        const endOfDay = new Date(date);
+        endOfDay.setHours(23, 59, 59, 999);
+        setSelectedDate(endOfDay);
+    } else {
+        setSelectedDate(undefined);
+    }
+  };
   
   const handleNextCandle = () => {
     const getDuration = (tf: string): number => { // returns duration in milliseconds
@@ -255,7 +265,7 @@ export default function AlgoInsightsPage() {
                       <Calendar
                           mode="single"
                           selected={selectedDate}
-                          onSelect={setSelectedDate}
+                          onSelect={handleDateSelect}
                           initialFocus
                           disabled={(date) =>
                               date > new Date() || date < new Date("1900-01-01")

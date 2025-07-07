@@ -64,9 +64,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
     if (!endDate) {
       return data;
     }
-    const endOfDay = new Date(endDate);
-    endOfDay.setHours(23, 59, 59, 999);
-    return data.filter(point => point.date <= endOfDay);
+    return data.filter(point => point.date <= endDate);
   }, [data, endDate]);
   
   const aggregatedData = useMemo(() => {
