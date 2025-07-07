@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -226,7 +227,6 @@ export default function AlgoInsightsPage() {
                 isPlacingRR={!!placingToolType}
                 timeframe={timeframe}
                 timeZone={timeZone}
-                endDate={selectedDate}
             />
         </div>
 
