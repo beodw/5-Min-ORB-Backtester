@@ -77,7 +77,7 @@ export default function AlgoInsightsPage() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-background text-foreground font-body">
+    <div className="flex flex-col h-screen bg-background text-foreground font-body">
       <header className="flex items-center justify-between p-4 border-b border-border shadow-md">
         <div className="flex items-center gap-2">
            <div className="p-2 bg-primary rounded-lg">
@@ -92,17 +92,9 @@ export default function AlgoInsightsPage() {
         </div>
       </header>
 
-      <main className="flex-1 w-full max-w-screen-2xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-4 xl:gap-6 p-4 xl:p-6">
-        <div className="lg:col-span-2 flex flex-col gap-6">
-          <Card className="flex-1 flex flex-col bg-card/80 backdrop-blur-sm">
-            <CardHeader>
-              <CardTitle className="font-headline text-xl">Interactive Chart</CardTitle>
-              <CardDescription>
-                {placingToolType ? `Click on the chart to place a ${placingToolType} position.` : "Use the tools to define trade setups."}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex-1 -mt-4">
-              <InteractiveChart
+      <main className="flex-1 relative">
+        <div className="absolute inset-0">
+            <InteractiveChart
                 data={mockPriceData}
                 trades={[]}
                 onChartClick={handleChartClick}
@@ -110,18 +102,19 @@ export default function AlgoInsightsPage() {
                 onUpdateTool={handleUpdateTool}
                 onRemoveTool={handleRemoveTool}
                 isPlacingRR={!!placingToolType}
-              />
-            </CardContent>
-          </Card>
+            />
         </div>
 
-        <aside className="lg:col-span-1 flex flex-col gap-6">
+        <aside className="absolute top-4 left-4 z-10 w-[350px] flex flex-col gap-6">
             <Card className="bg-card/80 backdrop-blur-sm">
                 <CardHeader>
                     <CardTitle className="font-headline text-xl flex items-center gap-2">
                         <Target className="w-5 h-5"/>
                         Trading Tools
                     </CardTitle>
+                    <CardDescription>
+                        {placingToolType ? `Click on the chart to place a ${placingToolType} position.` : "Use the tools to define trade setups."}
+                    </CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div className="grid grid-cols-2 gap-2">

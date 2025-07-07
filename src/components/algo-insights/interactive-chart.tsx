@@ -27,26 +27,28 @@ interface InteractiveChartProps {
 }
 
 const Wick = (props: any) => {
-  const { x, y, width, height } = props;
-  const { open, close } = props.payload;
-  const color = open < close ? 'hsl(var(--accent))' : 'hsl(var(--destructive))';
-  return <path d={`M ${x + width/2},${y} L ${x + width/2},${y + height}`} stroke={color} width={1}/>;
+    const { x, y, width, height, payload } = props;
+    if (y === undefined || height === undefined) return null;
+    const { open, close } = payload;
+    const color = open < close ? 'hsl(var(--accent))' : 'hsl(var(--destructive))';
+    return <path d={`M ${x + width/2},${y} L ${x + width/2},${y + height}`} stroke={color} strokeWidth={1}/>;
 };
 
 const Candlestick = (props: any) => {
-  const { x, y, width, height, open, close } = props;
-  const isGrowing = open < close;
-  const color = isGrowing ? 'hsl(var(--accent))' : 'hsl(var(--destructive))';
-  
-  return (
-    <rect 
-      x={x}
-      y={y}
-      width={width}
-      height={height}
-      fill={color}
-    />
-  );
+    const { x, y, width, height, open, close } = props;
+    if (x === undefined || y === undefined || height < 0) return null;
+    const isGrowing = open < close;
+    const color = isGrowing ? 'hsl(var(--accent))' : 'hsl(var(--destructive))';
+    
+    return (
+        <rect 
+            x={x}
+            y={y}
+            width={width}
+            height={height}
+            fill={color}
+        />
+    );
 };
 
 
@@ -213,7 +215,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
     <div 
       ref={chartContainerRef} 
       className={cn(
-        "w-full h-[350px] md:h-[500px] lg:h-full relative",
+        "w-full h-full relative",
       )}
       onWheel={handleWheel}
       onMouseDown={handleMouseDown}
@@ -223,7 +225,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
       style={{ cursor: isPlacingRR ? 'crosshair' : (isDragging ? 'grabbing' : 'grab') }}
     >
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={visibleData} onClick={handleClick} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+        <ComposedChart data={visibleData} onClick={handleClick} margin={{ top: 10, right: 30, left: 0, bottom: 10 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border) / 0.5)" />
           <XAxis
             dataKey="date"
@@ -234,6 +236,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
             axisLine={false}
             interval="preserveStartEnd"
             minTickGap={80}
+            xAxisId="main"
           />
           <YAxis
             orientation="right"
@@ -244,11 +247,12 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
             tickFormatter={(value) => `$${value.toFixed(2)}`}
             domain={yDomain}
             allowDataOverflow={true}
+            yAxisId="main"
           />
           <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'hsl(var(--accent))', strokeWidth: 1, strokeDasharray: '3 3' }}/>
           
-          <Bar dataKey="wick" shape={<Wick />} isAnimationActive={false} />
-          <Bar dataKey={d => [d.open, d.close]} shape={<Candlestick />} isAnimationActive={false} />
+          <Bar dataKey="wick" shape={<Wick />} isAnimationActive={false} xAxisId="main" yAxisId="main"/>
+          <Bar dataKey={d => [d.open, d.close]} shape={<Candlestick />} isAnimationActive={false} xAxisId="main" yAxisId="main"/>
 
           {trades.map((trade) => (
             <ReferenceDot
@@ -259,6 +263,8 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
               ifOverflow="extendDomain"
               fill={trade.type === 'win' ? 'hsl(var(--accent))' : 'hsl(var(--destructive))'}
               stroke="hsl(var(--card))"
+              xAxisId="main" 
+              yAxisId="main"
             />
           ))}
         </ComposedChart>
