@@ -29,6 +29,10 @@ interface InteractiveChartProps {
 // Custom shape for the candle body
 const CandleBody = (props: any) => {
   const { x, y, width, height, payload } = props;
+  // Guard against invalid values from recharts calculations which can cause a crash.
+  if (isNaN(y) || isNaN(height)) {
+    return null;
+  }
   const { open, close } = payload;
   const isUp = close > open;
   const color = isUp ? 'hsl(var(--accent))' : 'hsl(var(--destructive))';
