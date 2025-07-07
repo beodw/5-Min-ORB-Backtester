@@ -43,9 +43,11 @@ export function RiskRewardTool({ tool, onUpdate, onRemove, data, chartContainer 
     const { width, height } = chartContainer.getBoundingClientRect();
     const pWidth = width - X_AXIS_MARGIN_LEFT - X_AXIS_MARGIN_RIGHT;
     const pHeight = height - Y_AXIS_MARGIN_TOP - Y_AXIS_MARGIN_BOTTOM;
-    const prices = data.map(d => d.price);
-    const minP = Math.min(...prices);
-    const maxP = Math.max(...prices);
+    
+    const lows = data.map(d => d.low);
+    const highs = data.map(d => d.high);
+    const minP = Math.min(...lows);
+    const maxP = Math.max(...highs);
     
     return {
       containerWidth: width,

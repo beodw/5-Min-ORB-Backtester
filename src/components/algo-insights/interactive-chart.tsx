@@ -9,7 +9,8 @@ import {
   YAxis,
   Tooltip,
   ReferenceDot,
-  Line,
+  Bar,
+  ErrorBar,
 } from "recharts";
 import type { PriceData, Trade, RiskRewardTool as RRToolType } from "@/types";
 import { RiskRewardTool } from "./risk-reward-tool";
@@ -26,6 +27,14 @@ interface InteractiveChartProps {
   isPlacingRR: boolean;
 }
 
+const CandleBody = (props: any) => {
+    const { x, y, width, height, payload } = props;
+    const isRising = payload.close > payload.open;
+    const color = isRising ? 'hsl(var(--accent))' : 'hsl(var(--destructive))';
+    return <rect x={x} y={y} width={width} height={height} fill={color} stroke={color} />;
+};
+
+
 export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdateTool, onRemoveTool, isPlacingRR }: InteractiveChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
 
@@ -34,8 +43,8 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
       const payload = e.activePayload?.[0]?.payload;
       if (payload) {
         onChartClick({
-          price: payload.price, // Use price from data
-          date: new Date(e.activeLabel),
+          price: payload.close, // Use close price for placing tools
+          date: new Date(payload.date),
           dataIndex: e.activeTooltipIndex,
         });
       }
@@ -48,7 +57,10 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
       return (
         <div className="p-2 bg-card border border-border rounded-lg shadow-lg text-sm">
           <p className="label font-bold text-foreground">{`Date: ${new Date(label).toLocaleDateString()}`}</p>
-          <p>Price: <span className="font-mono text-primary">${data.price.toFixed(2)}</span></p>
+          <p>Open: <span className="font-mono text-primary">${data.open.toFixed(2)}</span></p>
+          <p>High: <span className="font-mono text-primary">${data.high.toFixed(2)}</span></p>
+          <p>Low: <span className="font-mono text-primary">${data.low.toFixed(2)}</span></p>
+          <p>Close: <span className="font-mono text-primary">${data.close.toFixed(2)}</span></p>
         </div>
       );
     }
@@ -80,17 +92,14 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
             tickLine={false}
             axisLine={false}
             tickFormatter={(value) => `$${value}`}
-            domain={['dataMin', 'dataMax']}
+            domain={['dataMin - 5', 'dataMax + 5']}
             allowDataOverflow={true}
           />
           <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'hsl(var(--accent))', strokeWidth: 1, strokeDasharray: '3 3' }}/>
           
-          <Line 
-            type="monotone" 
-            dataKey="price" 
-            stroke="hsl(var(--primary))" 
-            dot={false}
-          />
+          <Bar dataKey={['open', 'close']} shape={<CandleBody/>}>
+            <ErrorBar dataKey="wick" width={0} strokeWidth={1} stroke="hsl(var(--foreground))" direction="y" />
+          </Bar>
 
           {trades.map((trade) => (
             <ReferenceDot
