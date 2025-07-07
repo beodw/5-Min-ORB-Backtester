@@ -27,20 +27,27 @@ interface InteractiveChartProps {
 }
 
 const Candlestick = (props: any) => {
-  const { x, width, yAxis, payload } = props;
-  const { open, close, high, low } = payload;
-
-  if (!yAxis || typeof yAxis.scale !== 'function') {
+  const { x, y, width, height, yAxis, payload } = props;
+  
+  if (!payload || !yAxis || typeof yAxis.scale !== 'function') {
     return null;
   }
+  
+  const { open, close, high, low } = payload;
+  
+  // Final check to prevent rendering with invalid data
+  if ([x, y, width, height, open, close, high, low].some(val => val === undefined || isNaN(val))) {
+    return null;
+  }
+
+  const isUp = close >= open;
+  const color = isUp ? 'hsl(var(--accent))' : 'hsl(var(--destructive))';
   
   const closeY = yAxis.scale(close);
   const openY = yAxis.scale(open);
   const highY = yAxis.scale(high);
   const lowY = yAxis.scale(low);
 
-  const isUp = close >= open;
-  const color = isUp ? 'hsl(var(--accent))' : 'hsl(var(--destructive))';
   const bodyHeight = Math.max(1, Math.abs(closeY - openY));
   const bodyY = Math.min(closeY, openY);
 
@@ -108,6 +115,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
         <ComposedChart data={data} onClick={handleClick} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border) / 0.5)" />
           <XAxis
+            xAxisId="main"
             dataKey="date"
             tickFormatter={(date) => new Date(date).toLocaleDateString()}
             stroke="hsl(var(--muted-foreground))"
@@ -116,6 +124,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
             axisLine={false}
           />
           <YAxis
+            yAxisId="main"
             stroke="hsl(var(--muted-foreground))"
             fontSize={12}
             tickLine={false}
@@ -126,7 +135,12 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
           />
           <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'hsl(var(--accent))', strokeWidth: 1, strokeDasharray: '3 3' }}/>
           
-          <Bar dataKey="close" shape={<Candlestick />} />
+          <Bar 
+            dataKey="close" 
+            shape={<Candlestick />}
+            xAxisId="main"
+            yAxisId="main"
+          />
 
           {trades.map((trade) => (
             <ReferenceDot
@@ -136,6 +150,8 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
               r={5}
               fill={trade.type === 'win' ? 'hsl(var(--accent))' : 'hsl(var(--destructive))'}
               stroke="hsl(var(--card))"
+              xAxisId="main"
+              yAxisId="main"
             />
           ))}
         </ComposedChart>
