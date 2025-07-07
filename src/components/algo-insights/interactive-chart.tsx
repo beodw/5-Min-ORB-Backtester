@@ -124,8 +124,17 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
 
   useEffect(() => {
     const newEnd = aggregatedData.length > 1 ? aggregatedData.length - 1 : 1;
-    const newStart = Math.max(0, newEnd - (xDomain[1] - xDomain[0])); // Maintain zoom level
-    setXDomain([newStart, newEnd]);
+    setXDomain(prevDomain => {
+      const domainWidth = prevDomain[1] - prevDomain[0];
+      const newStart = Math.max(0, newEnd - domainWidth);
+      
+      // Prevent re-render if domain hasn't changed. This is important to break loops.
+      if (prevDomain[0] === newStart && prevDomain[1] === newEnd) {
+        return prevDomain;
+      }
+      
+      return [newStart, newEnd];
+    });
   }, [aggregatedData]);
 
   const visibleData = useMemo(() => {
