@@ -1,3 +1,4 @@
+
 export interface PriceData {
   date: Date;
   price: number;
@@ -11,6 +12,7 @@ export interface Trade {
   exitPrice: number;
   profit: number;
   type: 'win' | 'loss';
+  position: 'long' | 'short';
 }
 
 export interface PerformanceMetrics {
@@ -30,4 +32,5 @@ export interface RiskRewardTool {
   takeProfit: number;
   entryIndex: number;
   widthInPoints: number;
+  position: 'long' | 'short';
 }

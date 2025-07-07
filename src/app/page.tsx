@@ -1,7 +1,8 @@
+
 "use client";
 
 import { useState, useEffect, startTransition } from "react";
-import { Bot, LineChart as LineChartIcon, History, Target, X, Play } from "lucide-react";
+import { Bot, LineChart as LineChartIcon, History, Target, X, Play, ArrowUp, ArrowDown } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -28,8 +29,8 @@ export default function AlgoInsightsPage() {
   });
   const [aiReport, setAiReport] = useState<string>("");
   const [isReportLoading, setIsReportLoading] = useState(false);
-  const [rrTool, setRrTool] = useState<RRToolType | null>(null);
-  const [isPlacingRR, setIsPlacingRR] = useState(false);
+  const [rrTools, setRrTools] = useState<RRToolType[]>([]);
+  const [placingToolType, setPlacingToolType] = useState<'long' | 'short' | null>(null);
 
   useEffect(() => {
     const newMetrics = calculatePerformanceMetrics(trades);
@@ -37,43 +38,61 @@ export default function AlgoInsightsPage() {
   }, [trades]);
 
   const handleChartClick = (chartData: { price: number; date: Date, dataIndex: number }) => {
-    if (isPlacingRR) {
+    if (placingToolType) {
       const entryPrice = chartData.price;
-      const stopLoss = entryPrice * 0.98; // Default 2%
-      const takeProfit = entryPrice * 1.04; // Default 4% (1:2 RR)
+      const stopLoss = placingToolType === 'long' ? entryPrice * 0.98 : entryPrice * 1.02; // Default 2%
+      const takeProfit = placingToolType === 'long' ? entryPrice * 1.04 : entryPrice * 0.96; // Default 4% (1:2 RR)
       
-      setRrTool({
+      const newTool: RRToolType = {
         id: `rr-${Date.now()}`,
         entryPrice: entryPrice,
         stopLoss: stopLoss,
         takeProfit: takeProfit,
         entryIndex: chartData.dataIndex,
         widthInPoints: 100, // Visual width, doesn't affect simulation logic
-      });
-      setIsPlacingRR(false);
+        position: placingToolType,
+      };
+      
+      setRrTools(prevTools => [...prevTools, newTool]);
+      setPlacingToolType(null);
     }
+  };
+  
+  const handleUpdateTool = (updatedTool: RRToolType) => {
+    setRrTools(prevTools => prevTools.map(t => t.id === updatedTool.id ? updatedTool : t));
+  };
+
+  const handleRemoveTool = (id: string) => {
+    setRrTools(prevTools => prevTools.filter(t => t.id !== id));
+  };
+
+  const handleClearTools = () => {
+    setRrTools([]);
   };
 
   const handleClearTrades = () => {
     setTrades([]);
     setAiReport("");
-    setRrTool(null);
+    handleClearTools();
   };
 
-  const handleSimulateFromTool = () => {
-    if (!rrTool) return;
+  const handleSimulateAll = () => {
+    if (rrTools.length === 0) return;
     
-    const newTrade = simulateTrade(
-      rrTool.entryIndex,
-      mockPriceData,
-      rrTool.takeProfit,
-      rrTool.stopLoss,
-    );
+    const newTrades = rrTools.map(tool => 
+      simulateTrade(
+        tool.entryIndex,
+        mockPriceData,
+        tool.takeProfit,
+        tool.stopLoss,
+        tool.position
+      )
+    ).filter((trade): trade is Trade => trade !== null);
 
-    if (newTrade) {
-      setTrades((prevTrades) => [...prevTrades, newTrade].sort((a,b) => a.entryDate.getTime() - b.entryDate.getTime()));
+    if (newTrades.length > 0) {
+      setTrades((prevTrades) => [...prevTrades, ...newTrades].sort((a,b) => a.entryDate.getTime() - b.entryDate.getTime()));
     }
-    setRrTool(null); // Clear tool after simulating
+    setRrTools([]); // Clear tools after simulating
   }
 
   const handleGenerateReport = async () => {
@@ -85,6 +104,7 @@ export default function AlgoInsightsPage() {
         entryDate: t.entryDate.toISOString(),
         exitDate: t.exitDate.toISOString(),
         profit: t.profit,
+        position: t.position,
       }))
     );
     
@@ -127,7 +147,7 @@ export default function AlgoInsightsPage() {
             <CardHeader>
               <CardTitle className="font-headline text-xl">Interactive Chart</CardTitle>
               <CardDescription>
-                {isPlacingRR ? "Click on the chart to place the Risk/Reward tool." : "Use the Risk/Reward tool to define and simulate a trade."}
+                {placingToolType ? `Click on the chart to place a ${placingToolType} position.` : "Use the tools to define and simulate trades."}
               </CardDescription>
             </CardHeader>
             <CardContent className="flex-1 -mt-4">
@@ -135,9 +155,10 @@ export default function AlgoInsightsPage() {
                 data={mockPriceData}
                 trades={trades}
                 onChartClick={handleChartClick}
-                rrTool={rrTool}
-                setRrTool={setRrTool}
-                isPlacingRR={isPlacingRR}
+                rrTools={rrTools}
+                onUpdateTool={handleUpdateTool}
+                onRemoveTool={handleRemoveTool}
+                isPlacingRR={!!placingToolType}
               />
             </CardContent>
           </Card>
@@ -151,30 +172,31 @@ export default function AlgoInsightsPage() {
                         Trading Tools
                     </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                    <Button onClick={() => setIsPlacingRR(true)} disabled={isPlacingRR || !!rrTool} className="w-full">
-                        <Target className="mr-2"/> Place Risk/Reward
-                    </Button>
-                    {rrTool && (
-                        <div className="border-t border-border pt-4 space-y-2">
-                           <div className="flex justify-between items-center text-sm p-2 bg-secondary/30 rounded-md">
-                               <span className="text-muted-foreground">Entry:</span>
-                               <span className="font-mono">${rrTool.entryPrice.toFixed(2)}</span>
-                           </div>
-                           <div className="flex justify-between items-center text-sm p-2 bg-secondary/30 rounded-md">
-                               <span className="text-muted-foreground">Take Profit:</span>
-                               <span className="font-mono text-accent">${rrTool.takeProfit.toFixed(2)}</span>
-                           </div>
-                            <div className="flex justify-between items-center text-sm p-2 bg-secondary/30 rounded-md">
-                               <span className="text-muted-foreground">Stop Loss:</span>
-                               <span className="font-mono text-destructive">${rrTool.stopLoss.toFixed(2)}</span>
-                           </div>
+                <CardContent>
+                    <div className="grid grid-cols-2 gap-2">
+                        <Button onClick={() => setPlacingToolType('long')} disabled={!!placingToolType}>
+                            <ArrowUp className="mr-2 text-accent"/> Place Long
+                        </Button>
+                        <Button onClick={() => setPlacingToolType('short')} disabled={!!placingToolType}>
+                            <ArrowDown className="mr-2 text-destructive"/> Place Short
+                        </Button>
+                    </div>
+
+                    {placingToolType && (
+                        <div className="text-center text-sm text-primary mt-2 animate-pulse">
+                            Placing {placingToolType} tool... Click on the chart.
+                        </div>
+                    )}
+                    
+                    {rrTools.length > 0 && (
+                        <div className="border-t border-border pt-4 mt-4 space-y-2">
+                           <p className="text-sm text-center text-muted-foreground">{rrTools.length} tool(s) placed.</p>
                             <div className="grid grid-cols-2 gap-2 pt-2">
-                                <Button variant="outline" onClick={() => setRrTool(null)}>
-                                    <X className="mr-2"/> Clear
+                                <Button variant="outline" onClick={handleClearTools}>
+                                    <X className="mr-2"/> Clear Tools
                                 </Button>
-                                <Button onClick={handleSimulateFromTool}>
-                                    <Play className="mr-2"/> Simulate
+                                <Button onClick={handleSimulateAll}>
+                                    <Play className="mr-2"/> Simulate All
                                 </Button>
                             </div>
                         </div>

@@ -1,3 +1,4 @@
+
 import type { Trade, PriceData, PerformanceMetrics } from "@/types";
 
 export function simulateTrade(
@@ -5,6 +6,7 @@ export function simulateTrade(
   priceData: PriceData[],
   takeProfitPrice: number,
   stopLossPrice: number,
+  position: 'long' | 'short',
 ): Trade | null {
   const entryData = priceData[entryIndex];
   if (!entryData) return null;
@@ -13,29 +15,62 @@ export function simulateTrade(
 
   for (let i = entryIndex + 1; i < priceData.length; i++) {
     const currentData = priceData[i];
-    if (currentData.price <= stopLossPrice) {
-      // Loss
-      return {
-        id: `trade-${entryIndex}-${new Date().getTime()}`,
-        entryDate: entryData.date,
-        entryPrice: entryPrice,
-        exitDate: currentData.date,
-        exitPrice: stopLossPrice,
-        profit: stopLossPrice - entryPrice,
-        type: 'loss',
-      };
-    }
-    if (currentData.price >= takeProfitPrice) {
-      // Win
-      return {
-        id: `trade-${entryIndex}-${new Date().getTime()}`,
-        entryDate: entryData.date,
-        entryPrice: entryPrice,
-        exitDate: currentData.date,
-        exitPrice: takeProfitPrice,
-        profit: takeProfitPrice - entryPrice,
-        type: 'win',
-      };
+    const currentPrice = currentData.price;
+
+    if (position === 'long') {
+      // Loss condition for long
+      if (currentPrice <= stopLossPrice) {
+        return {
+          id: `trade-${entryIndex}-${new Date().getTime()}`,
+          entryDate: entryData.date,
+          entryPrice: entryPrice,
+          exitDate: currentData.date,
+          exitPrice: stopLossPrice,
+          profit: stopLossPrice - entryPrice,
+          type: 'loss',
+          position: 'long',
+        };
+      }
+      // Win condition for long
+      if (currentPrice >= takeProfitPrice) {
+        return {
+          id: `trade-${entryIndex}-${new Date().getTime()}`,
+          entryDate: entryData.date,
+          entryPrice: entryPrice,
+          exitDate: currentData.date,
+          exitPrice: takeProfitPrice,
+          profit: takeProfitPrice - entryPrice,
+          type: 'win',
+          position: 'long',
+        };
+      }
+    } else { // 'short' position
+      // Loss condition for short
+      if (currentPrice >= stopLossPrice) {
+        return {
+          id: `trade-${entryIndex}-${new Date().getTime()}`,
+          entryDate: entryData.date,
+          entryPrice: entryPrice,
+          exitDate: currentData.date,
+          exitPrice: stopLossPrice,
+          profit: entryPrice - stopLossPrice,
+          type: 'loss',
+          position: 'short',
+        };
+      }
+      // Win condition for short
+      if (currentPrice <= takeProfitPrice) {
+        return {
+          id: `trade-${entryIndex}-${new Date().getTime()}`,
+          entryDate: entryData.date,
+          entryPrice: entryPrice,
+          exitDate: currentData.date,
+          exitPrice: takeProfitPrice,
+          profit: entryPrice - takeProfitPrice,
+          type: 'win',
+          position: 'short',
+        };
+      }
     }
   }
 

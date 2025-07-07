@@ -1,3 +1,4 @@
+
 "use client";
 
 import {
@@ -19,12 +20,13 @@ interface InteractiveChartProps {
   data: PriceData[];
   trades: Trade[];
   onChartClick: (data: { price: number; date: Date, dataIndex: number }) => void;
-  rrTool: RRToolType | null;
-  setRrTool: (tool: RRToolType | null) => void;
+  rrTools: RRToolType[];
+  onUpdateTool: (tool: RRToolType) => void;
+  onRemoveTool: (id: string) => void;
   isPlacingRR: boolean;
 }
 
-export function InteractiveChart({ data, trades, onChartClick, rrTool, setRrTool, isPlacingRR }: InteractiveChartProps) {
+export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdateTool, onRemoveTool, isPlacingRR }: InteractiveChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
 
   const handleClick = (e: any) => {
@@ -96,14 +98,16 @@ export function InteractiveChart({ data, trades, onChartClick, rrTool, setRrTool
           ))}
         </LineChart>
       </ResponsiveContainer>
-      {rrTool && chartContainerRef.current && (
+      {chartContainerRef.current && rrTools.map(tool => (
         <RiskRewardTool 
-          tool={rrTool} 
-          setTool={setRrTool} 
+          key={tool.id}
+          tool={tool} 
+          onUpdate={onUpdateTool}
+          onRemove={onRemoveTool}
           data={data}
-          chartContainer={chartContainerRef.current}
+          chartContainer={chartContainerRef.current!}
         />
-      )}
+      ))}
     </div>
   );
 }

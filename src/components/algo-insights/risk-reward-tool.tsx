@@ -1,11 +1,14 @@
+
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import type { RiskRewardTool as RRToolType, PriceData } from '@/types';
+import { X } from 'lucide-react';
 
 interface RiskRewardToolProps {
   tool: RRToolType;
-  setTool: (tool: RRToolType | null) => void;
+  onUpdate: (updatedTool: RRToolType) => void;
+  onRemove: (id: string) => void;
   data: PriceData[];
   chartContainer: HTMLDivElement;
 }
@@ -15,7 +18,7 @@ const X_AXIS_MARGIN_RIGHT = 20;
 const Y_AXIS_MARGIN_TOP = 5;
 const Y_AXIS_MARGIN_BOTTOM = 20;
 
-export function RiskRewardTool({ tool, setTool, data, chartContainer }: RiskRewardToolProps) {
+export function RiskRewardTool({ tool, onUpdate, onRemove, data, chartContainer }: RiskRewardToolProps) {
   const [dragState, setDragState] = useState({
     active: false,
     type: 'none', // 'body', 'top', 'bottom'
@@ -30,7 +33,6 @@ export function RiskRewardTool({ tool, setTool, data, chartContainer }: RiskRewa
     containerHeight,
     plotWidth,
     plotHeight,
-    minPrice,
     maxPrice,
     priceRange,
     pointsCount,
@@ -71,26 +73,31 @@ export function RiskRewardTool({ tool, setTool, data, chartContainer }: RiskRewa
     const handleMouseMove = (e: MouseEvent) => {
       if (!dragState.active) return;
       
+      const chartRect = chartContainer.getBoundingClientRect();
       const deltaY = e.clientY - dragState.initialY;
       const priceDelta = (deltaY / plotHeight) * priceRange * -1;
 
       if (dragState.type === 'body') {
-        setTool({
+        onUpdate({
           ...tool,
           entryPrice: dragState.initialEntryPrice + priceDelta,
           stopLoss: dragState.initialStopLoss + priceDelta,
           takeProfit: dragState.initialTakeProfit + priceDelta,
         });
       } else if (dragState.type === 'top') {
-        setTool({
-          ...tool,
-          takeProfit: Math.max(tool.entryPrice, yToPrice(e.clientY - chartContainer.getBoundingClientRect().top)),
-        });
+        const newPrice = yToPrice(e.clientY - chartRect.top);
+        if (tool.position === 'long') {
+          onUpdate({ ...tool, takeProfit: Math.max(tool.entryPrice, newPrice) });
+        } else { // short
+          onUpdate({ ...tool, stopLoss: Math.max(tool.entryPrice, newPrice) });
+        }
       } else if (dragState.type === 'bottom') {
-        setTool({
-          ...tool,
-          stopLoss: Math.min(tool.entryPrice, yToPrice(e.clientY - chartContainer.getBoundingClientRect().top)),
-        });
+        const newPrice = yToPrice(e.clientY - chartRect.top);
+        if (tool.position === 'long') {
+          onUpdate({ ...tool, stopLoss: Math.min(tool.entryPrice, newPrice) });
+        } else { // short
+          onUpdate({ ...tool, takeProfit: Math.min(tool.entryPrice, newPrice) });
+        }
       }
     };
 
@@ -107,7 +114,7 @@ export function RiskRewardTool({ tool, setTool, data, chartContainer }: RiskRewa
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [dragState, tool, setTool, yToPrice, plotHeight, priceRange, chartContainer]);
+  }, [dragState, tool, onUpdate, yToPrice, plotHeight, priceRange, chartContainer]);
 
 
   const handleMouseDown = (e: React.MouseEvent, type: string) => {
@@ -122,68 +129,89 @@ export function RiskRewardTool({ tool, setTool, data, chartContainer }: RiskRewa
     });
   };
 
-  const { entryY, topY, bottomY, leftX, widthX } = useMemo(() => {
+  const { entryY, topY, bottomY, leftX, widthX, topHandleY, bottomHandleY } = useMemo(() => {
     const entry = priceToY(tool.entryPrice);
-    const top = priceToY(tool.takeProfit);
-    const bottom = priceToY(tool.stopLoss);
+    const stop = priceToY(tool.stopLoss);
+    const profit = priceToY(tool.takeProfit);
     const left = indexToX(tool.entryIndex);
-    const right = indexToX(tool.entryIndex + tool.widthInPoints);
-    return { entryY: entry, topY: top, bottomY: bottom, leftX: left, widthX: right - left };
-  }, [tool, priceToY, indexToX]);
+    const right = indexToX(Math.min(data.length - 1, tool.entryIndex + tool.widthInPoints));
+    
+    return { 
+      entryY: entry, 
+      topY: tool.position === 'long' ? profit : stop,
+      bottomY: tool.position === 'long' ? stop : profit,
+      leftX: left, 
+      widthX: right - left,
+      topHandleY: Math.min(profit, stop),
+      bottomHandleY: Math.max(profit, stop),
+    };
+  }, [tool, priceToY, indexToX, data.length]);
 
-  const rrRatio = (tool.takeProfit - tool.entryPrice) / (tool.entryPrice - tool.stopLoss);
+  const rrRatio = tool.entryPrice - tool.stopLoss !== 0 ? Math.abs((tool.takeProfit - tool.entryPrice) / (tool.entryPrice - tool.stopLoss)) : Infinity;
+
+  const profitZoneY = tool.position === 'long' ? topY : entryY;
+  const profitZoneHeight = tool.position === 'long' ? entryY - topY : bottomY - entryY;
+  const lossZoneY = tool.position === 'long' ? entryY : topY;
+  const lossZoneHeight = tool.position === 'long' ? bottomY - entryY : entryY - topY;
 
   return (
     <div
       className="absolute top-0 left-0 pointer-events-none"
       style={{ width: containerWidth, height: containerHeight }}
     >
-      <div 
-        className="absolute"
-        style={{
-            transform: `translate(${leftX}px, ${topY}px)`,
-            width: widthX,
-            height: entryY - topY,
-        }}
-      >
-        {/* Profit Zone */}
-        <div 
-            className="w-full h-full bg-green-500/20 border-t-2 border-x-2 border-dashed border-green-500/80"
-        />
-        <div
-            onMouseDown={(e) => handleMouseDown(e, 'top')} 
-            className="absolute -top-1 left-0 w-full h-2 cursor-ns-resize pointer-events-auto"
-        />
-      </div>
-
+      {/* Profit Zone */}
       <div
         className="absolute"
         style={{
-            transform: `translate(${leftX}px, ${entryY}px)`,
-            width: widthX,
-            height: bottomY - entryY,
+          transform: `translate(${leftX}px, ${profitZoneY}px)`,
+          width: widthX,
+          height: Math.max(0, profitZoneHeight),
+          backgroundColor: 'hsla(120, 100%, 50%, 0.15)', // accent color
+          border: '2px dashed hsla(120, 100%, 50%, 0.7)',
         }}
-      >
-        {/* Loss Zone */}
-        <div
-            className="w-full h-full bg-red-500/20 border-b-2 border-x-2 border-dashed border-red-500/80"
-        />
-         <div
-            onMouseDown={(e) => handleMouseDown(e, 'bottom')} 
-            className="absolute -bottom-1 left-0 w-full h-2 cursor-ns-resize pointer-events-auto"
-        />
-      </div>
+      />
+      {/* Loss Zone */}
+      <div
+        className="absolute"
+        style={{
+          transform: `translate(${leftX}px, ${lossZoneY}px)`,
+          width: widthX,
+          height: Math.max(0, lossZoneHeight),
+          backgroundColor: 'hsla(0, 84.2%, 60.2%, 0.15)', // destructive color
+          border: '2px dashed hsla(0, 84.2%, 60.2%, 0.7)',
+        }}
+      />
+      
+      {/* Top Handle */}
+      <div
+        onMouseDown={(e) => handleMouseDown(e, 'top')} 
+        className="absolute w-full h-2 cursor-ns-resize pointer-events-auto"
+        style={{ transform: `translate(0, ${topHandleY - 1}px)`}}
+      />
+
+      {/* Bottom Handle */}
+      <div
+        onMouseDown={(e) => handleMouseDown(e, 'bottom')} 
+        className="absolute w-full h-2 cursor-ns-resize pointer-events-auto"
+        style={{ transform: `translate(0, ${bottomHandleY - 1}px)`}}
+      />
       
        <div
         onMouseDown={(e) => handleMouseDown(e, 'body')}
-        className="absolute flex flex-col items-center justify-center text-xs text-white p-1 rounded bg-black/50 pointer-events-auto cursor-move"
+        className="absolute flex flex-col items-center justify-center text-xs text-white p-1 rounded bg-black/50 pointer-events-auto cursor-move group"
         style={{
-          transform: `translate(${leftX + widthX / 2 - 25}px, ${entryY - 15}px)`,
-          minWidth: '50px',
+          transform: `translate(${leftX + widthX / 2 - 35}px, ${entryY - 20}px)`,
+          minWidth: '70px',
         }}
        >
-        <div>{rrRatio.toFixed(2)}</div>
-        <div className="text-white/70">Risk/Reward</div>
+        <div>RR: {isFinite(rrRatio) ? rrRatio.toFixed(2) : '∞'}</div>
+        <div className="text-white/70 capitalize">{tool.position}</div>
+         <button
+            onClick={(e) => { e.stopPropagation(); onRemove(tool.id); }}
+            className="absolute -top-2 -right-2 bg-card rounded-full p-0.5 text-foreground opacity-0 group-hover:opacity-100 pointer-events-auto z-10"
+         >
+           <X size={12}/>
+         </button>
        </div>
 
     </div>

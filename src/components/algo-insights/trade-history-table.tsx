@@ -1,3 +1,4 @@
+
 "use client";
 
 import {
@@ -12,6 +13,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import type { Trade } from "@/types";
 import { cn } from "@/lib/utils";
+import { ArrowUp, ArrowDown } from "lucide-react";
 
 interface TradeHistoryTableProps {
   trades: Trade[];
@@ -37,6 +39,7 @@ export function TradeHistoryTable({ trades }: TradeHistoryTableProps) {
         <TableHeader>
           <TableRow>
             <TableHead>Type</TableHead>
+            <TableHead>Position</TableHead>
             <TableHead>Entry</TableHead>
             <TableHead>Exit</TableHead>
             <TableHead className="text-right">P/L</TableHead>
@@ -48,6 +51,12 @@ export function TradeHistoryTable({ trades }: TradeHistoryTableProps) {
               <TableCell>
                 <Badge variant={trade.type === 'win' ? 'default' : 'destructive'} className={cn(trade.type === 'win' && 'bg-accent text-accent-foreground', 'capitalize')}>
                   {trade.type}
+                </Badge>
+              </TableCell>
+               <TableCell>
+                <Badge variant="secondary" className="capitalize">
+                  {trade.position === 'long' ? <ArrowUp className="mr-1 h-3 w-3 text-accent" /> : <ArrowDown className="mr-1 h-3 w-3 text-destructive" />}
+                  {trade.position}
                 </Badge>
               </TableCell>
               <TableCell>
