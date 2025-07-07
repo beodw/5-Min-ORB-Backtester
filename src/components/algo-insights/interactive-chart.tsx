@@ -153,6 +153,20 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
     return [min - padding, max + padding];
   }, [visibleData, aggregatedData]);
 
+  const xTimeDomain = useMemo(() => {
+    if (!visibleData || visibleData.length === 0) return [0, 0];
+    const first = visibleData[0]?.date?.getTime();
+    const last = visibleData[visibleData.length - 1]?.date?.getTime();
+    if (!first || !last) return [0, 0];
+
+    if (first === last) {
+      // Pad by one minute on each side if only one data point is visible
+      const oneMinute = 60 * 1000;
+      return [first - oneMinute, last + oneMinute];
+    }
+    return [first, last];
+  }, [visibleData]);
+
 
   const handleClick = (e: any) => {
     if (e && e.activeTooltipIndex !== undefined && e.activeTooltipIndex >= 0) {
@@ -325,6 +339,11 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
       onMouseLeave={handleMouseLeave}
       style={{ cursor: isPlacingRR ? 'crosshair' : (isDragging ? 'grabbing' : 'grab') }}
     >
+      {!aggregatedData || aggregatedData.length === 0 ? (
+        <div className="flex items-center justify-center w-full h-full text-muted-foreground">
+          No data available for the selected time range.
+        </div>
+      ) : (
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={visibleData} onClick={handleClick} margin={{ top: 10, right: 30, left: 0, bottom: 10 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border) / 0.5)" />
@@ -338,7 +357,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
             interval="preserveStartEnd"
             minTickGap={80}
             xAxisId="main"
-            domain={['dataMin', 'dataMax']}
+            domain={xTimeDomain}
             type="number"
           />
           <YAxis
@@ -371,6 +390,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
           ))}
         </ComposedChart>
       </ResponsiveContainer>
+      )}
       {chartContainerRef.current && rrTools.map(tool => (
         <RiskRewardTool 
           key={tool.id}
