@@ -102,45 +102,37 @@ export default function AlgoInsightsPage() {
         </div>
 
         <aside className="absolute top-4 left-4 z-10 flex flex-col items-start gap-4">
-            <Card className="bg-card/80 backdrop-blur-sm">
-                <CardHeader className="pb-4">
-                    <CardTitle className="font-headline text-xl flex items-center gap-2">
-                        <Target className="w-5 h-5"/>
-                        Trading Tools
-                    </CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <TooltipProvider>
-                      <div className="flex justify-center gap-2">
-                          <Tooltip>
-                              <TooltipTrigger asChild>
-                                  <Button variant="outline" size="icon" onClick={() => setPlacingToolType('long')} disabled={!!placingToolType}>
-                                      <ArrowUp className="w-5 h-5 text-accent"/>
-                                  </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                  <p>Place Long Position</p>
-                              </TooltipContent>
-                          </Tooltip>
-                          <Tooltip>
-                              <TooltipTrigger asChild>
-                                  <Button variant="outline" size="icon" onClick={() => setPlacingToolType('short')} disabled={!!placingToolType}>
-                                      <ArrowDown className="w-5 h-5 text-destructive"/>
-                                  </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                  <p>Place Short Position</p>
-                              </TooltipContent>
-                          </Tooltip>
-                      </div>
-                    </TooltipProvider>
-                    {placingToolType && (
-                        <div className="text-center text-xs text-primary mt-2 animate-pulse">
-                            Click on the chart to place.
-                        </div>
-                    )}
-                </CardContent>
-            </Card>
+            <div className="flex flex-col items-start gap-2">
+                <TooltipProvider>
+                  <div className="flex justify-center gap-2">
+                      <Tooltip>
+                          <TooltipTrigger asChild>
+                              <Button variant="outline" size="icon" onClick={() => setPlacingToolType('long')} disabled={!!placingToolType}>
+                                  <ArrowUp className="w-5 h-5 text-accent"/>
+                              </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                              <p>Place Long Position</p>
+                          </TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                          <TooltipTrigger asChild>
+                              <Button variant="outline" size="icon" onClick={() => setPlacingToolType('short')} disabled={!!placingToolType}>
+                                  <ArrowDown className="w-5 h-5 text-destructive"/>
+                              </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                              <p>Place Short Position</p>
+                          </TooltipContent>
+                      </Tooltip>
+                  </div>
+                </TooltipProvider>
+                {placingToolType && (
+                    <div className="text-center text-xs text-primary mt-2 animate-pulse">
+                        Click on the chart to place.
+                    </div>
+                )}
+            </div>
             <Button
                 variant="ghost" 
                 onClick={handleExportCsv} 
