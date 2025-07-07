@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, ChevronRight } from "lucide-react";
+import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, ChevronRight, ChevronsRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InteractiveChart } from "@/components/algo-insights/interactive-chart";
 import { mockPriceData } from "@/lib/mock-data";
@@ -198,6 +198,40 @@ export default function AlgoInsightsPage() {
     });
   };
 
+  const handleNextSession = () => {
+    if (!timeZone || !sessionStartTime || !mockPriceData.length) return;
+
+    const startDate = selectedDate || mockPriceData[0].date;
+    
+    // Find the index of the candle just after the current start date.
+    const startIndex = mockPriceData.findIndex(p => p.date > startDate);
+    if (startIndex === -1) return; // Already at or after the last candle.
+
+    const [sessionHour, sessionMinute] = sessionStartTime.split(':').map(Number);
+    const options = { hour: 'numeric', minute: 'numeric', hour12: false, timeZone };
+    const formatter = new Intl.DateTimeFormat('en-US', options);
+
+    // Start searching from the next candle.
+    for (let i = startIndex; i < mockPriceData.length; i++) {
+        const pointDate = mockPriceData[i].date;
+        
+        const parts = formatter.formatToParts(pointDate);
+        const hourPart = parts.find(p => p.type === 'hour');
+        const minutePart = parts.find(p => p.type === 'minute');
+
+        if (hourPart && minutePart) {
+            const pointHour = parseInt(hourPart.value, 10);
+            const pointMinute = parseInt(minutePart.value, 10);
+
+            if (pointHour === sessionHour && pointMinute === sessionMinute) {
+                // Found the next session open
+                setSelectedDate(pointDate);
+                return; // Exit after finding the first match
+            }
+        }
+    }
+  };
+
   return (
     <div className="flex flex-col h-screen bg-background text-foreground font-body">
       <header className="flex items-center justify-between p-4 border-b border-border shadow-md">
@@ -317,6 +351,19 @@ export default function AlgoInsightsPage() {
                     </TooltipTrigger>
                     <TooltipContent>
                         <p>Next Candle</p>
+                    </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+
+              <TooltipProvider>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" onClick={handleNextSession} className="text-muted-foreground">
+                            <ChevronsRight className="h-5 w-5" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        <p>Next Session Open</p>
                     </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
