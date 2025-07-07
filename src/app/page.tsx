@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon } from "lucide-react";
+import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InteractiveChart } from "@/components/algo-insights/interactive-chart";
 import { mockPriceData } from "@/lib/mock-data";
@@ -133,6 +133,35 @@ export default function AlgoInsightsPage() {
     link.click();
     document.body.removeChild(link);
   };
+  
+  const handleNextCandle = () => {
+    const getDuration = (tf: string): number => { // returns duration in milliseconds
+      switch (tf) {
+        case '1m': return 60 * 1000;
+        case '30m': return 30 * 60 * 1000;
+        case '1H': return 60 * 60 * 1000;
+        case '4H': return 4 * 60 * 60 * 1000;
+        case '1D': return 24 * 60 * 60 * 1000;
+        default: return 24 * 60 * 60 * 1000; // Default to 1 Day
+      }
+    };
+
+    setSelectedDate(currentDate => {
+      // If no date is selected, start from the first data point.
+      const startDate = currentDate || (mockPriceData.length > 0 ? mockPriceData[0].date : new Date());
+      
+      const newDate = new Date(startDate.getTime() + getDuration(timeframe));
+      
+      const lastAvailableDate = mockPriceData[mockPriceData.length - 1].date;
+
+      // Ensure the new date does not exceed the last available data point.
+      if (newDate > lastAvailableDate) {
+        return lastAvailableDate;
+      }
+      
+      return newDate;
+    });
+  };
 
   return (
     <div className="flex flex-col h-screen bg-background text-foreground font-body">
@@ -234,6 +263,19 @@ export default function AlgoInsightsPage() {
                       />
                   </PopoverContent>
               </Popover>
+
+              <TooltipProvider>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" onClick={handleNextCandle} className="text-muted-foreground">
+                            <ChevronRight className="h-5 w-5" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        <p>Next Candle</p>
+                    </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
 
               <div className="h-6 border-l border-border/50"></div>
               
