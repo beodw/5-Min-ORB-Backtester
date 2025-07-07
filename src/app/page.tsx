@@ -1,21 +1,16 @@
 
 "use client";
 
-import { useState, startTransition } from "react";
-import { Bot, Target, X, Play, ArrowUp, ArrowDown } from "lucide-react";
+import { useState } from "react";
+import { Download, Target, X, ArrowUp, ArrowDown } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { InteractiveChart } from "@/components/algo-insights/interactive-chart";
 import { ReportDisplay } from "@/components/algo-insights/report-display";
 import { mockPriceData } from "@/lib/mock-data";
-import { simulateTrade, calculatePerformanceMetrics } from "@/lib/backtesting";
-import { generateReportAction } from "@/app/actions";
-import type { Trade, RiskRewardTool as RRToolType } from "@/types";
+import type { RiskRewardTool as RRToolType } from "@/types";
 
 export default function AlgoInsightsPage() {
-  const [trades, setTrades] = useState<Trade[]>([]);
-  const [aiReport, setAiReport] = useState<string>("");
-  const [isReportLoading, setIsReportLoading] = useState(false);
   const [rrTools, setRrTools] = useState<RRToolType[]>([]);
   const [placingToolType, setPlacingToolType] = useState<'long' | 'short' | null>(null);
 
@@ -52,55 +47,34 @@ export default function AlgoInsightsPage() {
     setRrTools([]);
   };
 
-  const handleSimulateAll = () => {
+  const handleExportCsv = () => {
     if (rrTools.length === 0) return;
-    
-    const newTrades = rrTools.map(tool => 
-      simulateTrade(
-        tool.entryIndex,
-        mockPriceData,
-        tool.takeProfit,
-        tool.stopLoss,
-        tool.position
-      )
-    ).filter((trade): trade is Trade => trade !== null);
 
-    if (newTrades.length > 0) {
-      setTrades((prevTrades) => [...prevTrades, ...newTrades].sort((a,b) => a.entryDate.getTime() - b.entryDate.getTime()));
+    const headers = "Position,Entry Price,Stop Loss,Take Profit,Stop Loss Distance\n";
+    const rows = rrTools.map(tool => {
+      const stopLossDistance = Math.abs(tool.entryPrice - tool.stopLoss).toFixed(4);
+      return [
+        tool.position,
+        tool.entryPrice.toFixed(4),
+        tool.stopLoss.toFixed(4),
+        tool.takeProfit.toFixed(4),
+        stopLossDistance
+      ].join(',');
+    }).join('\n');
+
+    const csvContent = headers + rows;
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    if (link.href) {
+      URL.revokeObjectURL(link.href);
     }
-    setRrTools([]); // Clear tools after simulating
-  }
-
-  const handleGenerateReport = async () => {
-    setIsReportLoading(true);
-    setAiReport("");
-    
-    const metrics = calculatePerformanceMetrics(trades);
-
-    const tradeHistoryString = JSON.stringify(
-      trades.map((t) => ({
-        entryDate: t.entryDate.toISOString(),
-        exitDate: t.exitDate.toISOString(),
-        profit: t.profit,
-        position: t.position,
-      }))
-    );
-    
-    startTransition(async () => {
-      const result = await generateReportAction({
-        profitLoss: metrics.totalProfitLoss,
-        winRate: metrics.winRate / 100,
-        drawdown: metrics.maxDrawdown,
-        tradeHistory: tradeHistoryString,
-      });
-
-      if (result.report) {
-        setAiReport(result.report);
-      } else {
-        setAiReport("Failed to generate report. Please try again.");
-      }
-      setIsReportLoading(false);
-    });
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", "strategy_report.csv");
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   return (
@@ -125,13 +99,13 @@ export default function AlgoInsightsPage() {
             <CardHeader>
               <CardTitle className="font-headline text-xl">Interactive Chart</CardTitle>
               <CardDescription>
-                {placingToolType ? `Click on the chart to place a ${placingToolType} position.` : "Use the tools to define and simulate trades."}
+                {placingToolType ? `Click on the chart to place a ${placingToolType} position.` : "Use the tools to define trade setups."}
               </CardDescription>
             </CardHeader>
             <CardContent className="flex-1 -mt-4">
               <InteractiveChart
                 data={mockPriceData}
-                trades={trades}
+                trades={[]}
                 onChartClick={handleChartClick}
                 rrTools={rrTools}
                 onUpdateTool={handleUpdateTool}
@@ -169,12 +143,9 @@ export default function AlgoInsightsPage() {
                     {rrTools.length > 0 && (
                         <div className="border-t border-border pt-4 mt-4 space-y-2">
                            <p className="text-sm text-center text-muted-foreground">{rrTools.length} tool(s) placed.</p>
-                            <div className="grid grid-cols-2 gap-2 pt-2">
+                            <div className="grid grid-cols-1 gap-2 pt-2">
                                 <Button variant="outline" onClick={handleClearTools}>
-                                    <X className="mr-2"/> Clear Tools
-                                </Button>
-                                <Button onClick={handleSimulateAll}>
-                                    <Play className="mr-2"/> Simulate All
+                                    <X className="mr-2"/> Clear All Tools
                                 </Button>
                             </div>
                         </div>
@@ -184,16 +155,14 @@ export default function AlgoInsightsPage() {
           <Card className="flex-1 flex flex-col bg-card/80 backdrop-blur-sm">
              <CardHeader>
                 <CardTitle className="font-headline text-xl flex items-center gap-2">
-                    <Bot className="w-5 h-5"/>
-                    AI Report
+                    <Download className="w-5 h-5"/>
+                    Export Report
                 </CardTitle>
             </CardHeader>
             <CardContent className="flex-1 flex flex-col">
                 <ReportDisplay
-                  onGenerate={handleGenerateReport}
-                  report={aiReport}
-                  isLoading={isReportLoading}
-                  hasTrades={trades.length > 0}
+                  onExport={handleExportCsv}
+                  hasTools={rrTools.length > 0}
                 />
             </CardContent>
           </Card>
