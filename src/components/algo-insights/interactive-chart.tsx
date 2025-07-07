@@ -188,11 +188,10 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
     
     if (min === Infinity || max === -Infinity) {
       if (openingRange) {
-        // Fallback if there's no candle data but there is an opening range
         min = openingRange.low;
         max = openingRange.high;
       } else {
-        return; // No data to base domain on
+        return; 
       }
     }
 
@@ -429,6 +428,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
               <ReferenceLine
                 y={openingRange.high}
                 yAxisId="main"
+                xAxisId="main"
                 stroke="hsl(var(--primary))"
                 strokeDasharray="4 4"
                 strokeWidth={1}
@@ -445,6 +445,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
               <ReferenceLine
                 y={openingRange.low}
                 yAxisId="main"
+                xAxisId="main"
                 stroke="hsl(var(--primary))"
                 strokeDasharray="4 4"
                 strokeWidth={1}
@@ -466,6 +467,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
               key={marker.id}
               y={marker.price}
               yAxisId="main"
+              xAxisId="main"
               stroke="hsl(var(--ring))"
               strokeDasharray="2 2"
               strokeWidth={1}
