@@ -478,5 +478,3 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
     </div>
   );
 }
-
-    
