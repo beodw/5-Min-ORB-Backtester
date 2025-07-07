@@ -31,7 +31,7 @@ interface InteractiveChartProps {
 
 const Candlestick = (props: any) => {
     const { x, y, width, height, payload } = props;
-    if (y === undefined || height <= 0 || !payload) return null;
+    if (x === undefined || y === undefined || !payload || height <= 0) return null;
 
     const { open, high, low, close } = payload;
     const isGrowing = close > open;
@@ -119,6 +119,7 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
   }, [filteredData, timeframe]);
   
   const [xDomain, setXDomain] = useState<[number, number]>([0, 100]);
+  const [yDomain, setYDomain] = useState<[number, number]>([0, 100]);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState<{ x: number, domain: [number, number] } | null>(null);
 
@@ -159,34 +160,41 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
     return aggregatedData.slice(boundedStart, boundedEnd);
   }, [aggregatedData, xDomain]);
   
-  const yDomain = useMemo(() => {
-    const dataToProcess = (!visibleData || visibleData.length === 0) ? aggregatedData : visibleData;
-
-    if (dataToProcess.length === 0) {
-      return [0, 100];
+  useEffect(() => {
+    if (visibleData.length === 0) {
+      // Don't update the domain if there's no visible data.
+      // This happens when panning into empty space, and we want the Y-axis to remain stable.
+      return;
     }
     
     let min = Infinity;
     let max = -Infinity;
 
-    for (const d of dataToProcess) {
+    for (const d of visibleData) {
         if (d.low < min) min = d.low;
         if (d.high > max) max = d.high;
     }
     
     if (min === Infinity || max === -Infinity) {
-      return [0, 100];
+      return; // Should not happen with the length check, but for safety
     }
 
     const padding = (max - min) * 0.1 || 10;
-    return [min - padding, max + padding];
-  }, [visibleData, aggregatedData]);
+    setYDomain([min - padding, max + padding]);
+  }, [visibleData]);
 
   const xTimeDomain = useMemo(() => {
     if (!aggregatedData || aggregatedData.length === 0) return [0, 0];
+    
+    // Handle cases with single data point to prevent NaN errors
+    if (aggregatedData.length === 1) {
+        const singlePointTime = aggregatedData[0].date.getTime();
+        return [singlePointTime - 60000, singlePointTime + 60000]; // Pad with 1 minute
+    }
+
     if (visibleData.length === 0) { // Handle case where view is outside data range
         const [start, end] = xDomain;
-        const interval = aggregatedData.length > 1 ? aggregatedData[1].date.getTime() - aggregatedData[0].date.getTime() : 60000;
+        const interval = aggregatedData[1].date.getTime() - aggregatedData[0].date.getTime();
         const startTime = aggregatedData[0].date.getTime() + start * interval;
         const endTime = aggregatedData[0].date.getTime() + end * interval;
         return [startTime, endTime];
@@ -323,8 +331,10 @@ export function InteractiveChart({ data, trades, onChartClick, rrTools, onUpdate
 
     if (!firstDate || !lastDate) {
         // Fallback for when we're viewing empty space
-        const timeDiff = (end - start) * (aggregatedData.length > 1 ? aggregatedData[1].date.getTime() - aggregatedData[0].date.getTime() : 60000);
-        if (timeDiff > 3 * 24 * 60 * 60 * 1000) return date.toLocaleDateString([], { month: 'short', day: 'numeric', timeZone });
+        if (aggregatedData.length > 1) {
+            const timeDiff = (end - start) * (aggregatedData[1].date.getTime() - aggregatedData[0].date.getTime());
+            if (timeDiff > 3 * 24 * 60 * 60 * 1000) return date.toLocaleDateString([], { month: 'short', day: 'numeric', timeZone });
+        }
         return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone });
     }
 
