@@ -10,19 +10,67 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 export default function AlgoInsightsPage() {
   const [rrTools, setRrTools] = useState<RRToolType[]>([]);
   const [placingToolType, setPlacingToolType] = useState<'long' | 'short' | null>(null);
   const [timeframe, setTimeframe] = useState('1D');
   const [timeZone, setTimeZone] = useState<string>('');
-  const [timezones, setTimezones] = useState<string[]>([]);
+  const [timezones, setTimezones] = useState<{ value: string; label: string }[]>([]);
 
   useEffect(() => {
-    // This runs only on the client to avoid hydration errors
-    setTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
-    setTimezones(Intl.supportedValuesOf('timeZone'));
+    const getOffsetInMinutes = (timeZone: string): number => {
+        try {
+            const now = new Date();
+            // Create dates in UTC and the target timezone to calculate the difference
+            const utcDate = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }));
+            const tzDate = new Date(now.toLocaleString('en-US', { timeZone }));
+            return (tzDate.getTime() - utcDate.getTime()) / 60000;
+        } catch (e) {
+            // Some obscure timezones might not be supported everywhere
+            return NaN;
+        }
+    };
+
+    const tzData = Intl.supportedValuesOf('timeZone')
+        .map(tz => {
+            const offset = getOffsetInMinutes(tz);
+            if (isNaN(offset)) return null;
+
+            const offsetHours = Math.floor(Math.abs(offset) / 60);
+            const offsetMinutes = Math.abs(offset) % 60;
+            const sign = offset >= 0 ? '+' : '-';
+            const offsetString = `(UTC${sign}${String(offsetHours).padStart(2, '0')}:${String(offsetMinutes).padStart(2, '0')})`;
+            
+            return {
+                value: tz,
+                label: `${tz.replace(/_/g, ' ')} ${offsetString}`,
+                offset,
+            };
+        })
+        .filter((tz): tz is { value: string; label: string; offset: number; } => tz !== null)
+        .sort((a, b) => a.offset - b.offset);
+
+    setTimezones(tzData);
+
+    const savedTimeZone = localStorage.getItem('algo-insights-timezone');
+    // Ensure the saved timezone is a valid one before setting it
+    if (savedTimeZone && Intl.supportedValuesOf('timeZone').includes(savedTimeZone)) {
+        setTimeZone(savedTimeZone);
+    } else {
+        // Fallback to user's local timezone if nothing is saved or it's invalid
+        setTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    }
   }, []);
+
+  useEffect(() => {
+    // Persist the timezone to localStorage whenever it changes
+    if (timeZone) {
+        localStorage.setItem('algo-insights-timezone', timeZone);
+    }
+  }, [timeZone]);
+
 
   const handleChartClick = (chartData: { close: number; date: Date, dataIndex: number }) => {
     if (placingToolType) {
@@ -97,7 +145,8 @@ export default function AlgoInsightsPage() {
             Algo Insights
           </h1>
         </div>
-        <div>
+        <div className="flex items-center gap-4">
+            <span className="text-sm text-muted-foreground hidden sm:inline-block">{timeZone.replace(/_/g, ' ')}</span>
             <Popover>
                 <PopoverTrigger asChild>
                     <Button variant="ghost" size="icon">
@@ -119,9 +168,11 @@ export default function AlgoInsightsPage() {
                                     <SelectValue placeholder="Select timezone" />
                                 </SelectTrigger>
                                 <SelectContent>
+                                  <ScrollArea className="h-72">
                                     {timezones.map(tz => (
-                                        <SelectItem key={tz} value={tz}>{tz.replace(/_/g, ' ')}</SelectItem>
+                                        <SelectItem key={tz.value} value={tz.value}>{tz.label}</SelectItem>
                                     ))}
+                                  </ScrollArea>
                                 </SelectContent>
                             </Select>
                         </div>
