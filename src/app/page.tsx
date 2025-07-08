@@ -174,13 +174,7 @@ export default function AlgoInsightsPage() {
   };
 
   const handleDateSelect = (date: Date | undefined) => {
-    if (date) {
-      const endOfDay = new Date(date);
-      endOfDay.setHours(23, 59, 59, 999);
-      setSelectedDate(endOfDay);
-    } else {
-      setSelectedDate(undefined);
-    }
+    setSelectedDate(date);
   };
   
   const handleNextCandle = () => {
