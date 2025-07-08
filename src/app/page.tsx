@@ -26,9 +26,11 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import type { PriceData } from "@/types";
+import { cn } from "@/lib/utils";
 
 export default function AlgoInsightsPage() {
   const [priceData, setPriceData] = useState<PriceData[]>(mockPriceData);
+  const [isDataImported, setIsDataImported] = useState(false);
   const [rrTools, setRrTools] = useState<RRToolType[]>([]);
   const [placingToolType, setPlacingToolType] = useState<'long' | 'short' | null>(null);
   const [priceMarkers, setPriceMarkers] = useState<PriceMarker[]>([]);
@@ -151,8 +153,12 @@ export default function AlgoInsightsPage() {
   };
   
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    // This function will be implemented in the next step.
-    console.log("File selected. Parsing logic to come.");
+    if (event.target.files && event.target.files[0]) {
+      // Placeholder to show color change.
+      // The real parsing logic will come next.
+      setIsDataImported(true); 
+      console.log("File selected. Parsing logic to come.");
+    }
   };
 
   const handleExportCsv = () => {
@@ -487,14 +493,26 @@ export default function AlgoInsightsPage() {
 
               <div className="h-6 border-l border-border/50"></div>
 
-              <Button
-                  variant="ghost"
-                  onClick={handleImportClick}
-                  className="text-foreground"
-              >
-                  <FileUp className="mr-2 h-4 w-4" />
-                  Import CSV
-              </Button>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={handleImportClick}
+                    >
+                      <FileUp className={cn(
+                        "h-5 w-5",
+                        isDataImported ? "text-chart-3" : "text-muted-foreground"
+                      )} />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{isDataImported ? "CSV Data Loaded" : "Import Dukascopy CSV"}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              
               <input
                 type="file"
                 ref={fileInputRef}
