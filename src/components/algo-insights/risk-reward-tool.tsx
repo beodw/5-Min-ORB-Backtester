@@ -25,7 +25,6 @@ const findClosestIndex = (data: PriceData[], timestamp: number) => {
 };
 
 export function RiskRewardTool({ tool, onUpdateTool, onRemove, data, xScale, yScale, plot, svgBounds }: RiskRewardToolProps) {
-  const [isHovered, setIsHovered] = useState(false);
   const [isDragging, setIsDragging] = useState<null | 'entry' | 'stop' | 'profit' | 'width'>(null);
 
   const handleMouseDown = (e: React.MouseEvent, part: 'entry' | 'stop' | 'profit' | 'width') => {
@@ -131,20 +130,8 @@ export function RiskRewardTool({ tool, onUpdateTool, onRemove, data, xScale, ySc
   
   const rrRatio = tool.entryPrice - tool.stopLoss !== 0 ? Math.abs((tool.takeProfit - tool.entryPrice) / (tool.entryPrice - tool.stopLoss)) : Infinity;
 
-  const getCursor = () => {
-    if (isDragging === 'stop' || isDragging === 'profit') return 'ns-resize';
-    if (isDragging === 'width') return 'ew-resize';
-    if (isDragging === 'entry') return 'move';
-    if (isHovered) return 'pointer';
-    return 'default';
-  };
-
   return (
-    <g 
-      onMouseEnter={() => setIsHovered(true)} 
-      onMouseLeave={() => setIsHovered(false)}
-      style={{ cursor: getCursor(), pointerEvents: 'all' }}
-    >
+    <g style={{ pointerEvents: 'all' }}>
       {/* Profit Zone */}
       <rect
         x={leftX}
@@ -219,17 +206,15 @@ export function RiskRewardTool({ tool, onUpdateTool, onRemove, data, xScale, ySc
 
 
       {/* Delete Button */}
-      {isHovered && !isDragging && (
-        <g 
-            transform={`translate(${leftX + width / 2}, ${entryY - 25})`}
-            onClick={() => onRemove(tool.id)}
-            style={{ cursor: 'pointer' }}
-        >
-          <circle r={8} fill="hsl(var(--card))" stroke="hsl(var(--border))" />
-          <line x1={-3} y1={-3} x2={3} y2={3} stroke="hsl(var(--muted-foreground))" strokeWidth="1.5"/>
-          <line x1={-3} y1={3} x2={3} y2={-3} stroke="hsl(var(--muted-foreground))" strokeWidth="1.5"/>
-        </g>
-      )}
+      <g 
+          transform={`translate(${leftX + width / 2}, ${entryY - 25})`}
+          onClick={() => onRemove(tool.id)}
+          style={{ cursor: 'pointer' }}
+      >
+        <circle r={8} fill="hsl(var(--card))" stroke="hsl(var(--border))" />
+        <line x1={-3} y1={-3} x2={3} y2={3} stroke="hsl(var(--muted-foreground))" strokeWidth="1.5"/>
+        <line x1={-3} y1={3} x2={3} y2={-3} stroke="hsl(var(--muted-foreground))" strokeWidth="1.5"/>
+      </g>
     </g>
   );
 }

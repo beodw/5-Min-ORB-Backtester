@@ -342,7 +342,7 @@ export function InteractiveChart({
       const pricePerPixel = yDomainWidth / plotHeight;
       const deltaPrice = dy * pricePerPixel;
       
-      const newYStart = yStart + deltaPrice;
+      const newYStart = yStart - deltaPrice;
       const newYEnd = newYStart + yDomainWidth;
       setYDomain([newYStart, newYEnd]);
     }
@@ -381,29 +381,6 @@ export function InteractiveChart({
     }
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone });
   }, [xDomain, aggregatedData, timeZone]);
-
-  const CustomTooltip = ({ active, payload, label }: any) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload;
-      return (
-        <div className="p-2 bg-card border border-border rounded-lg shadow-lg text-sm">
-          <p className="label font-bold text-foreground">{`${new Date(data.date).toLocaleString([], {
-              year: 'numeric',
-              month: 'short',
-              day: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit',
-              timeZone
-            })}`}</p>
-          <p>Open: <span className="font-mono text-primary">{data.open.toFixed(2)}</span></p>
-          <p>High: <span className="font-mono text-primary">{data.high.toFixed(2)}</span></p>
-          <p>Low: <span className="font-mono text-primary">{data.low.toFixed(2)}</span></p>
-          <p>Close: <span className="font-mono text-primary">{data.close.toFixed(2)}</span></p>
-        </div>
-      );
-    }
-    return null;
-  };
 
   return (
     <div 
@@ -451,7 +428,7 @@ export function InteractiveChart({
             allowDataOverflow={true}
             yAxisId="main"
           />
-          <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'hsl(var(--accent))', strokeWidth: 1, strokeDasharray: '3 3' }}/>
+          <Tooltip content={<></>} cursor={{ stroke: 'hsl(var(--accent))', strokeWidth: 1, strokeDasharray: '3 3' }}/>
           
           <Bar dataKey="wick" shape={<Candlestick />} isAnimationActive={false} xAxisId="main" yAxisId="main"/>
 
