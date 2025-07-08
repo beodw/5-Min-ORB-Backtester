@@ -344,13 +344,13 @@ export default function AlgoInsightsPage() {
             id: `or-high-${startIndex}`,
             price: openingRangeHigh,
             label: 'OR High',
-            isDeletable: false,
+            isDeletable: true,
         };
         const lowMarker: PriceMarker = {
             id: `or-low-${startIndex}`,
             price: openingRangeLow,
             label: 'OR Low',
-            isDeletable: false,
+            isDeletable: true,
         };
 
         setPriceMarkers([...otherMarkers, highMarker, lowMarker]);
