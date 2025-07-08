@@ -26,9 +26,9 @@ const findClosestIndex = (data: PriceData[], timestamp: number) => {
 
 export function RiskRewardTool({ tool, onUpdateTool, onRemove, data, xScale, yScale, plot, svgBounds }: RiskRewardToolProps) {
   const [isHovered, setIsHovered] = useState(false);
-  const [isDragging, setIsDragging] = useState<null | 'entry' | 'stop' | 'profit'>(null);
+  const [isDragging, setIsDragging] = useState<null | 'entry' | 'stop' | 'profit' | 'width'>(null);
 
-  const handleMouseDown = (e: React.MouseEvent, part: 'entry' | 'stop' | 'profit') => {
+  const handleMouseDown = (e: React.MouseEvent, part: 'entry' | 'stop' | 'profit' | 'width') => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(part);
@@ -70,6 +70,23 @@ export function RiskRewardTool({ tool, onUpdateTool, onRemove, data, xScale, ySc
         const mouseYInSvg = moveEvent.clientY - svgBounds.top;
         const newPrice = yScale.invert(mouseYInSvg);
         if (newPrice !== undefined) newTool.takeProfit = newPrice;
+      
+      } else if (part === 'width') {
+        const mouseXInSvg = moveEvent.clientX - svgBounds.left;
+        const mouseXInPlot = mouseXInSvg - plot.left;
+        const newTimestamp = xScale.invert(mouseXInPlot);
+        
+        if (newTimestamp !== undefined) {
+          const entryTimestamp = data[tool.entryIndex]?.date.getTime();
+          if (entryTimestamp) {
+              const candleInterval = data.length > 1 ? data[1].date.getTime() - data[0].date.getTime() : 60000;
+              const newWidthInPoints = Math.round((newTimestamp - entryTimestamp) / candleInterval);
+
+              if (newWidthInPoints >= 5) {
+                newTool.widthInPoints = newWidthInPoints;
+              }
+          }
+        }
       }
       
       onUpdateTool(newTool);
@@ -91,8 +108,6 @@ export function RiskRewardTool({ tool, onUpdateTool, onRemove, data, xScale, ySc
     return null;
   }
   
-  // Calculate interval based on the first two points of the entire dataset.
-  // This assumes a consistent timeframe, which is reasonable given aggregation.
   const interval = data.length > 1 ? data[1].date.getTime() - data[0].date.getTime() : 60000;
   const endDate = entryDate + tool.widthInPoints * interval;
 
@@ -118,6 +133,7 @@ export function RiskRewardTool({ tool, onUpdateTool, onRemove, data, xScale, ySc
 
   const getCursor = () => {
     if (isDragging === 'stop' || isDragging === 'profit') return 'ns-resize';
+    if (isDragging === 'width') return 'ew-resize';
     if (isDragging === 'entry') return 'move';
     if (isHovered) return 'pointer';
     return 'default';
@@ -189,6 +205,16 @@ export function RiskRewardTool({ tool, onUpdateTool, onRemove, data, xScale, ySc
           fill="transparent"
           style={{ cursor: 'ns-resize' }}
           onMouseDown={(e) => handleMouseDown(e, 'profit')}
+      />
+      {/* Width Drag Hitbox */}
+       <rect
+          x={rightX - 5}
+          y={Math.min(profitY, stopY)}
+          width={10}
+          height={Math.abs(profitY - stopY)}
+          fill="transparent"
+          style={{ cursor: 'ew-resize' }}
+          onMouseDown={(e) => handleMouseDown(e, 'width')}
       />
 
 
