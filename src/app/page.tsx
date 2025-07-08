@@ -196,8 +196,11 @@ export default function AlgoInsightsPage() {
     };
 
     setSelectedDate(currentDate => {
-      const startDate = currentDate || (mockPriceData.length > 0 ? mockPriceData[0].date : new Date());
-      const newDate = new Date(startDate.getTime() + getDuration(timeframe));
+      if (!currentDate) {
+        return mockPriceData.length > 0 ? mockPriceData[0].date : new Date();
+      }
+      
+      const newDate = new Date(currentDate.getTime() + getDuration(timeframe));
       const lastAvailableDate = mockPriceData[mockPriceData.length - 1].date;
 
       if (newDate > lastAvailableDate) {
@@ -211,15 +214,17 @@ export default function AlgoInsightsPage() {
   const handleNextSession = () => {
     if (!timeZone || !sessionStartTime || !mockPriceData.length) return;
 
-    const startDate = selectedDate || mockPriceData[0].date;
-    const startIndex = mockPriceData.findIndex(p => p.date > startDate);
-    if (startIndex === -1) return;
+    const searchFromIndex = selectedDate
+      ? mockPriceData.findIndex(p => p.date > selectedDate)
+      : 0;
+    
+    if (searchFromIndex === -1) return;
 
     const [sessionHour, sessionMinute] = sessionStartTime.split(':').map(Number);
     const options = { hour: 'numeric', minute: 'numeric', hour12: false, timeZone };
     const formatter = new Intl.DateTimeFormat('en-US', options);
 
-    for (let i = startIndex; i < mockPriceData.length; i++) {
+    for (let i = searchFromIndex; i < mockPriceData.length; i++) {
       const pointDate = mockPriceData[i].date;
       const parts = formatter.formatToParts(pointDate);
       const hourPart = parts.find(p => p.type === 'hour');
