@@ -220,6 +220,8 @@ export default function AlgoInsightsPage() {
     
     if (searchFromIndex === -1) return;
 
+    alert(`Starting loop at index ${searchFromIndex}, time: ${mockPriceData[searchFromIndex].date.toLocaleString()}`);
+
     const [sessionHour, sessionMinute] = sessionStartTime.split(':').map(Number);
     const options = { hour: 'numeric', minute: 'numeric', hour12: false, timeZone };
     const formatter = new Intl.DateTimeFormat('en-US', options);
@@ -240,8 +242,7 @@ export default function AlgoInsightsPage() {
             
             const openingRangeCandles = mockPriceData.slice(i, i + 5);
             if (openingRangeCandles.length === 5) {
-                alert(`Opening Range Start: ${openingRangeCandles[0].date.toLocaleString()}`);
-                alert(`Opening Range End: ${openingRangeCandles[4].date.toLocaleString()}`);
+                // Intentionally left blank for debugging
             }
             
             // Set the view to show the opening range and the next candle (up to 9:35)
