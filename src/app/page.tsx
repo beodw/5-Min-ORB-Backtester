@@ -116,9 +116,9 @@ export default function AlgoInsightsPage() {
   }, [pipValue]);
 
 
-  const handleChartClick = (chartData: { close: number; date: Date, dataIndex: number, yDomain: [number, number], xDomain: [number, number] }) => {
+  const handleChartClick = (chartData: { price: number; date: Date, dataIndex: number, yDomain: [number, number], xDomain: [number, number] }) => {
     if (placingToolType) {
-      const entryPrice = chartData.close;
+      const entryPrice = chartData.price;
       
       const visiblePriceRange = chartData.yDomain[1] - chartData.yDomain[0];
       const stopLossOffset = visiblePriceRange * 0.05; // 5% of visible height for stop
@@ -145,7 +145,7 @@ export default function AlgoInsightsPage() {
     } else if (isPlacingPriceMarker) {
       const newMarker: PriceMarker = {
         id: `pm-${Date.now()}`,
-        price: chartData.close,
+        price: chartData.price,
         isDeletable: true,
       };
       setPriceMarkers(prev => [...prev, newMarker]);
@@ -153,7 +153,7 @@ export default function AlgoInsightsPage() {
     } else if (isPlacingMeasurement) {
         const currentPoint = {
             index: chartData.dataIndex,
-            price: chartData.close
+            price: chartData.price
         };
         if (!measurementStartPoint) {
             setMeasurementStartPoint(currentPoint);

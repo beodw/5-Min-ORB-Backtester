@@ -3,6 +3,7 @@
 
 import React, { useState } from 'react';
 import type { RiskRewardTool as RRToolType, PriceData } from '@/types';
+import { findClosestIndex } from '@/lib/chart-utils';
 
 interface RiskRewardToolProps {
   tool: RRToolType;
@@ -14,15 +15,6 @@ interface RiskRewardToolProps {
   plot: { width: number; height: number; top: number; left: number };
   svgBounds: DOMRect;
 }
-
-const findClosestIndex = (data: PriceData[], timestamp: number) => {
-    if (!data || data.length === 0) return 0;
-    return data.reduce((prev, curr, index) => {
-        const prevDiff = Math.abs(data[prev].date.getTime() - timestamp);
-        const currDiff = Math.abs(curr.date.getTime() - timestamp);
-        return currDiff < prevDiff ? index : prev;
-    }, 0);
-};
 
 export function RiskRewardTool({ tool, onUpdateTool, onRemove, data, xScale, yScale, plot, svgBounds }: RiskRewardToolProps) {
   const [isDragging, setIsDragging] = useState<null | 'entry' | 'stop' | 'profit' | 'width'>(null);

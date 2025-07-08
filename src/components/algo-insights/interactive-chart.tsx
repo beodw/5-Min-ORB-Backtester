@@ -18,11 +18,12 @@ import { PriceMarker } from "./price-marker";
 import { MeasurementTool } from "./measurement-tool";
 import { useMemo, useRef, useState, useCallback, useEffect } from "react";
 import { cn } from "@/lib/utils";
+import { findClosestIndex } from "@/lib/chart-utils";
 
 interface InteractiveChartProps {
   data: PriceData[];
   trades: Trade[];
-  onChartClick: (data: { close: number; date: Date, dataIndex: number, yDomain: [number, number], xDomain: [number, number] }) => void;
+  onChartClick: (data: { price: number; date: Date, dataIndex: number, yDomain: [number, number], xDomain: [number, number] }) => void;
   rrTools: RRToolType[];
   onUpdateTool: (tool: RRToolType) => void;
   onRemoveTool: (id: string) => void;
@@ -85,6 +86,7 @@ export function InteractiveChart({
     isYAxisLocked
 }: InteractiveChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
+  const chartScalesRef = useRef<{x: any, y: any, plot: any} | null>(null);
 
   const aggregatedData = useMemo(() => {
     if (!data || data.length === 0) {
@@ -257,17 +259,30 @@ export function InteractiveChart({
 
 
   const handleClick = (e: any) => {
-    if (e && e.activeTooltipIndex !== undefined && e.activeTooltipIndex >= 0 && e.activePayload?.[0]?.payload) {
-        const dataIndex = aggregatedData.findIndex(d => d.date === e.activePayload[0].payload.date);
-        if (dataIndex !== -1) {
-            onChartClick({
-              close: e.activePayload[0].payload.close,
-              date: new Date(e.activePayload[0].payload.date),
-              dataIndex: dataIndex,
-              yDomain: yDomain,
-              xDomain: xDomain,
-            });
-        }
+    if (!e || !chartScalesRef.current) return;
+
+    const { x: xScale, y: yScale, plot } = chartScalesRef.current;
+    
+    const mouseXInPlot = e.chartX - plot.left;
+    const mouseYInPlot = e.chartY - plot.top;
+    
+    if (mouseXInPlot < 0 || mouseXInPlot > plot.width || mouseYInPlot < 0 || mouseYInPlot > plot.height) {
+        return;
+    }
+
+    const price = yScale.invert(mouseYInPlot);
+    const timestamp = xScale.invert(mouseXInPlot);
+    const dataIndex = findClosestIndex(aggregatedData, timestamp);
+    const date = aggregatedData[dataIndex]?.date;
+    
+    if (price !== undefined && date !== undefined) {
+        onChartClick({
+          price,
+          date,
+          dataIndex,
+          yDomain: yDomain,
+          xDomain: xDomain,
+        });
     }
   };
 
@@ -471,6 +486,13 @@ export function InteractiveChart({
                 height: mainYAxis.height,
                 top: mainYAxis.y,
                 left: mainXAxis.x
+              };
+
+              // Store scales in ref for the main onClick handler
+              chartScalesRef.current = {
+                x: mainXAxis.scale,
+                y: mainYAxis.scale,
+                plot: plot
               };
 
               return (
