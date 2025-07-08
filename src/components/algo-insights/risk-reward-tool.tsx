@@ -86,11 +86,16 @@ export function RiskRewardTool({ tool, onUpdateTool, onRemove, data, xScale, ySc
   };
 
   const entryDate = data[tool.entryIndex]?.date.getTime();
-  const endDate = data[Math.min(data.length - 1, tool.entryIndex + tool.widthInPoints)]?.date.getTime();
 
-  if (!entryDate || !endDate) {
+  if (!entryDate || !data || data.length === 0) {
     return null;
   }
+  
+  // Calculate interval based on the first two points of the entire dataset.
+  // This assumes a consistent timeframe, which is reasonable given aggregation.
+  const interval = data.length > 1 ? data[1].date.getTime() - data[0].date.getTime() : 60000;
+  const endDate = entryDate + tool.widthInPoints * interval;
+
 
   const leftX = xScale(entryDate);
   const rightX = xScale(endDate);
