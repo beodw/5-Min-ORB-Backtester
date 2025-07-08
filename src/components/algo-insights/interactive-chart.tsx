@@ -485,10 +485,13 @@ export function InteractiveChart({
                     <RiskRewardTool
                       key={tool.id}
                       tool={tool}
+                      onUpdateTool={onUpdateTool}
                       onRemove={onRemoveTool}
                       data={aggregatedData}
                       xScale={mainXAxis.scale}
                       yScale={mainYAxis.scale}
+                      plot={plot}
+                      svgBounds={svgBounds}
                     />
                   ))}
                 </g>

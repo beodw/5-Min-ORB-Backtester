@@ -6,14 +6,84 @@ import type { RiskRewardTool as RRToolType, PriceData } from '@/types';
 
 interface RiskRewardToolProps {
   tool: RRToolType;
+  onUpdateTool: (tool: RRToolType) => void;
   onRemove: (id: string) => void;
   data: PriceData[];
-  xScale: (date: number) => number;
-  yScale: (price: number) => number;
+  xScale: ((date: number) => number) & { invert?: (x: number) => number };
+  yScale: ((price: number) => number) & { invert?: (y: number) => number };
+  plot: { width: number; height: number; top: number; left: number };
+  svgBounds: DOMRect;
 }
 
-export function RiskRewardTool({ tool, onRemove, data, xScale, yScale }: RiskRewardToolProps) {
+const findClosestIndex = (data: PriceData[], timestamp: number) => {
+    if (!data || data.length === 0) return 0;
+    return data.reduce((prev, curr, index) => {
+        const prevDiff = Math.abs(data[prev].date.getTime() - timestamp);
+        const currDiff = Math.abs(curr.date.getTime() - timestamp);
+        return currDiff < prevDiff ? index : prev;
+    }, 0);
+};
+
+export function RiskRewardTool({ tool, onUpdateTool, onRemove, data, xScale, yScale, plot, svgBounds }: RiskRewardToolProps) {
   const [isHovered, setIsHovered] = useState(false);
+  const [isDragging, setIsDragging] = useState<null | 'entry' | 'stop' | 'profit'>(null);
+
+  const handleMouseDown = (e: React.MouseEvent, part: 'entry' | 'stop' | 'profit') => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(part);
+
+    const startToolState = { ...tool };
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      moveEvent.preventDefault();
+
+      if (!yScale.invert || !xScale.invert) return;
+
+      let newTool = { ...tool };
+
+      if (part === 'entry') {
+        const mouseXInSvg = moveEvent.clientX - svgBounds.left;
+        const mouseYInSvg = moveEvent.clientY - svgBounds.top;
+        const mouseXInPlot = mouseXInSvg - plot.left;
+        const mouseYInPlot = mouseYInSvg - plot.top;
+        
+        const newEntryPrice = yScale.invert(mouseYInPlot);
+        const newTimestamp = xScale.invert(mouseXInPlot);
+        
+        if (newEntryPrice === undefined || newTimestamp === undefined) return;
+
+        const stopOffset = startToolState.entryPrice - startToolState.stopLoss;
+        const profitOffset = startToolState.takeProfit - startToolState.entryPrice;
+        
+        newTool.entryPrice = newEntryPrice;
+        newTool.stopLoss = newEntryPrice - stopOffset;
+        newTool.takeProfit = newEntryPrice + profitOffset;
+        newTool.entryIndex = findClosestIndex(data, newTimestamp);
+
+      } else if (part === 'stop') {
+        const mouseYInSvg = moveEvent.clientY - svgBounds.top;
+        const newPrice = yScale.invert(mouseYInSvg);
+        if (newPrice !== undefined) newTool.stopLoss = newPrice;
+      
+      } else if (part === 'profit') {
+        const mouseYInSvg = moveEvent.clientY - svgBounds.top;
+        const newPrice = yScale.invert(mouseYInSvg);
+        if (newPrice !== undefined) newTool.takeProfit = newPrice;
+      }
+      
+      onUpdateTool(newTool);
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(null);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
 
   const entryDate = data[tool.entryIndex]?.date.getTime();
   const endDate = data[Math.min(data.length - 1, tool.entryIndex + tool.widthInPoints)]?.date.getTime();
@@ -35,17 +105,24 @@ export function RiskRewardTool({ tool, onRemove, data, xScale, yScale }: RiskRew
   }
 
   const profitZoneY = tool.position === 'long' ? profitY : entryY;
-  const profitZoneHeight = tool.position === 'long' ? Math.abs(entryY - profitY) : Math.abs(stopY - entryY);
+  const profitZoneHeight = Math.abs(entryY - profitY);
   const lossZoneY = tool.position === 'long' ? entryY : stopY;
-  const lossZoneHeight = tool.position === 'long' ? Math.abs(stopY - entryY) : Math.abs(entryY - profitY);
+  const lossZoneHeight = Math.abs(stopY - entryY);
   
   const rrRatio = tool.entryPrice - tool.stopLoss !== 0 ? Math.abs((tool.takeProfit - tool.entryPrice) / (tool.entryPrice - tool.stopLoss)) : Infinity;
+
+  const getCursor = () => {
+    if (isDragging === 'stop' || isDragging === 'profit') return 'ns-resize';
+    if (isDragging === 'entry') return 'move';
+    if (isHovered) return 'pointer';
+    return 'default';
+  };
 
   return (
     <g 
       onMouseEnter={() => setIsHovered(true)} 
       onMouseLeave={() => setIsHovered(false)}
-      style={{ pointerEvents: 'all' }}
+      style={{ cursor: getCursor(), pointerEvents: 'all' }}
     >
       {/* Profit Zone */}
       <rect
@@ -77,8 +154,41 @@ export function RiskRewardTool({ tool, onRemove, data, xScale, yScale }: RiskRew
           <text textAnchor="middle" x="0" y="10" fill="white" fontSize="10" style={{textTransform: 'capitalize'}}>{tool.position}</text>
       </g>
       
+      {/* Interactive Hitboxes */}
+      {/* Entry Drag Hitbox */}
+      <rect
+          x={leftX}
+          y={entryY - 5}
+          width={width}
+          height={10}
+          fill="transparent"
+          style={{ cursor: 'move' }}
+          onMouseDown={(e) => handleMouseDown(e, 'entry')}
+      />
+      {/* Stop Drag Hitbox */}
+      <rect
+          x={leftX}
+          y={stopY - 5}
+          width={width}
+          height={10}
+          fill="transparent"
+          style={{ cursor: 'ns-resize' }}
+          onMouseDown={(e) => handleMouseDown(e, 'stop')}
+      />
+      {/* Profit Drag Hitbox */}
+      <rect
+          x={leftX}
+          y={profitY - 5}
+          width={width}
+          height={10}
+          fill="transparent"
+          style={{ cursor: 'ns-resize' }}
+          onMouseDown={(e) => handleMouseDown(e, 'profit')}
+      />
+
+
       {/* Delete Button */}
-      {isHovered && (
+      {isHovered && !isDragging && (
         <g 
             transform={`translate(${leftX + width / 2}, ${entryY - 25})`}
             onClick={() => onRemove(tool.id)}
