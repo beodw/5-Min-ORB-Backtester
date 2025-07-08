@@ -140,7 +140,7 @@ export default function AlgoInsightsPage() {
 
   const handleClearAllDrawings = () => {
     setRrTools([]);
-    setPriceMarkers([]);
+    setPriceMarkers(prev => prev.filter(m => !m.isDeletable));
   };
 
   const handleExportCsv = () => {
@@ -174,7 +174,6 @@ export default function AlgoInsightsPage() {
   };
 
   const handleDateSelect = (date: Date | undefined) => {
-    setPriceMarkers(prev => prev.filter(m => m.id !== 'or-high' && m.id !== 'or-low'));
     if (date && timeZone) {
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -200,7 +199,6 @@ export default function AlgoInsightsPage() {
   };
   
   const handleNextCandle = () => {
-    setPriceMarkers(prev => prev.filter(m => m.id !== 'or-high' && m.id !== 'or-low'));
     const getDuration = (tf: string): number => {
       switch (tf) {
         case '1m': return 60 * 1000;
@@ -227,43 +225,37 @@ export default function AlgoInsightsPage() {
 
   const handleNextSession = () => {
     if (!timeZone || !sessionStartTime || !mockPriceData.length) return;
-
-    // When searching for a new session, we first clear any existing OR markers.
+  
     setPriceMarkers(prev => prev.filter(m => m.id !== 'or-high' && m.id !== 'or-low'));
-
+  
     const startDate = selectedDate || mockPriceData[0].date;
-    
     const startIndex = mockPriceData.findIndex(p => p.date > startDate);
-    if (startIndex === -1) return; // No more data to search
-
+    if (startIndex === -1) return;
+  
     const [sessionHour, sessionMinute] = sessionStartTime.split(':').map(Number);
     const options = { hour: 'numeric', minute: 'numeric', hour12: false, timeZone };
     const formatter = new Intl.DateTimeFormat('en-US', options);
-
+  
     for (let i = startIndex; i < mockPriceData.length; i++) {
-        const pointDate = mockPriceData[i].date;
-        
-        const parts = formatter.formatToParts(pointDate);
-        const hourPart = parts.find(p => p.type === 'hour');
-        const minutePart = parts.find(p => p.type === 'minute');
-
-        if (hourPart && minutePart) {
-            const pointHour = parseInt(hourPart.value, 10);
-            const pointMinute = parseInt(minutePart.value, 10);
-
-            if (pointHour === sessionHour && pointMinute === sessionMinute) {
-                // Found the session start. The user wants to see the first 5 minutes, plus 5 more.
-                // This means we want to pan the chart to show up to the 10th candle (index i + 9).
-                if (i + 9 < mockPriceData.length) {
-                    const endDateToShow = mockPriceData[i + 9].date;
-                    setSelectedDate(endDateToShow);
-                } else {
-                    // If there isn't enough data for 10 candles, just pan to the session start.
-                    setSelectedDate(pointDate);
-                }
-                return; // Exit after finding and processing the first matching session.
-            }
+      const pointDate = mockPriceData[i].date;
+      const parts = formatter.formatToParts(pointDate);
+      const hourPart = parts.find(p => p.type === 'hour');
+      const minutePart = parts.find(p => p.type === 'minute');
+  
+      if (hourPart && minutePart) {
+        const pointHour = parseInt(hourPart.value, 10);
+        const pointMinute = parseInt(minutePart.value, 10);
+  
+        if (pointHour === sessionHour && pointMinute === sessionMinute) {
+          if (i + 4 < mockPriceData.length) {
+            const endDateToShow = mockPriceData[i + 4].date;
+            setSelectedDate(endDateToShow);
+          } else {
+            setSelectedDate(pointDate);
+          }
+          return; 
         }
+      }
     }
   };
   
@@ -364,7 +356,7 @@ export default function AlgoInsightsPage() {
             />
         </div>
 
-        <aside className="absolute top-4 left-4 z-10 flex flex-col items-start gap-2">
+        <aside className="absolute top-4 left-4 z-10 flex items-start gap-2">
             <div className="flex items-center gap-2 bg-card/80 backdrop-blur-sm p-2 rounded-lg shadow-lg">
               <Select value={timeframe} onValueChange={setTimeframe}>
                   <SelectTrigger className="w-[120px]">
@@ -482,7 +474,7 @@ export default function AlgoInsightsPage() {
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <AlertDialogTrigger asChild>
-                          <Button variant="destructive" size="icon" disabled={rrTools.length === 0 && priceMarkers.length === 0}>
+                          <Button variant="destructive" size="icon" disabled={rrTools.length === 0 && priceMarkers.filter(pm => pm.isDeletable).length === 0}>
                             <Trash2 className="h-5 w-5" />
                           </Button>
                         </AlertDialogTrigger>
@@ -519,3 +511,5 @@ export default function AlgoInsightsPage() {
     </div>
   );
 }
+
+    
