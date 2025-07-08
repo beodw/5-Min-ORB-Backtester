@@ -6,7 +6,7 @@ import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, Chevr
 import { Button } from "@/components/ui/button";
 import { InteractiveChart } from "@/components/algo-insights/interactive-chart";
 import { mockPriceData } from "@/lib/mock-data";
-import type { RiskRewardTool as RRToolType, PriceMarker } from "@/types";
+import type { RiskRewardTool as RRToolType, PriceMarker, OpeningRange } from "@/types";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -174,28 +174,7 @@ export default function AlgoInsightsPage() {
   };
 
   const handleDateSelect = (date: Date | undefined) => {
-    if (date && timeZone) {
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      const dateString = `${year}-${month}-${day}`;
-  
-      const timeString = `23:59:59`;
-      const dateTimeString = `${dateString}T${timeString}`;
-      
-      const tempDate = new Date(dateTimeString);
-      
-      const utcDate = new Date(date.toLocaleString('en-US', {timeZone: 'UTC'}));
-      const tzDate = new Date(date.toLocaleString('en-US', {timeZone}));
-      const offset = tzDate.getTime() - utcDate.getTime();
-      
-      const endOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
-      const finalTimestamp = endOfDay.getTime() - offset;
-      
-      setSelectedDate(new Date(finalTimestamp));
-    } else {
-        setSelectedDate(undefined);
-    }
+    setSelectedDate(date);
   };
   
   const handleNextCandle = () => {
@@ -225,30 +204,57 @@ export default function AlgoInsightsPage() {
 
   const handleNextSession = () => {
     if (!timeZone || !sessionStartTime || !mockPriceData.length) return;
-  
+
     const startDate = selectedDate || mockPriceData[0].date;
     const startIndex = mockPriceData.findIndex(p => p.date > startDate);
     if (startIndex === -1) return;
-  
+
     const [sessionHour, sessionMinute] = sessionStartTime.split(':').map(Number);
     const options = { hour: 'numeric', minute: 'numeric', hour12: false, timeZone };
     const formatter = new Intl.DateTimeFormat('en-US', options);
-  
+
     for (let i = startIndex; i < mockPriceData.length; i++) {
       const pointDate = mockPriceData[i].date;
       const parts = formatter.formatToParts(pointDate);
       const hourPart = parts.find(p => p.type === 'hour');
       const minutePart = parts.find(p => p.type === 'minute');
-  
+
       if (hourPart && minutePart) {
         const pointHour = parseInt(hourPart.value, 10);
         const pointMinute = parseInt(minutePart.value, 10);
-  
+
         if (pointHour === sessionHour && pointMinute === sessionMinute) {
+          // Check if we have enough data for the 5-min range and the candle after
           if (i + 5 < mockPriceData.length) {
+            
+            // Define the 5-minute opening range (first 5 candles)
+            const rangeSlice = mockPriceData.slice(i, i + 5);
+            
+            let high = -Infinity;
+            let low = Infinity;
+
+            // Loop through the slice to find the highest high and lowest low
+            for (const candle of rangeSlice) {
+              high = Math.max(high, candle.high);
+              low = Math.min(low, candle.low);
+            }
+            
+            // Create the marker components to be drawn on the chart
+            const highMarker: PriceMarker = { id: 'or-high', price: high, label: 'OR High', isDeletable: true };
+            const lowMarker: PriceMarker = { id: 'or-low', price: low, label: 'OR Low', isDeletable: true };
+
+            // Update the state to render the markers, removing old ones first
+            setPriceMarkers(prev => {
+              const filtered = prev.filter(m => m.id !== 'or-high' && m.id !== 'or-low');
+              return [...filtered, highMarker, lowMarker];
+            });
+
+            // Set the view to show the opening range and the next candle (up to 9:35)
             const endDateToShow = mockPriceData[i + 5].date;
             setSelectedDate(endDateToShow);
+
           } else {
+            // Not enough data, just go to the session start
             setSelectedDate(pointDate);
           }
           return; 
@@ -509,5 +515,3 @@ export default function AlgoInsightsPage() {
     </div>
   );
 }
-
-    
