@@ -153,23 +153,17 @@ export function InteractiveChart({
         const isInitialLoad = (prev[0] === 0 && prev[1] === 100);
 
         if (endDate) {
-            // "Snap" mode: Calculate a specific, narrow domain.
-            let foundIndex = -1;
-            for (let i = aggregatedData.length - 1; i >= 0; i--) {
-                if (aggregatedData[i].date <= endDate) {
-                    foundIndex = i;
-                    break;
-                }
-            }
-            if (foundIndex !== -1) {
-                const newEnd = foundIndex;
-                const newStart = newEnd - 5; // Exactly 6 candles (0-5)
-                return [newStart >= 0 ? newStart : 0, newEnd];
+            const targetIndex = aggregatedData.findIndex(d => d.date >= endDate);
+            if (targetIndex !== -1) {
+                const domainWidth = 100;
+                const newEnd = targetIndex + (domainWidth * 0.2); // Add buffer to the right
+                const newStart = newEnd - domainWidth;
+                return [newStart > 0 ? newStart : 0, newEnd];
             }
         }
-
-        if (isInitialLoad) {
-            // "Normal" mode for initial load: Pan to the end with a buffer.
+        
+        // "Normal" mode: If no end date, or not found, just pan to the very end
+        if (isInitialLoad || !endDate) {
             const domainWidth = 100;
             const targetIndex = aggregatedData.length - 1;
             const newEnd = targetIndex + (domainWidth * 0.2); // Add buffer
