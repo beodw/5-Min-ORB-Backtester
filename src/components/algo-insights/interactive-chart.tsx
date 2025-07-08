@@ -12,9 +12,10 @@ import {
   Bar,
   Customized,
 } from "recharts";
-import type { PriceData, Trade, RiskRewardTool as RRToolType, PriceMarker as PriceMarkerType } from "@/types";
+import type { PriceData, Trade, RiskRewardTool as RRToolType, PriceMarker as PriceMarkerType, MeasurementTool as MeasurementToolType } from "@/types";
 import { RiskRewardTool } from "./risk-reward-tool";
 import { PriceMarker } from "./price-marker";
+import { MeasurementTool } from "./measurement-tool";
 import { useMemo, useRef, useState, useCallback, useEffect } from "react";
 import { cn } from "@/lib/utils";
 
@@ -30,6 +31,9 @@ interface InteractiveChartProps {
   priceMarkers: PriceMarkerType[];
   onRemovePriceMarker: (id: string) => void;
   onUpdatePriceMarker: (id: string, price: number) => void;
+  measurementTools: MeasurementToolType[];
+  onRemoveMeasurementTool: (id: string) => void;
+  pipValue: number;
   timeframe: string;
   timeZone: string;
   endDate?: Date;
@@ -72,6 +76,9 @@ export function InteractiveChart({
     priceMarkers, 
     onRemovePriceMarker,
     onUpdatePriceMarker,
+    measurementTools,
+    onRemoveMeasurementTool,
+    pipValue,
     timeframe, 
     timeZone, 
     endDate,
@@ -490,6 +497,18 @@ export function InteractiveChart({
                       yScale={mainYAxis.scale}
                       plot={plot}
                       svgBounds={svgBounds}
+                    />
+                  ))}
+                  {measurementTools.map(tool => (
+                    <MeasurementTool
+                      key={tool.id}
+                      tool={tool}
+                      onRemove={onRemoveMeasurementTool}
+                      data={aggregatedData}
+                      xScale={mainXAxis.scale}
+                      yScale={mainYAxis.scale}
+                      plot={plot}
+                      pipValue={pipValue}
                     />
                   ))}
                 </g>

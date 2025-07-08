@@ -2,11 +2,11 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, ChevronRight, ChevronsRight, Target, Trash2, FileUp, Lock, Unlock } from "lucide-react";
+import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, ChevronRight, ChevronsRight, Target, Trash2, FileUp, Lock, Unlock, Ruler } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InteractiveChart } from "@/components/algo-insights/interactive-chart";
 import { mockPriceData } from "@/lib/mock-data";
-import type { RiskRewardTool as RRToolType, PriceMarker, OpeningRange } from "@/types";
+import type { RiskRewardTool as RRToolType, PriceMarker, OpeningRange, PriceData, MeasurementTool as MeasurementToolType, MeasurementPoint } from "@/types";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -25,7 +25,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import type { PriceData } from "@/types";
 import { cn } from "@/lib/utils";
 
 export default function AlgoInsightsPage() {
@@ -36,12 +35,16 @@ export default function AlgoInsightsPage() {
   const [placingToolType, setPlacingToolType] = useState<'long' | 'short' | null>(null);
   const [priceMarkers, setPriceMarkers] = useState<PriceMarker[]>([]);
   const [isPlacingPriceMarker, setIsPlacingPriceMarker] = useState(false);
+  const [measurementTools, setMeasurementTools] = useState<MeasurementToolType[]>([]);
+  const [isPlacingMeasurement, setIsPlacingMeasurement] = useState(false);
+  const [measurementStartPoint, setMeasurementStartPoint] = useState<MeasurementPoint | null>(null);
   const [timeframe, setTimeframe] = useState('1m');
   const [timeZone, setTimeZone] = useState<string>('');
   const [timezones, setTimezones] = useState<{ value: string; label: string }[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [sessionStartTime, setSessionStartTime] = useState('09:30');
   const [isYAxisLocked, setIsYAxisLocked] = useState(true);
+  const [pipValue, setPipValue] = useState(0.0001);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   
@@ -89,6 +92,11 @@ export default function AlgoInsightsPage() {
     if (savedSessionStart) {
         setSessionStartTime(savedSessionStart);
     }
+
+    const savedPipValue = localStorage.getItem('algo-insights-pip-value');
+    if (savedPipValue) {
+        setPipValue(parseFloat(savedPipValue));
+    }
   }, []);
 
   useEffect(() => {
@@ -102,6 +110,10 @@ export default function AlgoInsightsPage() {
         localStorage.setItem('algo-insights-session-start', sessionStartTime);
     }
   }, [sessionStartTime]);
+
+  useEffect(() => {
+      localStorage.setItem('algo-insights-pip-value', String(pipValue));
+  }, [pipValue]);
 
 
   const handleChartClick = (chartData: { close: number; date: Date, dataIndex: number, yDomain: [number, number], xDomain: [number, number] }) => {
@@ -138,6 +150,23 @@ export default function AlgoInsightsPage() {
       };
       setPriceMarkers(prev => [...prev, newMarker]);
       setIsPlacingPriceMarker(false);
+    } else if (isPlacingMeasurement) {
+        const currentPoint = {
+            index: chartData.dataIndex,
+            price: chartData.close
+        };
+        if (!measurementStartPoint) {
+            setMeasurementStartPoint(currentPoint);
+        } else {
+            const newTool: MeasurementToolType = {
+                id: `measure-${Date.now()}`,
+                startPoint: measurementStartPoint,
+                endPoint: currentPoint,
+            };
+            setMeasurementTools(prev => [...prev, newTool]);
+            setMeasurementStartPoint(null);
+            setIsPlacingMeasurement(false);
+        }
     }
   };
   
@@ -153,6 +182,10 @@ export default function AlgoInsightsPage() {
     setPriceMarkers(prevMarkers => prevMarkers.filter(m => m.id !== id));
   };
 
+  const handleRemoveMeasurementTool = (id: string) => {
+    setMeasurementTools(prev => prev.filter(t => t.id !== id));
+  };
+
   const handleUpdatePriceMarker = (id: string, price: number) => {
     setPriceMarkers(prevMarkers => 
       prevMarkers.map(m => 
@@ -164,6 +197,7 @@ export default function AlgoInsightsPage() {
   const handleClearAllDrawings = () => {
     setRrTools([]);
     setPriceMarkers([]);
+    setMeasurementTools([]);
   };
 
   const handleImportClick = () => {
@@ -384,20 +418,33 @@ export default function AlgoInsightsPage() {
 
   const handlePlaceLong = () => {
     setIsPlacingPriceMarker(false);
+    setIsPlacingMeasurement(false);
+    setMeasurementStartPoint(null);
     setPlacingToolType('long');
   };
 
   const handlePlaceShort = () => {
     setIsPlacingPriceMarker(false);
+    setIsPlacingMeasurement(false);
+    setMeasurementStartPoint(null);
     setPlacingToolType('short');
   };
 
   const handlePlaceMarker = () => {
     setPlacingToolType(null);
+    setIsPlacingMeasurement(false);
+    setMeasurementStartPoint(null);
     setIsPlacingPriceMarker(true);
   };
 
-  const isPlacingAnything = !!placingToolType || isPlacingPriceMarker;
+  const handlePlaceMeasurement = () => {
+    setPlacingToolType(null);
+    setIsPlacingPriceMarker(false);
+    setMeasurementStartPoint(null);
+    setIsPlacingMeasurement(true);
+  };
+
+  const isPlacingAnything = !!placingToolType || isPlacingPriceMarker || isPlacingMeasurement;
 
   return (
     <div className="flex flex-col h-screen bg-background text-foreground font-body">
@@ -454,6 +501,16 @@ export default function AlgoInsightsPage() {
                                 onChange={(e) => setSessionStartTime(e.target.value)}
                             />
                         </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor="pip-value">Pip / Point Value</Label>
+                            <Input
+                                id="pip-value"
+                                type="number"
+                                step="0.0001"
+                                value={pipValue}
+                                onChange={(e) => setPipValue(parseFloat(e.target.value) || 0)}
+                            />
+                        </div>
                     </div>
                 </PopoverContent>
             </Popover>
@@ -474,6 +531,9 @@ export default function AlgoInsightsPage() {
                 priceMarkers={priceMarkers}
                 onRemovePriceMarker={handleRemovePriceMarker}
                 onUpdatePriceMarker={handleUpdatePriceMarker}
+                measurementTools={measurementTools}
+                onRemoveMeasurementTool={handleRemoveMeasurementTool}
+                pipValue={pipValue}
                 timeframe={timeframe}
                 timeZone={timeZone}
                 endDate={selectedDate}
@@ -635,12 +695,24 @@ export default function AlgoInsightsPage() {
                       </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
+                <TooltipProvider>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon" onClick={handlePlaceMeasurement} disabled={isPlacingAnything}>
+                                <Ruler className="w-5 h-5 text-foreground"/>
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>Measure Distance</p>
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
                 <AlertDialog>
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <AlertDialogTrigger asChild>
-                          <Button variant="destructive" size="icon" disabled={rrTools.length === 0 && priceMarkers.length === 0}>
+                          <Button variant="destructive" size="icon" disabled={rrTools.length === 0 && priceMarkers.length === 0 && measurementTools.length === 0}>
                             <Trash2 className="h-5 w-5" />
                           </Button>
                         </AlertDialogTrigger>
@@ -677,5 +749,3 @@ export default function AlgoInsightsPage() {
     </div>
   );
 }
-
-    

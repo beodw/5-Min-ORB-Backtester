@@ -38,3 +38,14 @@ export interface OpeningRange {
   high: number;
   low: number;
 }
+
+export interface MeasurementPoint {
+  index: number;
+  price: number;
+}
+
+export interface MeasurementTool {
+  id: string;
+  startPoint: MeasurementPoint;
+  endPoint: MeasurementPoint;
+}
