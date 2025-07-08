@@ -22,16 +22,17 @@ export function PriceMarker({ marker, onRemove, yScale, plot }: PriceMarkerProps
   const labelText = `${marker.label ? `${marker.label}: ` : ''}${marker.price.toFixed(2)}`;
   const labelWidth = labelText.length * 6.5 + 8; // A reasonable estimate for width
 
-  const handleDoubleClick = () => {
+  const handleContextMenu = (e: React.MouseEvent) => {
     if (isDeletable) {
+      e.preventDefault();
+      e.stopPropagation();
       onRemove(marker.id);
     }
   };
 
   return (
     <g
-      onClick={(e) => e.stopPropagation()}
-      onDoubleClick={handleDoubleClick}
+      onContextMenu={handleContextMenu}
       style={{ cursor: isDeletable ? 'pointer' : 'default', pointerEvents: 'all' }}
     >
       <line
