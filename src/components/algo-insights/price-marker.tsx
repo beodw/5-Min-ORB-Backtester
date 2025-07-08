@@ -30,6 +30,7 @@ export function PriceMarker({ marker, onRemove, yScale, plot }: PriceMarkerProps
 
   return (
     <g
+      onClick={(e) => e.stopPropagation()}
       onDoubleClick={handleDoubleClick}
       style={{ cursor: isDeletable ? 'pointer' : 'default', pointerEvents: 'all' }}
     >
