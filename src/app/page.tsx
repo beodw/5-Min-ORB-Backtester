@@ -207,54 +207,88 @@ export default function AlgoInsightsPage() {
     });
   };
 
-  const handleNextSession = () => {
-    // For now, we will assume the mock data timestamps are in the user's local timezone.
-    // This simplifies the logic by avoiding complex timezone conversions with Intl.DateTimeFormat.
-    if (!sessionStartTime || !mockPriceData.length) return;
-
-    // Get the day of the currently selected date, ignoring the time, for comparison.
-    const startOfSelectedDay = new Date(selectedDate);
-    startOfSelectedDay.setHours(0, 0, 0, 0);
-
-    // To be efficient, start searching from the candle immediately after the current one.
-    const searchStartIndex = mockPriceData.findIndex(p => p.date > selectedDate);
-    if (searchStartIndex === -1) {
-        alert("No future data to search.");
-        return;
-    }
-
+  const findNextSessionStartIndex = (currentDate: Date): number => {
     const [sessionHour, sessionMinute] = sessionStartTime.split(':').map(Number);
     
-    // Loop through the data from our starting point.
+    // Start searching from the candle immediately after the current one.
+    const searchStartIndex = mockPriceData.findIndex(p => p.date > currentDate);
+    if (searchStartIndex === -1) return -1;
+
+    // Get the day of the candle we are currently on, ignoring time.
+    let lastDay = new Date(currentDate);
+    lastDay.setHours(0, 0, 0, 0);
+
     for (let i = searchStartIndex; i < mockPriceData.length; i++) {
         const pointDate = mockPriceData[i].date;
         
-        // Get the day of the candle we are currently checking.
         const pointDay = new Date(pointDate);
         pointDay.setHours(0, 0, 0, 0);
 
-        // Check 1: Is this candle on a day AFTER the currently selected day?
-        const isNextDayOrLater = pointDay.getTime() > startOfSelectedDay.getTime();
-
-        if (isNextDayOrLater) {
-            // Check 2: If it's a new day, is this candle at the session start time (e.g., 9:30)?
-            const isSessionStart = pointDate.getHours() === sessionHour && pointDate.getMinutes() === sessionMinute;
+        // Check 1: Is this candle on a day AFTER the last known day?
+        if (pointDay.getTime() > lastDay.getTime()) {
             
-            if (isSessionStart) {
-                // We found the start of the next session.
-                alert(`Found next session start at index ${i}: ${pointDate.toLocaleString()}`);
-
-                // For this step, we'll just update the date to focus the chart.
-                // In the next step, we'll add the opening range markers.
-                setSelectedDate(pointDate);
-                return; // Exit the function once found.
+            // Check 2: If it's a new day, is this the session start time?
+            if (pointDate.getHours() === sessionHour && pointDate.getMinutes() === sessionMinute) {
+                return i; // Found the start of the next session.
             }
         }
     }
 
-    alert("Could not find the start of the next session in the available data.");
+    return -1; // Not found
   };
   
+  const handleNextSession = () => {
+    if (!sessionStartTime || !mockPriceData.length) return;
+
+    const startIndex = findNextSessionStartIndex(selectedDate);
+
+    if (startIndex !== -1) {
+        if (startIndex + 4 >= mockPriceData.length) {
+            alert("Not enough data to draw the opening range.");
+            setSelectedDate(mockPriceData[startIndex].date);
+            return;
+        }
+        
+        const openingRangeCandles = mockPriceData.slice(startIndex, startIndex + 5);
+
+        let openingRangeHigh = openingRangeCandles[0].high;
+        let openingRangeLow = openingRangeCandles[0].low;
+
+        for (const candle of openingRangeCandles) {
+            openingRangeHigh = Math.max(openingRangeHigh, candle.high);
+            openingRangeLow = Math.min(openingRangeLow, candle.low);
+        }
+
+        // Remove any previous Opening Range markers before adding new ones
+        const otherMarkers = priceMarkers.filter(
+            m => m.label !== "OR High" && m.label !== "OR Low"
+        );
+        
+        const highMarker: PriceMarker = {
+            id: `or-high-${startIndex}`,
+            price: openingRangeHigh,
+            label: 'OR High',
+            isDeletable: false,
+        };
+        const lowMarker: PriceMarker = {
+            id: `or-low-${startIndex}`,
+            price: openingRangeLow,
+            label: 'OR Low',
+            isDeletable: false,
+        };
+
+        setPriceMarkers([...otherMarkers, highMarker, lowMarker]);
+
+        // Pan the view to show the opening range and a few subsequent candles
+        const viewEndIndex = Math.min(startIndex + 15, mockPriceData.length - 1);
+        setSelectedDate(mockPriceData[viewEndIndex].date);
+        
+        return;
+    }
+    
+    alert("Could not find the start of the next session in the available data.");
+  };
+
   const handlePlaceLong = () => {
     setIsPlacingPriceMarker(false);
     setPlacingToolType('long');
