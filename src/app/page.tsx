@@ -153,13 +153,69 @@ export default function AlgoInsightsPage() {
   };
   
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files && event.target.files[0]) {
-      // Placeholder to show color change.
-      // The real parsing logic will come next.
-      setIsDataImported(true); 
-      console.log("File selected. Parsing logic to come.");
-    }
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      const text = e.target?.result;
+      if (typeof text !== 'string') return;
+
+      const lines = text.split('\n').filter(line => line.trim() !== '');
+      if (lines.length <= 1) {
+        console.error("CSV file is empty or has only a header.");
+        return;
+      }
+
+      // Skip header
+      const dataRows = lines.slice(1);
+
+      const parsedData: PriceData[] = dataRows.map(row => {
+        const [localTime, openStr, highStr, lowStr, closeStr] = row.split(',');
+
+        // Dukascopy format: 01.05.2024 00:00:00.000
+        const [datePart, timePart] = localTime.split(' ');
+        const [day, month, year] = datePart.split('.').map(Number);
+        const [hour, minute, second] = timePart.split(':').map(Number);
+        
+        // Month is 0-indexed in JS Date
+        const date = new Date(year, month - 1, day, hour, minute, Math.floor(second));
+
+        const open = parseFloat(openStr);
+        const high = parseFloat(highStr);
+        const low = parseFloat(lowStr);
+        const close = parseFloat(closeStr);
+
+        return {
+          date,
+          open,
+          high,
+          low,
+          close,
+          wick: [low, high],
+        };
+      }).filter(p => !isNaN(p.date.getTime())); // Filter out any rows that failed to parse
+
+      if (parsedData.length > 0) {
+        setPriceData(parsedData);
+        setIsDataImported(true);
+        // Reset the view to the end of the new data
+        setSelectedDate(parsedData[parsedData.length - 1].date);
+      } else {
+        console.error("Failed to parse any valid data from the CSV file.");
+        setIsDataImported(false);
+      }
+    };
+
+    reader.onerror = (e) => {
+        console.error("Error reading file:", e);
+        setIsDataImported(false);
+    };
+
+    reader.readAsText(file);
   };
+
 
   const handleExportCsv = () => {
     if (rrTools.length === 0) return;
@@ -569,19 +625,11 @@ export default function AlgoInsightsPage() {
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={handleClearAllDrawings}>
-                        Continue
-                      </AlertDialogAction>
+                      <AlertDialogAction onClick={handleClearAllDrawings}>Continue</AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
             </div>
-
-            {isPlacingAnything && (
-                <div className="bg-card/80 backdrop-blur-sm p-2 rounded-lg text-center text-xs text-primary animate-pulse">
-                    Click on the chart to place.
-                </div>
-            )}
         </aside>
       </main>
     </div>
