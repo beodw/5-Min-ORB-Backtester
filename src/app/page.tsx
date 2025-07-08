@@ -31,6 +31,7 @@ import { cn } from "@/lib/utils";
 export default function AlgoInsightsPage() {
   const [priceData, setPriceData] = useState<PriceData[]>(mockPriceData);
   const [isDataImported, setIsDataImported] = useState(false);
+  const [fileName, setFileName] = useState('');
   const [rrTools, setRrTools] = useState<RRToolType[]>([]);
   const [placingToolType, setPlacingToolType] = useState<'long' | 'short' | null>(null);
   const [priceMarkers, setPriceMarkers] = useState<PriceMarker[]>([]);
@@ -156,6 +157,7 @@ export default function AlgoInsightsPage() {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    setFileName(file.name);
     const reader = new FileReader();
 
     reader.onload = (e) => {
@@ -460,177 +462,186 @@ export default function AlgoInsightsPage() {
             />
         </div>
 
-        <aside className="absolute top-4 left-4 z-10 flex items-start gap-2">
-            <div className="flex items-center gap-2 bg-card/80 backdrop-blur-sm p-2 rounded-lg shadow-lg">
-              <Select value={timeframe} onValueChange={setTimeframe}>
-                  <SelectTrigger className="w-[120px]">
-                      <SelectValue placeholder="Timeframe" />
-                  </SelectTrigger>
-                  <SelectContent>
-                      <SelectItem value="1m">1 Minute</SelectItem>
-                      <SelectItem value="30m">30 Minutes</SelectItem>
-                      <SelectItem value="1H">1 Hour</SelectItem>
-                      <SelectItem value="4H">4 Hours</SelectItem>
-                      <SelectItem value="1D">1 Day</SelectItem>
-                  </SelectContent>
-              </Select>
+        <div className="absolute top-4 left-4 z-10 flex flex-col items-start gap-1">
+            <div className="flex items-start gap-2">
+                <div className="flex items-center gap-2 bg-card/80 backdrop-blur-sm p-2 rounded-lg shadow-lg">
+                  <Select value={timeframe} onValueChange={setTimeframe}>
+                      <SelectTrigger className="w-[120px]">
+                          <SelectValue placeholder="Timeframe" />
+                      </SelectTrigger>
+                      <SelectContent>
+                          <SelectItem value="1m">1 Minute</SelectItem>
+                          <SelectItem value="30m">30 Minutes</SelectItem>
+                          <SelectItem value="1H">1 Hour</SelectItem>
+                          <SelectItem value="4H">4 Hours</SelectItem>
+                          <SelectItem value="1D">1 Day</SelectItem>
+                      </SelectContent>
+                  </Select>
 
-              <Popover>
-                  <PopoverTrigger asChild>
-                      <Button variant="ghost" size="icon" className="text-muted-foreground">
-                          <CalendarIcon className="h-5 w-5" />
-                      </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0">
-                      <Calendar
-                          mode="single"
-                          selected={selectedDate}
-                          onSelect={handleDateSelect}
-                          initialFocus
-                          disabled={(date) =>
-                              date > new Date() || date < new Date("1900-01-01")
-                            }
-                      />
-                  </PopoverContent>
-              </Popover>
+                  <Popover>
+                      <PopoverTrigger asChild>
+                          <Button variant="ghost" size="icon" className="text-muted-foreground">
+                              <CalendarIcon className="h-5 w-5" />
+                          </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0">
+                          <Calendar
+                              mode="single"
+                              selected={selectedDate}
+                              onSelect={handleDateSelect}
+                              initialFocus
+                              disabled={(date) =>
+                                  date > new Date() || date < new Date("1900-01-01")
+                                }
+                          />
+                      </PopoverContent>
+                  </Popover>
 
-              <TooltipProvider>
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={handleNextCandle} className="text-muted-foreground">
-                            <ChevronRight className="h-5 w-5" />
-                        </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                        <p>Next Candle</p>
-                    </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-
-              <TooltipProvider>
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={handleNextSession} className="text-muted-foreground">
-                            <ChevronsRight className="h-5 w-5" />
-                        </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                        <p>Next Session Open</p>
-                    </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-
-              <div className="h-6 border-l border-border/50"></div>
-              
-              <TooltipProvider>
-                <div className="flex justify-center gap-2">
+                  <TooltipProvider>
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={handlePlaceLong} disabled={isPlacingAnything}>
-                                <ArrowUp className="w-5 h-5 text-accent"/>
+                            <Button variant="ghost" size="icon" onClick={handleNextCandle} className="text-muted-foreground">
+                                <ChevronRight className="h-5 w-5" />
                             </Button>
                         </TooltipTrigger>
                         <TooltipContent>
-                            <p>Place Long Position</p>
+                            <p>Next Candle</p>
                         </TooltipContent>
                     </Tooltip>
+                  </TooltipProvider>
+
+                  <TooltipProvider>
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={handlePlaceShort} disabled={isPlacingAnything}>
-                                <ArrowDown className="w-5 h-5 text-destructive"/>
+                            <Button variant="ghost" size="icon" onClick={handleNextSession} className="text-muted-foreground">
+                                <ChevronsRight className="h-5 w-5" />
                             </Button>
                         </TooltipTrigger>
                         <TooltipContent>
-                            <p>Place Short Position</p>
+                            <p>Next Session Open</p>
                         </TooltipContent>
                     </Tooltip>
-                </div>
-              </TooltipProvider>
+                  </TooltipProvider>
 
-              <div className="h-6 border-l border-border/50"></div>
+                  <div className="h-6 border-l border-border/50"></div>
+                  
+                  <TooltipProvider>
+                    <div className="flex justify-center gap-2">
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" onClick={handlePlaceLong} disabled={isPlacingAnything}>
+                                    <ArrowUp className="w-5 h-5 text-accent"/>
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p>Place Long Position</p>
+                            </TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" onClick={handlePlaceShort} disabled={isPlacingAnything}>
+                                    <ArrowDown className="w-5 h-5 text-destructive"/>
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p>Place Short Position</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </div>
+                  </TooltipProvider>
 
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={handleImportClick}
-                    >
-                      <FileUp className={cn(
-                        "h-5 w-5",
-                        isDataImported ? "text-chart-3" : "text-muted-foreground"
-                      )} />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>{isDataImported ? "CSV Data Loaded" : "Import Dukascopy CSV"}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileChange}
-                accept=".csv"
-                className="hidden"
-              />
+                  <div className="h-6 border-l border-border/50"></div>
 
-              <Button
-                  variant="ghost" 
-                  onClick={handleExportCsv} 
-                  disabled={rrTools.length === 0}
-                  className="text-foreground"
-              >
-                  <Download className="mr-2 h-4 w-4" />
-                  Download Report
-              </Button>
-            </div>
-
-            <div className="flex flex-col items-center gap-2 bg-card/80 backdrop-blur-sm p-2 rounded-lg shadow-lg">
-                <TooltipProvider>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={handlePlaceMarker} disabled={isPlacingAnything}>
-                                <Target className="w-5 h-5 text-foreground"/>
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent side="right">
-                            <p>Place Price Marker</p>
-                        </TooltipContent>
-                    </Tooltip>
-                </TooltipProvider>
-                <AlertDialog>
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="destructive" size="icon" disabled={rrTools.length === 0 && priceMarkers.length === 0}>
-                            <Trash2 className="h-5 w-5" />
-                          </Button>
-                        </AlertDialogTrigger>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={handleImportClick}
+                        >
+                          <FileUp className={cn(
+                            "h-5 w-5",
+                            isDataImported ? "text-chart-3" : "text-muted-foreground"
+                          )} />
+                        </Button>
                       </TooltipTrigger>
-                      <TooltipContent side="right">
-                        <p>Clear all drawings</p>
+                      <TooltipContent>
+                        <p>{isDataImported ? "CSV Data Loaded" : "Import Dukascopy CSV"}</p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        This action cannot be undone. This will permanently delete all placed tools and markers from the chart.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={handleClearAllDrawings}>Continue</AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+                  
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileChange}
+                    accept=".csv"
+                    className="hidden"
+                  />
+
+                  <Button
+                      variant="ghost" 
+                      onClick={handleExportCsv} 
+                      disabled={rrTools.length === 0}
+                      className="text-foreground"
+                  >
+                      <Download className="mr-2 h-4 w-4" />
+                      Download Report
+                  </Button>
+                </div>
+
+                <div className="flex flex-col items-center gap-2 bg-card/80 backdrop-blur-sm p-2 rounded-lg shadow-lg">
+                    <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" onClick={handlePlaceMarker} disabled={isPlacingAnything}>
+                                    <Target className="w-5 h-5 text-foreground"/>
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="right">
+                                <p>Place Price Marker</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                    <AlertDialog>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="destructive" size="icon" disabled={rrTools.length === 0 && priceMarkers.length === 0}>
+                                <Trash2 className="h-5 w-5" />
+                              </Button>
+                            </AlertDialogTrigger>
+                          </TooltipTrigger>
+                          <TooltipContent side="right">
+                            <p>Clear all drawings</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            This action cannot be undone. This will permanently delete all placed tools and markers from the chart.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction onClick={handleClearAllDrawings}>Continue</AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                </div>
             </div>
-        </aside>
+            {fileName && (
+                <div className="bg-card/70 backdrop-blur-sm rounded-md px-2 py-1 shadow-md">
+                    <p className="text-xs text-muted-foreground/80">
+                        Loaded: <span className="font-medium text-foreground/90">{fileName}</span>
+                    </p>
+                </div>
+            )}
+        </div>
       </main>
     </div>
   );
