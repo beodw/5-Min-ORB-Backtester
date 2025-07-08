@@ -10,6 +10,7 @@ import {
   Tooltip,
   ReferenceDot,
   Bar,
+  Customized,
 } from "recharts";
 import type { PriceData, Trade, RiskRewardTool as RRToolType, PriceMarker as PriceMarkerType } from "@/types";
 import { RiskRewardTool } from "./risk-reward-tool";
@@ -446,32 +447,49 @@ export function InteractiveChart({
             />
           ))}
 
+          <Customized
+            component={(props: any) => {
+              const { xAxisMap, yAxisMap, width, height, ...rest } = props;
+              const mainXAxis = xAxisMap?.['main'];
+              const mainYAxis = yAxisMap?.['main'];
+
+              if (!mainXAxis || !mainYAxis) return null;
+              
+              const plot = {
+                width: mainXAxis.width,
+                height: mainYAxis.height,
+                top: mainYAxis.y,
+                left: mainXAxis.x
+              };
+
+              return (
+                <g>
+                  {priceMarkers.map(marker => (
+                    <PriceMarker
+                      key={marker.id}
+                      marker={marker}
+                      onRemove={onRemovePriceMarker}
+                      yScale={mainYAxis.scale}
+                      plot={plot}
+                    />
+                  ))}
+                  {rrTools.map(tool => (
+                    <RiskRewardTool
+                      key={tool.id}
+                      tool={tool}
+                      onRemove={onRemoveTool}
+                      data={aggregatedData}
+                      xScale={mainXAxis.scale}
+                      yScale={mainYAxis.scale}
+                    />
+                  ))}
+                </g>
+              )
+            }}
+          />
         </ComposedChart>
       </ResponsiveContainer>
       )}
-
-      {chartContainerRef.current && priceMarkers.map(marker => (
-        <PriceMarker 
-          key={marker.id}
-          marker={marker} 
-          onRemove={onRemovePriceMarker}
-          chartContainer={chartContainerRef.current!}
-          yDomain={yDomain}
-        />
-      ))}
-
-      {chartContainerRef.current && rrTools.map(tool => (
-        <RiskRewardTool 
-          key={tool.id}
-          tool={tool} 
-          onUpdate={onUpdateTool}
-          onRemove={onRemoveTool}
-          data={aggregatedData}
-          chartContainer={chartContainerRef.current!}
-          xDomain={xDomain}
-          yDomain={yDomain}
-        />
-      ))}
     </div>
   );
 }

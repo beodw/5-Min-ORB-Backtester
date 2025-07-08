@@ -1,84 +1,76 @@
 
 "use client";
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState } from 'react';
 import type { PriceMarker as PriceMarkerType } from '@/types';
-import { X } from 'lucide-react';
 
 interface PriceMarkerProps {
   marker: PriceMarkerType;
   onRemove: (id: string) => void;
-  chartContainer: HTMLDivElement;
-  yDomain: [number, number];
+  yScale: (price: number) => number;
+  plot: { width: number; height: number; top: number; left: number };
 }
 
-const Y_AXIS_MARGIN_TOP = 10;
-const Y_AXIS_MARGIN_BOTTOM = 20;
-const X_AXIS_MARGIN_LEFT = 0;
-const X_AXIS_MARGIN_RIGHT = 60; // Space for the Y-axis and labels
-
-export function PriceMarker({ marker, onRemove, chartContainer, yDomain }: PriceMarkerProps) {
+export function PriceMarker({ marker, onRemove, yScale, plot }: PriceMarkerProps) {
   const [isHovered, setIsHovered] = useState(false);
+  const yPosition = yScale(marker.price);
 
-  const {
-    containerHeight,
-    plotHeight,
-    plotWidth,
-  } = useMemo(() => {
-    if (!chartContainer) return { containerHeight: 0, plotHeight: 0, plotWidth: 0 };
-    const { height, width } = chartContainer.getBoundingClientRect();
-    const pHeight = height - Y_AXIS_MARGIN_TOP - Y_AXIS_MARGIN_BOTTOM;
-    const pWidth = width - X_AXIS_MARGIN_LEFT - X_AXIS_MARGIN_RIGHT;
-    return { containerHeight: height, plotHeight: pHeight, plotWidth: pWidth };
-  }, [chartContainer]);
-
-  const [minPrice, maxPrice] = yDomain;
-  const priceRange = maxPrice - minPrice;
-
-  const priceToY = useCallback((price: number) => {
-    if (priceRange <= 0) return Y_AXIS_MARGIN_TOP + plotHeight / 2;
-    return Y_AXIS_MARGIN_TOP + ((maxPrice - price) / priceRange) * plotHeight;
-  }, [maxPrice, plotHeight, priceRange]);
-
-  if (plotHeight <= 0 || priceRange <= 0) {
+  if (isNaN(yPosition) || yPosition < plot.top || yPosition > plot.top + plot.height) {
     return null;
   }
-  
-  const yPosition = priceToY(marker.price);
-  
-  if (yPosition < Y_AXIS_MARGIN_TOP || yPosition > containerHeight - Y_AXIS_MARGIN_BOTTOM) {
-    return null;
-  }
-  
+
   const isDeletable = marker.isDeletable !== false;
+  const labelText = `${marker.label ? `${marker.label}: ` : ''}${marker.price.toFixed(2)}`;
+  const labelWidth = labelText.length * 6.5 + 8; // A reasonable estimate for width
 
   return (
-    <div
-      className="absolute left-0 w-full group"
-      style={{ top: yPosition - 8, height: '16px', pointerEvents: 'auto' }}
+    <g
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      style={{ pointerEvents: 'all' }}
     >
-      <div 
-        className="h-px border-t border-dashed border-primary absolute top-1/2 -translate-y-1/2" 
-        style={{ left: X_AXIS_MARGIN_LEFT, width: plotWidth }}
+      <line
+        x1={plot.left}
+        y1={yPosition}
+        x2={plot.left + plot.width}
+        y2={yPosition}
+        stroke="hsl(var(--primary))"
+        strokeWidth={1}
+        strokeDasharray="4 4"
+        style={{ pointerEvents: 'none' }}
       />
-      <div 
-        className="absolute top-1/2 -translate-y-1/2 bg-card px-1.5 py-0.5 rounded text-xs text-primary pointer-events-none flex items-center"
-        style={{ left: plotWidth + 8 }}
-      >
-        {marker.label && <span className="font-semibold mr-2 text-primary/80">{marker.label}</span>}
-        {marker.price.toFixed(2)}
-      </div>
-      {isHovered && isDeletable && (
-        <button
-          onClick={(e) => { e.stopPropagation(); onRemove(marker.id); }}
-          className="absolute top-1/2 -translate-y-1/2 bg-card rounded-full p-0.5 text-foreground z-10"
-          style={{ left: plotWidth + 48 }}
+      <g transform={`translate(${plot.left + plot.width + 4}, ${yPosition})`}>
+        <rect
+          x={0}
+          y={-9}
+          width={labelWidth}
+          height={18}
+          fill="hsl(var(--card))"
+          stroke="hsl(var(--border))"
+          rx="3"
+        />
+        <text
+          x={4}
+          y={0}
+          alignmentBaseline="middle"
+          fontSize="12"
+          fill="hsl(var(--primary))"
+          style={{ pointerEvents: 'none' }}
         >
-          <X size={12}/>
-        </button>
+          {labelText}
+        </text>
+      </g>
+      {isHovered && isDeletable && (
+        <g 
+            transform={`translate(${plot.left + plot.width + 4 + labelWidth + 12}, ${yPosition})`}
+            onClick={() => onRemove(marker.id)}
+            style={{ cursor: 'pointer' }}
+        >
+          <circle r={8} fill="hsl(var(--card))" stroke="hsl(var(--border))" />
+          <line x1={-3} y1={-3} x2={3} y2={3} stroke="hsl(var(--muted-foreground))" strokeWidth="1.5"/>
+          <line x1={-3} y1={3} x2={3} y2={-3} stroke="hsl(var(--muted-foreground))" strokeWidth="1.5"/>
+        </g>
       )}
-    </div>
+    </g>
   );
 }
