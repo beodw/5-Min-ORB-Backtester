@@ -227,8 +227,8 @@ export default function AlgoInsightsPage() {
           // Check if we have enough data for the 5-min range and the candle after
           if (i + 5 < mockPriceData.length) {
             
-            // Define the 5-minute opening range (first 5 candles)
-            const rangeSlice = mockPriceData.slice(i, i + 5);
+            // Define the 5-minute opening range (from 9:30 to 9:35 inclusive)
+            const rangeSlice = mockPriceData.slice(i, i + 6);
             
             let high = -Infinity;
             let low = Infinity;
