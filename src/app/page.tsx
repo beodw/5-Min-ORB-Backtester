@@ -174,7 +174,13 @@ export default function AlgoInsightsPage() {
   };
 
   const handleDateSelect = (date: Date | undefined) => {
-    setSelectedDate(date);
+    if (date) {
+        const endOfDay = new Date(date);
+        endOfDay.setHours(23, 59, 59, 999);
+        setSelectedDate(endOfDay);
+    } else {
+        setSelectedDate(undefined);
+    }
   };
   
   const handleNextCandle = () => {
@@ -225,10 +231,10 @@ export default function AlgoInsightsPage() {
 
         if (pointHour === sessionHour && pointMinute === sessionMinute) {
           // Check if we have enough data for the 5-min range and the candle after
-          if (i + 5 < mockPriceData.length) {
+          if (i + 4 < mockPriceData.length) {
             
             // Set the view to show the opening range and the next candle (up to 9:35)
-            const endDateToShow = mockPriceData[i + 5].date;
+            const endDateToShow = mockPriceData[i + 4].date;
             setSelectedDate(endDateToShow);
 
           } else {
