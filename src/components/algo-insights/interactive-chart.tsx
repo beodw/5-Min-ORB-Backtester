@@ -149,38 +149,36 @@ export function InteractiveChart({
   useEffect(() => {
     if (aggregatedData.length === 0) return;
 
-    let targetIndex: number;
-
-    if (endDate) {
-      let foundIndex = -1;
-      for(let i = aggregatedData.length - 1; i >= 0; i--) {
-        if(aggregatedData[i].date <= endDate) {
-          foundIndex = i;
-          break;
-        }
-      }
-      targetIndex = foundIndex !== -1 ? foundIndex : aggregatedData.length - 1;
-
-    } else {
-      targetIndex = aggregatedData.length - 1;
-    }
-    
-    const domainWidth = 100;
-    const newEnd = targetIndex + (domainWidth * 0.2);
-    const newStart = newEnd - domainWidth;
-
     setXDomain(prev => {
-      const isInitialLoadOrDateChange = (prev[0] === 0 && prev[1] === 100) || endDate;
-      if (isInitialLoadOrDateChange) {
-         return [newStart > 0 ? newStart : 0, newEnd];
-      }
-      if (aggregatedData.length - 1 > prev[1]) {
-        const panAmount = (aggregatedData.length - 1) - prev[1];
-        return [prev[0] + panAmount + 1, prev[1] + panAmount + 1];
-      }
-      return prev;
-    });
+        const isInitialLoad = (prev[0] === 0 && prev[1] === 100);
 
+        if (endDate) {
+            // "Snap" mode: Calculate a specific, narrow domain.
+            let foundIndex = -1;
+            for (let i = aggregatedData.length - 1; i >= 0; i--) {
+                if (aggregatedData[i].date <= endDate) {
+                    foundIndex = i;
+                    break;
+                }
+            }
+            if (foundIndex !== -1) {
+                const newEnd = foundIndex;
+                const newStart = newEnd - 5; // Exactly 6 candles (0-5)
+                return [newStart >= 0 ? newStart : 0, newEnd];
+            }
+        }
+
+        if (isInitialLoad) {
+            // "Normal" mode for initial load: Pan to the end with a buffer.
+            const domainWidth = 100;
+            const targetIndex = aggregatedData.length - 1;
+            const newEnd = targetIndex + (domainWidth * 0.2); // Add buffer
+            const newStart = newEnd - domainWidth;
+            return [newStart > 0 ? newStart : 0, newEnd];
+        }
+
+        return prev; // No change for other interactions
+    });
   }, [endDate, aggregatedData.length, timeframe]);
 
 
