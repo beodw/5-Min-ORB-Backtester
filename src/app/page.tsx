@@ -228,10 +228,13 @@ export default function AlgoInsightsPage() {
   const handleNextSession = () => {
     if (!timeZone || !sessionStartTime || !mockPriceData.length) return;
 
+    // When searching for a new session, we first clear any existing OR markers.
+    setPriceMarkers(prev => prev.filter(m => m.id !== 'or-high' && m.id !== 'or-low'));
+
     const startDate = selectedDate || mockPriceData[0].date;
     
     const startIndex = mockPriceData.findIndex(p => p.date > startDate);
-    if (startIndex === -1) return;
+    if (startIndex === -1) return; // No more data to search
 
     const [sessionHour, sessionMinute] = sessionStartTime.split(':').map(Number);
     const options = { hour: 'numeric', minute: 'numeric', hour12: false, timeZone };
@@ -249,34 +252,19 @@ export default function AlgoInsightsPage() {
             const pointMinute = parseInt(minutePart.value, 10);
 
             if (pointHour === sessionHour && pointMinute === sessionMinute) {
-                if (i + 4 < mockPriceData.length) {
-                    const rangeSlice = mockPriceData.slice(i, i + 5);
-                    
-                    let high = -Infinity;
-                    let low = Infinity;
-
-                    for (const candle of rangeSlice) {
-                        high = Math.max(high, candle.high);
-                        low = Math.min(low, candle.low);
-                    }
-                    
-                    const highMarker: PriceMarker = { id: 'or-high', price: high, label: 'OR High', isDeletable: true };
-                    const lowMarker: PriceMarker = { id: 'or-low', price: low, label: 'OR Low', isDeletable: true };
-
-                    setPriceMarkers(prev => {
-                      const filtered = prev.filter(m => m.id !== 'or-high' && m.id !== 'or-low');
-                      return [...filtered, highMarker, lowMarker];
-                    });
+                // Found the session start. The user wants to see the first 5 minutes, plus 5 more.
+                // This means we want to pan the chart to show up to the 10th candle (index i + 9).
+                if (i + 9 < mockPriceData.length) {
+                    const endDateToShow = mockPriceData[i + 9].date;
+                    setSelectedDate(endDateToShow);
                 } else {
-                    setPriceMarkers(prev => prev.filter(m => m.id !== 'or-high' && m.id !== 'or-low'));
+                    // If there isn't enough data for 10 candles, just pan to the session start.
+                    setSelectedDate(pointDate);
                 }
-                
-                setSelectedDate(pointDate);
-                return;
+                return; // Exit after finding and processing the first matching session.
             }
         }
     }
-    setPriceMarkers(prev => prev.filter(m => m.id !== 'or-high' && m.id !== 'or-low'));
   };
   
   const handlePlaceLong = () => {
