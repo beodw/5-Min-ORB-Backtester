@@ -298,49 +298,82 @@ export default function AlgoInsightsPage() {
 
         const dateTaken = entryCandle.date;
         const dayOfWeek = dateTaken.toLocaleDateString('en-US', { weekday: 'long' });
-        const stopLossPips = Math.abs(tool.entryPrice - tool.stopLoss) / pipValue;
+        
+        const riskAmountPrice = Math.abs(tool.entryPrice - tool.stopLoss);
+        const stopLossPips = riskAmountPrice / pipValue;
 
         let tradeOutcome = 'Incomplete';
         let dateClosed: Date | null = null;
         let minDistanceToSLPips = NaN;
+        let maxR = 0;
 
         if (tool.position === 'long') {
             let minLowSinceEntry = entryCandle.low;
+            let maxHighSinceEntry = entryCandle.high;
+            let stopHit = false;
+
             for (let i = tool.entryIndex + 1; i < priceData.length; i++) {
                 const candle = priceData[i];
-                minLowSinceEntry = Math.min(minLowSinceEntry, candle.low);
-
+                
                 if (candle.low <= tool.stopLoss) {
-                    tradeOutcome = 'loss';
-                    dateClosed = candle.date;
-                    minDistanceToSLPips = 0;
-                    break;
+                    if (tradeOutcome === 'Incomplete') {
+                        tradeOutcome = 'loss';
+                        dateClosed = candle.date;
+                        minDistanceToSLPips = 0;
+                    }
+                    stopHit = true;
+                    break; 
                 }
-                if (candle.high >= tool.takeProfit) {
+                
+                if (tradeOutcome === 'Incomplete' && candle.high >= tool.takeProfit) {
                     tradeOutcome = 'win';
                     dateClosed = candle.date;
-                    minDistanceToSLPips = (minLowSinceEntry - tool.stopLoss) / pipValue;
-                    break;
+                    // Calculate min distance at the point of winning
+                    const candlesUpToWin = priceData.slice(tool.entryIndex, i + 1);
+                    const minLowForWin = Math.min(...candlesUpToWin.map(c => c.low));
+                    minDistanceToSLPips = (minLowForWin - tool.stopLoss) / pipValue;
                 }
+                
+                maxHighSinceEntry = Math.max(maxHighSinceEntry, candle.high);
             }
+            
+            const maxProfitPrice = maxHighSinceEntry - tool.entryPrice;
+            if(riskAmountPrice > 0){
+                maxR = maxProfitPrice / riskAmountPrice;
+            }
+
         } else { // 'short'
             let maxHighSinceEntry = entryCandle.high;
+            let minLowSinceEntry = entryCandle.low;
+            let stopHit = false;
+
             for (let i = tool.entryIndex + 1; i < priceData.length; i++) {
                 const candle = priceData[i];
-                maxHighSinceEntry = Math.max(maxHighSinceEntry, candle.high);
 
                 if (candle.high >= tool.stopLoss) {
-                    tradeOutcome = 'loss';
-                    dateClosed = candle.date;
-                    minDistanceToSLPips = 0;
+                    if (tradeOutcome === 'Incomplete') {
+                        tradeOutcome = 'loss';
+                        dateClosed = candle.date;
+                        minDistanceToSLPips = 0;
+                    }
+                    stopHit = true;
                     break;
                 }
-                if (candle.low <= tool.takeProfit) {
+                
+                if (tradeOutcome === 'Incomplete' && candle.low <= tool.takeProfit) {
                     tradeOutcome = 'win';
                     dateClosed = candle.date;
-                    minDistanceToSLPips = (tool.stopLoss - maxHighSinceEntry) / pipValue;
-                    break;
+                    const candlesUpToWin = priceData.slice(tool.entryIndex, i + 1);
+                    const maxHighForWin = Math.max(...candlesUpToWin.map(c => c.high));
+                    minDistanceToSLPips = (tool.stopLoss - maxHighForWin) / pipValue;
                 }
+                
+                minLowSinceEntry = Math.min(minLowSinceEntry, candle.low);
+            }
+            
+            const maxProfitPrice = tool.entryPrice - minLowSinceEntry;
+            if(riskAmountPrice > 0){
+                maxR = maxProfitPrice / riskAmountPrice;
             }
         }
         
@@ -356,7 +389,7 @@ export default function AlgoInsightsPage() {
             dateTaken.toLocaleString(),
             dateClosed ? dateClosed.toLocaleString() : '',
             dayOfWeek,
-            '', // Max R
+            maxR.toFixed(2),
             '', // Comments
             stopLossPips.toFixed(2),
             !isNaN(minDistanceToSLPips) ? minDistanceToSLPips.toFixed(2) : '',
