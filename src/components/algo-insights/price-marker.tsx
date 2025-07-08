@@ -7,11 +7,13 @@ import type { PriceMarker as PriceMarkerType } from '@/types';
 interface PriceMarkerProps {
   marker: PriceMarkerType;
   onRemove: (id: string) => void;
-  yScale: (price: number) => number;
+  onUpdate: (id: string, price: number) => void;
+  yScale: ((price: number) => number) & { invert?: (y: number) => number };
   plot: { width: number; height: number; top: number; left: number };
+  svgBounds: DOMRect;
 }
 
-export function PriceMarker({ marker, onRemove, yScale, plot }: PriceMarkerProps) {
+export function PriceMarker({ marker, onRemove, onUpdate, yScale, plot, svgBounds }: PriceMarkerProps) {
   const yPosition = yScale(marker.price);
 
   if (isNaN(yPosition) || yPosition < plot.top || yPosition > plot.top + plot.height) {
@@ -30,10 +32,40 @@ export function PriceMarker({ marker, onRemove, yScale, plot }: PriceMarkerProps
     }
   };
 
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0 || !isDeletable) return; // Only allow left-click drag on deletable markers
+    e.stopPropagation();
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+        moveEvent.preventDefault();
+        if (yScale.invert) {
+            const mouseYInSvg = moveEvent.clientY - svgBounds.top;
+            const mouseYInPlot = mouseYInSvg - plot.top;
+            
+            // Clamp the drag to within the plot area
+            const clampedY = Math.max(0, Math.min(mouseYInPlot, plot.height));
+
+            const newPrice = yScale.invert(clampedY);
+            if (newPrice !== undefined) {
+              onUpdate(marker.id, newPrice);
+            }
+        }
+    };
+
+    const handleMouseUp = () => {
+        window.removeEventListener('mousemove', handleMouseMove);
+        window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
+
   return (
     <g
       onContextMenu={handleContextMenu}
-      style={{ cursor: isDeletable ? 'pointer' : 'default', pointerEvents: 'all' }}
+      onMouseDown={handleMouseDown}
+      style={{ cursor: isDeletable ? 'ns-resize' : 'default', pointerEvents: 'all' }}
     >
       <line
         x1={plot.left}
@@ -45,7 +77,7 @@ export function PriceMarker({ marker, onRemove, yScale, plot }: PriceMarkerProps
         strokeDasharray="4 4"
         style={{ pointerEvents: 'none' }}
       />
-      {/* Invisible hitbox for easier clicking */}
+      {/* Invisible hitbox for easier interaction */}
        <line
         x1={plot.left}
         y1={yPosition}

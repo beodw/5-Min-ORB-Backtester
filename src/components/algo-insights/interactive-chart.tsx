@@ -29,6 +29,7 @@ interface InteractiveChartProps {
   isPlacingPriceMarker: boolean;
   priceMarkers: PriceMarkerType[];
   onRemovePriceMarker: (id: string) => void;
+  onUpdatePriceMarker: (id: string, price: number) => void;
   timeframe: string;
   timeZone: string;
   endDate?: Date;
@@ -69,6 +70,7 @@ export function InteractiveChart({
     isPlacingPriceMarker, 
     priceMarkers, 
     onRemovePriceMarker,
+    onUpdatePriceMarker,
     timeframe, 
     timeZone, 
     endDate
@@ -452,8 +454,10 @@ export function InteractiveChart({
               const { xAxisMap, yAxisMap, width, height, ...rest } = props;
               const mainXAxis = xAxisMap?.['main'];
               const mainYAxis = yAxisMap?.['main'];
+              const svgNode = chartContainerRef.current?.querySelector('svg');
+              const svgBounds = svgNode?.getBoundingClientRect();
 
-              if (!mainXAxis || !mainYAxis) return null;
+              if (!mainXAxis || !mainYAxis || !svgBounds) return null;
               
               const plot = {
                 width: mainXAxis.width,
@@ -469,8 +473,10 @@ export function InteractiveChart({
                       key={marker.id}
                       marker={marker}
                       onRemove={onRemovePriceMarker}
+                      onUpdate={onUpdatePriceMarker}
                       yScale={mainYAxis.scale}
                       plot={plot}
+                      svgBounds={svgBounds}
                     />
                   ))}
                   {rrTools.map(tool => (

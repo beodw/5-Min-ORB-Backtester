@@ -144,6 +144,14 @@ export default function AlgoInsightsPage() {
     setPriceMarkers(prevMarkers => prevMarkers.filter(m => m.id !== id));
   };
 
+  const handleUpdatePriceMarker = (id: string, price: number) => {
+    setPriceMarkers(prevMarkers => 
+      prevMarkers.map(m => 
+        m.id === id ? { ...m, price } : m
+      )
+    );
+  };
+
   const handleClearAllDrawings = () => {
     setRrTools([]);
     setPriceMarkers([]);
@@ -456,6 +464,7 @@ export default function AlgoInsightsPage() {
                 isPlacingPriceMarker={isPlacingPriceMarker}
                 priceMarkers={priceMarkers}
                 onRemovePriceMarker={handleRemovePriceMarker}
+                onUpdatePriceMarker={handleUpdatePriceMarker}
                 timeframe={timeframe}
                 timeZone={timeZone}
                 endDate={selectedDate}
