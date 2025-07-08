@@ -37,12 +37,16 @@ export function MeasurementTool({ tool, onRemove, data, xScale, yScale, plot, pi
   };
   
   const priceDiff = Math.abs(tool.endPoint.price - tool.startPoint.price);
-  const pips = pipValue > 0 ? (priceDiff / pipValue).toFixed(1) : 0;
+  const pips = pipValue > 0 ? (priceDiff / pipValue).toFixed(1) : '0.0';
   const barDiff = Math.abs(tool.endPoint.index - tool.startPoint.index);
 
-  const labelText = `${pips} pips, ${barDiff} bars`;
+  const labelText = `↕ ${pips} pips  |  ↔ ${barDiff} bars`;
+  const textWidth = labelText.length * 6.5; // A reasonable estimate for width
   const midX = (startX + endX) / 2;
   const midY = (startY + endY) / 2;
+
+  // Position the label above the line, adjusting for orientation
+  const labelYOffset = -20;
 
   return (
     <g onContextMenu={handleContextMenu}>
@@ -66,22 +70,30 @@ export function MeasurementTool({ tool, onRemove, data, xScale, yScale, plot, pi
         strokeDasharray="4 4"
         style={{ pointerEvents: 'none' }}
       />
-      <g transform={`translate(${midX}, ${midY - 10})`}>
-        <text 
-            textAnchor="middle" 
-            alignmentBaseline="middle"
-            fill="hsl(var(--foreground))"
-            fontSize="12"
-            style={{ 
-                paintOrder: 'stroke',
-                stroke: 'hsl(var(--background))',
-                strokeWidth: '3px',
-                strokeLinecap: 'butt',
-                strokeLinejoin: 'miter'
-            }}
-        >
-            {labelText}
-        </text>
+      <g transform={`translate(${midX}, ${midY})`}>
+        <g transform={`translate(0, ${labelYOffset})`}>
+            <rect 
+                x={-(textWidth / 2)} 
+                y="-10" 
+                width={textWidth} 
+                height={20} 
+                fill="hsl(var(--background) / 0.8)" 
+                stroke="hsl(var(--border))"
+                rx="3"
+            />
+            <text 
+                textAnchor="middle" 
+                alignmentBaseline="middle"
+                fill="hsl(var(--foreground))"
+                fontSize="12"
+                fontWeight="500"
+                style={{ 
+                    userSelect: 'none'
+                }}
+            >
+                {labelText}
+            </text>
+        </g>
       </g>
     </g>
   );
