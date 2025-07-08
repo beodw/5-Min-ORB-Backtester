@@ -271,21 +271,104 @@ export default function AlgoInsightsPage() {
 
 
   const handleExportCsv = () => {
-    if (rrTools.length === 0) return;
+    if (rrTools.length === 0 || !isDataImported) {
+        alert("Please place at least one trade tool on imported data to generate a report.");
+        return;
+    }
 
-    const headers = "Position,Entry Price,Stop Loss,Take Profit,Stop Loss Distance\n";
+    const headers = [
+        "Trade Outcome", 
+        "Pair", 
+        "Date Taken", 
+        "Date Closed", 
+        "Day of the week", 
+        "Max R", 
+        "Comments", 
+        "Stop Loss In Pips", 
+        "Minimum Distance To SL (pips)", 
+        "Screenshot Chart Before", 
+        "Screenshot Chart After"
+    ].join(',');
+
     const rows = rrTools.map(tool => {
-      const stopLossDistance = Math.abs(tool.entryPrice - tool.stopLoss).toFixed(4);
-      return [
-        tool.position,
-        tool.entryPrice.toFixed(4),
-        tool.stopLoss.toFixed(4),
-        tool.takeProfit.toFixed(4),
-        stopLossDistance
-      ].join(',');
-    }).join('\n');
+        const pair = fileName ? fileName.split('-')[0].trim() : 'N/A';
+        const entryCandle = priceData[tool.entryIndex];
 
-    const csvContent = headers + rows;
+        if (!entryCandle) return null; // Should not happen but good practice
+
+        const dateTaken = entryCandle.date;
+        const dayOfWeek = dateTaken.toLocaleDateString('en-US', { weekday: 'long' });
+        const stopLossPips = Math.abs(tool.entryPrice - tool.stopLoss) / pipValue;
+
+        let tradeOutcome = 'Incomplete';
+        let dateClosed: Date | null = null;
+        let minDistanceToSLPips = NaN;
+
+        if (tool.position === 'long') {
+            let minLowSinceEntry = entryCandle.low;
+            for (let i = tool.entryIndex + 1; i < priceData.length; i++) {
+                const candle = priceData[i];
+                minLowSinceEntry = Math.min(minLowSinceEntry, candle.low);
+
+                if (candle.low <= tool.stopLoss) {
+                    tradeOutcome = 'loss';
+                    dateClosed = candle.date;
+                    minDistanceToSLPips = 0;
+                    break;
+                }
+                if (candle.high >= tool.takeProfit) {
+                    tradeOutcome = 'win';
+                    dateClosed = candle.date;
+                    minDistanceToSLPips = (minLowSinceEntry - tool.stopLoss) / pipValue;
+                    break;
+                }
+            }
+        } else { // 'short'
+            let maxHighSinceEntry = entryCandle.high;
+            for (let i = tool.entryIndex + 1; i < priceData.length; i++) {
+                const candle = priceData[i];
+                maxHighSinceEntry = Math.max(maxHighSinceEntry, candle.high);
+
+                if (candle.high >= tool.stopLoss) {
+                    tradeOutcome = 'loss';
+                    dateClosed = candle.date;
+                    minDistanceToSLPips = 0;
+                    break;
+                }
+                if (candle.low <= tool.takeProfit) {
+                    tradeOutcome = 'win';
+                    dateClosed = candle.date;
+                    minDistanceToSLPips = (tool.stopLoss - maxHighSinceEntry) / pipValue;
+                    break;
+                }
+            }
+        }
+        
+        const sanitize = (val: any) => {
+            const str = String(val);
+            if (str.includes(',')) return `"${str}"`;
+            return str;
+        };
+
+        const rowData = [
+            tradeOutcome,
+            pair,
+            dateTaken.toLocaleString(),
+            dateClosed ? dateClosed.toLocaleString() : '',
+            dayOfWeek,
+            '', // Max R
+            '', // Comments
+            stopLossPips.toFixed(2),
+            !isNaN(minDistanceToSLPips) ? minDistanceToSLPips.toFixed(2) : '',
+            '', // Screenshot Before
+            ''  // Screenshot After
+        ];
+        
+        return rowData.map(sanitize).join(',');
+
+    }).filter(row => row !== null).join('\n');
+
+    const csvContent = `${headers}\n${rows}`;
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     if (link.href) {
