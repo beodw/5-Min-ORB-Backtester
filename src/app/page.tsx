@@ -34,7 +34,7 @@ export default function AlgoInsightsPage() {
   const [timeframe, setTimeframe] = useState('1m');
   const [timeZone, setTimeZone] = useState<string>('');
   const [timezones, setTimezones] = useState<{ value: string; label: string }[]>([]);
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>();
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [sessionStartTime, setSessionStartTime] = useState('09:30');
 
   
@@ -179,7 +179,7 @@ export default function AlgoInsightsPage() {
         endOfDay.setHours(23, 59, 59, 999);
         setSelectedDate(endOfDay);
     } else {
-        setSelectedDate(undefined);
+        setSelectedDate(new Date());
     }
   };
   
@@ -196,10 +196,6 @@ export default function AlgoInsightsPage() {
     };
 
     setSelectedDate(currentDate => {
-      if (!currentDate) {
-        return mockPriceData.length > 0 ? mockPriceData[0].date : new Date();
-      }
-      
       const newDate = new Date(currentDate.getTime() + getDuration(timeframe));
       const lastAvailableDate = mockPriceData[mockPriceData.length - 1].date;
 
@@ -212,51 +208,51 @@ export default function AlgoInsightsPage() {
   };
 
   const handleNextSession = () => {
-    if (!timeZone || !sessionStartTime || !mockPriceData.length) return;
+    // For now, we will assume the mock data timestamps are in the user's local timezone.
+    // This simplifies the logic by avoiding complex timezone conversions with Intl.DateTimeFormat.
+    if (!sessionStartTime || !mockPriceData.length) return;
 
-    const searchFromIndex = selectedDate
-      ? mockPriceData.findIndex(p => p.date > selectedDate)
-      : 0;
-    
-    if (searchFromIndex === -1) return;
+    // Get the day of the currently selected date, ignoring the time, for comparison.
+    const startOfSelectedDay = new Date(selectedDate);
+    startOfSelectedDay.setHours(0, 0, 0, 0);
 
-    alert(`Starting loop at index ${searchFromIndex}, time: ${mockPriceData[searchFromIndex].date.toLocaleString()}`);
+    // To be efficient, start searching from the candle immediately after the current one.
+    const searchStartIndex = mockPriceData.findIndex(p => p.date > selectedDate);
+    if (searchStartIndex === -1) {
+        alert("No future data to search.");
+        return;
+    }
 
     const [sessionHour, sessionMinute] = sessionStartTime.split(':').map(Number);
-    const options = { hour: 'numeric', minute: 'numeric', hour12: false, timeZone };
-    const formatter = new Intl.DateTimeFormat('en-US', options);
+    
+    // Loop through the data from our starting point.
+    for (let i = searchStartIndex; i < mockPriceData.length; i++) {
+        const pointDate = mockPriceData[i].date;
+        
+        // Get the day of the candle we are currently checking.
+        const pointDay = new Date(pointDate);
+        pointDay.setHours(0, 0, 0, 0);
 
-    for (let i = searchFromIndex; i < mockPriceData.length; i++) {
-      const pointDate = mockPriceData[i].date;
-      const parts = formatter.formatToParts(pointDate);
-      const hourPart = parts.find(p => p.type === 'hour');
-      const minutePart = parts.find(p => p.type === 'minute');
+        // Check 1: Is this candle on a day AFTER the currently selected day?
+        const isNextDayOrLater = pointDay.getTime() > startOfSelectedDay.getTime();
 
-      if (hourPart && minutePart) {
-        const pointHour = parseInt(hourPart.value, 10);
-        const pointMinute = parseInt(minutePart.value, 10);
-
-        if (pointHour === sessionHour && pointMinute === sessionMinute) {
-          // Check if we have enough data for the 5-min range
-          if (i + 4 < mockPriceData.length) {
+        if (isNextDayOrLater) {
+            // Check 2: If it's a new day, is this candle at the session start time (e.g., 9:30)?
+            const isSessionStart = pointDate.getHours() === sessionHour && pointDate.getMinutes() === sessionMinute;
             
-            const openingRangeCandles = mockPriceData.slice(i, i + 5);
-            if (openingRangeCandles.length === 5) {
-                // Intentionally left blank for debugging
+            if (isSessionStart) {
+                // We found the start of the next session.
+                alert(`Found next session start at index ${i}: ${pointDate.toLocaleString()}`);
+
+                // For this step, we'll just update the date to focus the chart.
+                // In the next step, we'll add the opening range markers.
+                setSelectedDate(pointDate);
+                return; // Exit the function once found.
             }
-            
-            // Set the view to show the opening range and the next candle (up to 9:35)
-            const endDateToShow = mockPriceData[i + 4].date;
-            setSelectedDate(endDateToShow);
-
-          } else {
-            // Not enough data, just go to the session start
-            setSelectedDate(pointDate);
-          }
-          return; 
         }
-      }
     }
+
+    alert("Could not find the start of the next session in the available data.");
   };
   
   const handlePlaceLong = () => {
