@@ -227,28 +227,6 @@ export default function AlgoInsightsPage() {
           // Check if we have enough data for the 5-min range and the candle after
           if (i + 5 < mockPriceData.length) {
             
-            // Define the 5-minute opening range (from 9:30 to 9:35 inclusive)
-            const rangeSlice = mockPriceData.slice(i, i + 6);
-            
-            let high = -Infinity;
-            let low = Infinity;
-
-            // Loop through the slice to find the highest high and lowest low
-            for (const candle of rangeSlice) {
-              high = Math.max(high, candle.high);
-              low = Math.min(low, candle.low);
-            }
-            
-            // Create the marker components to be drawn on the chart
-            const highMarker: PriceMarker = { id: 'or-high', price: high, label: 'OR High', isDeletable: true };
-            const lowMarker: PriceMarker = { id: 'or-low', price: low, label: 'OR Low', isDeletable: true };
-
-            // Update the state to render the markers, removing old ones first
-            setPriceMarkers(prev => {
-              const filtered = prev.filter(m => m.id !== 'or-high' && m.id !== 'or-low');
-              return [...filtered, highMarker, lowMarker];
-            });
-
             // Set the view to show the opening range and the next candle (up to 9:35)
             const endDateToShow = mockPriceData[i + 5].date;
             setSelectedDate(endDateToShow);
