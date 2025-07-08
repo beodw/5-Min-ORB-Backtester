@@ -337,19 +337,19 @@ export default function AlgoInsightsPage() {
 
         // Remove any previous Opening Range markers before adding new ones
         const otherMarkers = priceMarkers.filter(
-            m => m.label !== "OR High" && m.label !== "OR Low"
+            m => m.label !== "High" && m.label !== "Low"
         );
         
         const highMarker: PriceMarker = {
             id: `or-high-${startIndex}`,
             price: openingRangeHigh,
-            label: 'OR High',
+            label: 'High',
             isDeletable: true,
         };
         const lowMarker: PriceMarker = {
             id: `or-low-${startIndex}`,
             price: openingRangeLow,
-            label: 'OR Low',
+            label: 'Low',
             isDeletable: true,
         };
 

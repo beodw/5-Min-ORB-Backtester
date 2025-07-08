@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState } from 'react';
+import React from 'react';
 import type { PriceMarker as PriceMarkerType } from '@/types';
 
 interface PriceMarkerProps {
@@ -12,7 +12,6 @@ interface PriceMarkerProps {
 }
 
 export function PriceMarker({ marker, onRemove, yScale, plot }: PriceMarkerProps) {
-  const [isHovered, setIsHovered] = useState(false);
   const yPosition = yScale(marker.price);
 
   if (isNaN(yPosition) || yPosition < plot.top || yPosition > plot.top + plot.height) {
@@ -23,11 +22,16 @@ export function PriceMarker({ marker, onRemove, yScale, plot }: PriceMarkerProps
   const labelText = `${marker.label ? `${marker.label}: ` : ''}${marker.price.toFixed(2)}`;
   const labelWidth = labelText.length * 6.5 + 8; // A reasonable estimate for width
 
+  const handleDoubleClick = () => {
+    if (isDeletable) {
+      onRemove(marker.id);
+    }
+  };
+
   return (
     <g
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      style={{ pointerEvents: 'all' }}
+      onDoubleClick={handleDoubleClick}
+      style={{ cursor: isDeletable ? 'pointer' : 'default', pointerEvents: 'all' }}
     >
       <line
         x1={plot.left}
@@ -38,6 +42,15 @@ export function PriceMarker({ marker, onRemove, yScale, plot }: PriceMarkerProps
         strokeWidth={1}
         strokeDasharray="4 4"
         style={{ pointerEvents: 'none' }}
+      />
+      {/* Invisible hitbox for easier clicking */}
+       <line
+        x1={plot.left}
+        y1={yPosition}
+        x2={plot.left + plot.width}
+        y2={yPosition}
+        stroke="transparent"
+        strokeWidth={10}
       />
       <g transform={`translate(${plot.left + plot.width + 4}, ${yPosition})`}>
         <rect
@@ -60,17 +73,6 @@ export function PriceMarker({ marker, onRemove, yScale, plot }: PriceMarkerProps
           {labelText}
         </text>
       </g>
-      {isHovered && isDeletable && (
-        <g 
-            transform={`translate(${plot.left + plot.width + 4 + labelWidth + 12}, ${yPosition})`}
-            onClick={() => onRemove(marker.id)}
-            style={{ cursor: 'pointer' }}
-        >
-          <circle r={8} fill="hsl(var(--card))" stroke="hsl(var(--border))" />
-          <line x1={-3} y1={-3} x2={3} y2={3} stroke="hsl(var(--muted-foreground))" strokeWidth="1.5"/>
-          <line x1={-3} y1={3} x2={3} y2={-3} stroke="hsl(var(--muted-foreground))" strokeWidth="1.5"/>
-        </g>
-      )}
     </g>
   );
 }
