@@ -149,31 +149,33 @@ export function InteractiveChart({
   useEffect(() => {
     if (aggregatedData.length === 0) return;
 
+    const panToEnd = () => {
+        const domainWidth = 100;
+        const targetIndex = aggregatedData.length - 1;
+        // Position the end of the data near the right edge of the viewport, but with a small buffer
+        const newEnd = targetIndex + (domainWidth * 0.1); 
+        const newStart = newEnd - domainWidth;
+        return [newStart > 0 ? newStart : 0, newEnd];
+    };
+
     setXDomain(prev => {
         const isInitialLoad = (prev[0] === 0 && prev[1] === 100);
 
+        // If a date is selected, the data is filtered. We should always pan to the end of this new dataset.
         if (endDate) {
-            const targetIndex = aggregatedData.findIndex(d => d.date >= endDate);
-            if (targetIndex !== -1) {
-                const domainWidth = 100;
-                const newEnd = targetIndex + (domainWidth * 0.2); // Add buffer to the right
-                const newStart = newEnd - domainWidth;
-                return [newStart > 0 ? newStart : 0, newEnd];
-            }
+            return panToEnd();
         }
         
-        // "Normal" mode: If no end date, or not found, just pan to the very end
-        if (isInitialLoad || !endDate) {
-            const domainWidth = 100;
-            const targetIndex = aggregatedData.length - 1;
-            const newEnd = targetIndex + (domainWidth * 0.2); // Add buffer
-            const newStart = newEnd - domainWidth;
-            return [newStart > 0 ? newStart : 0, newEnd];
+        // If no date is selected, only pan to the end on the initial load.
+        // User-initiated pans/zooms shouldn't be overridden.
+        if (isInitialLoad) {
+            return panToEnd();
         }
 
-        return prev; // No change for other interactions
+        // For all other cases (like user panning/zooming), don't change the domain.
+        return prev;
     });
-  }, [endDate, aggregatedData.length, timeframe]);
+  }, [endDate, aggregatedData]);
 
 
   useEffect(() => {
