@@ -340,7 +340,7 @@ export function InteractiveChart({
       const [yStart, yEnd] = dragStart.yDomain;
       const yDomainWidth = yEnd - yStart;
       const pricePerPixel = yDomainWidth / plotHeight;
-      const deltaPrice = dy * pricePerPixel;
+      const deltaPrice = dy * pricePerPixel * -1; // Invert the drag direction
       
       const newYStart = yStart - deltaPrice;
       const newYEnd = newYStart + yDomainWidth;
@@ -428,7 +428,10 @@ export function InteractiveChart({
             allowDataOverflow={true}
             yAxisId="main"
           />
-          <Tooltip content={<></>} cursor={{ stroke: 'hsl(var(--accent))', strokeWidth: 1, strokeDasharray: '3 3' }}/>
+          <Tooltip 
+            cursor={{ stroke: 'hsl(var(--accent))', strokeWidth: 1, strokeDasharray: '3 3' }}
+            wrapperStyle={{ display: 'none' }}
+          />
           
           <Bar dataKey="wick" shape={<Candlestick />} isAnimationActive={false} xAxisId="main" yAxisId="main"/>
 
