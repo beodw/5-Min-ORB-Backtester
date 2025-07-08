@@ -1,8 +1,8 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
-import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, ChevronRight, ChevronsRight, Target, Trash2 } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, ChevronRight, ChevronsRight, Target, Trash2, FileUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InteractiveChart } from "@/components/algo-insights/interactive-chart";
 import { mockPriceData } from "@/lib/mock-data";
@@ -25,8 +25,10 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import type { PriceData } from "@/types";
 
 export default function AlgoInsightsPage() {
+  const [priceData, setPriceData] = useState<PriceData[]>(mockPriceData);
   const [rrTools, setRrTools] = useState<RRToolType[]>([]);
   const [placingToolType, setPlacingToolType] = useState<'long' | 'short' | null>(null);
   const [priceMarkers, setPriceMarkers] = useState<PriceMarker[]>([]);
@@ -36,6 +38,7 @@ export default function AlgoInsightsPage() {
   const [timezones, setTimezones] = useState<{ value: string; label: string }[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [sessionStartTime, setSessionStartTime] = useState('09:30');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   
   useEffect(() => {
@@ -143,6 +146,15 @@ export default function AlgoInsightsPage() {
     setPriceMarkers([]);
   };
 
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+  
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    // This function will be implemented in the next step.
+    console.log("File selected. Parsing logic to come.");
+  };
+
   const handleExportCsv = () => {
     if (rrTools.length === 0) return;
 
@@ -197,7 +209,7 @@ export default function AlgoInsightsPage() {
 
     setSelectedDate(currentDate => {
       const newDate = new Date(currentDate.getTime() + getDuration(timeframe));
-      const lastAvailableDate = mockPriceData[mockPriceData.length - 1].date;
+      const lastAvailableDate = priceData[priceData.length - 1].date;
 
       if (newDate > lastAvailableDate) {
         return lastAvailableDate;
@@ -211,15 +223,15 @@ export default function AlgoInsightsPage() {
     const [sessionHour, sessionMinute] = sessionStartTime.split(':').map(Number);
     
     // Start searching from the candle immediately after the current one.
-    const searchStartIndex = mockPriceData.findIndex(p => p.date > currentDate);
+    const searchStartIndex = priceData.findIndex(p => p.date > currentDate);
     if (searchStartIndex === -1) return -1;
 
     // Get the day of the candle we are currently on, ignoring time.
     let lastDay = new Date(currentDate);
     lastDay.setHours(0, 0, 0, 0);
 
-    for (let i = searchStartIndex; i < mockPriceData.length; i++) {
-        const pointDate = mockPriceData[i].date;
+    for (let i = searchStartIndex; i < priceData.length; i++) {
+        const pointDate = priceData[i].date;
         
         const pointDay = new Date(pointDate);
         pointDay.setHours(0, 0, 0, 0);
@@ -238,18 +250,18 @@ export default function AlgoInsightsPage() {
   };
   
   const handleNextSession = () => {
-    if (!sessionStartTime || !mockPriceData.length) return;
+    if (!sessionStartTime || !priceData.length) return;
 
     const startIndex = findNextSessionStartIndex(selectedDate);
 
     if (startIndex !== -1) {
-        if (startIndex + 4 >= mockPriceData.length) {
+        if (startIndex + 4 >= priceData.length) {
             alert("Not enough data to draw the opening range.");
-            setSelectedDate(mockPriceData[startIndex].date);
+            setSelectedDate(priceData[startIndex].date);
             return;
         }
         
-        const openingRangeCandles = mockPriceData.slice(startIndex, startIndex + 5);
+        const openingRangeCandles = priceData.slice(startIndex, startIndex + 5);
 
         let openingRangeHigh = openingRangeCandles[0].high;
         let openingRangeLow = openingRangeCandles[0].low;
@@ -280,8 +292,8 @@ export default function AlgoInsightsPage() {
         setPriceMarkers([...otherMarkers, highMarker, lowMarker]);
 
         // Pan the view to show the opening range and a few subsequent candles
-        const viewEndIndex = Math.min(startIndex + 15, mockPriceData.length - 1);
-        setSelectedDate(mockPriceData[viewEndIndex].date);
+        const viewEndIndex = Math.min(startIndex + 15, priceData.length - 1);
+        setSelectedDate(priceData[viewEndIndex].date);
         
         return;
     }
@@ -370,7 +382,7 @@ export default function AlgoInsightsPage() {
       <main className="flex-1 relative">
         <div className="absolute inset-0">
             <InteractiveChart
-                data={mockPriceData}
+                data={priceData}
                 trades={[]}
                 onChartClick={handleChartClick}
                 rrTools={rrTools}
@@ -474,6 +486,22 @@ export default function AlgoInsightsPage() {
               </TooltipProvider>
 
               <div className="h-6 border-l border-border/50"></div>
+
+              <Button
+                  variant="ghost"
+                  onClick={handleImportClick}
+                  className="text-foreground"
+              >
+                  <FileUp className="mr-2 h-4 w-4" />
+                  Import CSV
+              </Button>
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                accept=".csv"
+                className="hidden"
+              />
 
               <Button
                   variant="ghost" 
