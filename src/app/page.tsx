@@ -230,8 +230,14 @@ export default function AlgoInsightsPage() {
         const pointMinute = parseInt(minutePart.value, 10);
 
         if (pointHour === sessionHour && pointMinute === sessionMinute) {
-          // Check if we have enough data for the 5-min range and the candle after
+          // Check if we have enough data for the 5-min range
           if (i + 4 < mockPriceData.length) {
+            
+            const openingRangeCandles = mockPriceData.slice(i, i + 5);
+            if (openingRangeCandles.length === 5) {
+                alert(`Opening Range Start: ${openingRangeCandles[0].date.toLocaleString()}`);
+                alert(`Opening Range End: ${openingRangeCandles[4].date.toLocaleString()}`);
+            }
             
             // Set the view to show the opening range and the next candle (up to 9:35)
             const endDateToShow = mockPriceData[i + 4].date;
