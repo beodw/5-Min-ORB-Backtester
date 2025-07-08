@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, ChevronRight, ChevronsRight, Target, Trash2, FileUp } from "lucide-react";
+import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, ChevronRight, ChevronsRight, Target, Trash2, FileUp, Lock, Unlock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InteractiveChart } from "@/components/algo-insights/interactive-chart";
 import { mockPriceData } from "@/lib/mock-data";
@@ -41,6 +41,7 @@ export default function AlgoInsightsPage() {
   const [timezones, setTimezones] = useState<{ value: string; label: string }[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [sessionStartTime, setSessionStartTime] = useState('09:30');
+  const [isYAxisLocked, setIsYAxisLocked] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   
@@ -476,6 +477,7 @@ export default function AlgoInsightsPage() {
                 timeframe={timeframe}
                 timeZone={timeZone}
                 endDate={selectedDate}
+                isYAxisLocked={isYAxisLocked}
             />
         </div>
 
@@ -621,6 +623,18 @@ export default function AlgoInsightsPage() {
                                 <p>Place Price Marker</p>
                             </TooltipContent>
                         </Tooltip>
+                    </TooltipProvider>
+                    <TooltipProvider>
+                      <Tooltip>
+                          <TooltipTrigger asChild>
+                              <Button variant="ghost" size="icon" onClick={() => setIsYAxisLocked(prev => !prev)}>
+                                  {isYAxisLocked ? <Lock className="h-5 w-5" /> : <Unlock className="h-5 w-5" />}
+                              </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="right">
+                              <p>{isYAxisLocked ? "Unlock Y-Axis" : "Lock Y-Axis"}</p>
+                          </TooltipContent>
+                      </Tooltip>
                     </TooltipProvider>
                     <AlertDialog>
                       <TooltipProvider>

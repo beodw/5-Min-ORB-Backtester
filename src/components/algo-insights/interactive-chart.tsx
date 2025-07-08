@@ -33,6 +33,7 @@ interface InteractiveChartProps {
   timeframe: string;
   timeZone: string;
   endDate?: Date;
+  isYAxisLocked: boolean;
 }
 
 const Candlestick = (props: any) => {
@@ -73,7 +74,8 @@ export function InteractiveChart({
     onUpdatePriceMarker,
     timeframe, 
     timeZone, 
-    endDate
+    endDate,
+    isYAxisLocked
 }: InteractiveChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
 
@@ -137,7 +139,8 @@ export function InteractiveChart({
   const [xDomain, setXDomain] = useState<[number, number]>([0, 100]);
   const [yDomain, setYDomain] = useState<[number, number]>([0, 100]);
   const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState<{ x: number, domain: [number, number] } | null>(null);
+  const [dragStart, setDragStart] = useState<{ x: number, y: number, xDomain: [number, number], yDomain: [number, number] } | null>(null);
+
 
   const windowedData = useMemo(() => {
     if (!aggregatedData.length) return [];
@@ -182,6 +185,8 @@ export function InteractiveChart({
 
 
   useEffect(() => {
+    if (!isYAxisLocked) return;
+
     let min = Infinity;
     let max = -Infinity;
 
@@ -215,7 +220,7 @@ export function InteractiveChart({
     if (newYDomain[0] !== yDomain[0] || newYDomain[1] !== yDomain[1]) {
         setYDomain(newYDomain);
     }
-  }, [windowedData, priceMarkers, yDomain]);
+  }, [windowedData, priceMarkers, yDomain, isYAxisLocked]);
 
   const xDataDomain = useMemo(() => {
     if (!aggregatedData.length) return [0, 0];
@@ -302,7 +307,9 @@ export function InteractiveChart({
     setIsDragging(true);
     setDragStart({
       x: e.clientX,
-      domain: xDomain,
+      y: e.clientY,
+      xDomain: xDomain,
+      yDomain: yDomain,
     });
     chartContainerRef.current.style.cursor = 'grabbing';
   };
@@ -310,24 +317,35 @@ export function InteractiveChart({
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!isDragging || !dragStart || !chartContainerRef.current) return;
     e.preventDefault();
-    const { width } = chartContainerRef.current.getBoundingClientRect();
-    const plotWidth = width - 80;
-    if (plotWidth <= 0) return;
+    const { width, height } = chartContainerRef.current.getBoundingClientRect();
+    const plotWidth = width - 80; // recharts default margins
+    const plotHeight = height - 20; // recharts default margins
+    
+    if (plotWidth <= 0 || plotHeight <= 0) return;
     
     const dx = e.clientX - dragStart.x;
-    const [start, end] = dragStart.domain;
-    const domainWidth = end - start;
-    const indexPerPixel = domainWidth / plotWidth;
+    const [xStart, xEnd] = dragStart.xDomain;
+    const xDomainWidth = xEnd - xStart;
+    const indexPerPixel = xDomainWidth / plotWidth;
     const deltaIndex = dx * indexPerPixel;
-
-    let newStart = start - deltaIndex;
-
-    if (newStart < 0) {
-      newStart = 0;
+    let newXStart = xStart - deltaIndex;
+    if (newXStart < 0) {
+      newXStart = 0;
     }
-    let newEnd = newStart + domainWidth;
-    
-    setXDomain([newStart, newEnd]);
+    let newXEnd = newXStart + xDomainWidth;
+    setXDomain([newXStart, newXEnd]);
+
+    if (!isYAxisLocked) {
+      const dy = e.clientY - dragStart.y;
+      const [yStart, yEnd] = dragStart.yDomain;
+      const yDomainWidth = yEnd - yStart;
+      const pricePerPixel = yDomainWidth / plotHeight;
+      const deltaPrice = dy * pricePerPixel;
+      
+      const newYStart = yStart - deltaPrice;
+      const newYEnd = newYStart + yDomainWidth;
+      setYDomain([newYStart, newYEnd]);
+    }
   };
   
   const handleMouseUp = (e: React.MouseEvent<HTMLDivElement>) => {
