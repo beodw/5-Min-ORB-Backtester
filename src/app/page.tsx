@@ -140,7 +140,7 @@ export default function AlgoInsightsPage() {
 
   const handleClearAllDrawings = () => {
     setRrTools([]);
-    setPriceMarkers(prev => prev.filter(m => !m.isDeletable));
+    setPriceMarkers([]);
   };
 
   const handleExportCsv = () => {
@@ -226,8 +226,6 @@ export default function AlgoInsightsPage() {
   const handleNextSession = () => {
     if (!timeZone || !sessionStartTime || !mockPriceData.length) return;
   
-    setPriceMarkers(prev => prev.filter(m => m.id !== 'or-high' && m.id !== 'or-low'));
-  
     const startDate = selectedDate || mockPriceData[0].date;
     const startIndex = mockPriceData.findIndex(p => p.date > startDate);
     if (startIndex === -1) return;
@@ -247,8 +245,8 @@ export default function AlgoInsightsPage() {
         const pointMinute = parseInt(minutePart.value, 10);
   
         if (pointHour === sessionHour && pointMinute === sessionMinute) {
-          if (i + 4 < mockPriceData.length) {
-            const endDateToShow = mockPriceData[i + 4].date;
+          if (i + 5 < mockPriceData.length) {
+            const endDateToShow = mockPriceData[i + 5].date;
             setSelectedDate(endDateToShow);
           } else {
             setSelectedDate(pointDate);
@@ -474,7 +472,7 @@ export default function AlgoInsightsPage() {
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <AlertDialogTrigger asChild>
-                          <Button variant="destructive" size="icon" disabled={rrTools.length === 0 && priceMarkers.filter(pm => pm.isDeletable).length === 0}>
+                          <Button variant="destructive" size="icon" disabled={rrTools.length === 0 && priceMarkers.length === 0}>
                             <Trash2 className="h-5 w-5" />
                           </Button>
                         </AlertDialogTrigger>
