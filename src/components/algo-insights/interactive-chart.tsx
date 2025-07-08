@@ -342,7 +342,7 @@ export function InteractiveChart({
       const pricePerPixel = yDomainWidth / plotHeight;
       const deltaPrice = dy * pricePerPixel;
       
-      const newYStart = yStart - deltaPrice;
+      const newYStart = yStart + deltaPrice;
       const newYEnd = newYStart + yDomainWidth;
       setYDomain([newYStart, newYEnd]);
     }
