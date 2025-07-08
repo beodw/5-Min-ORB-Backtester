@@ -103,19 +103,27 @@ export default function AlgoInsightsPage() {
   }, [sessionStartTime]);
 
 
-  const handleChartClick = (chartData: { close: number; date: Date, dataIndex: number }) => {
+  const handleChartClick = (chartData: { close: number; date: Date, dataIndex: number, yDomain: [number, number], xDomain: [number, number] }) => {
     if (placingToolType) {
       const entryPrice = chartData.close;
-      const stopLoss = placingToolType === 'long' ? entryPrice * 0.98 : entryPrice * 1.02; // Default 2%
-      const takeProfit = placingToolType === 'long' ? entryPrice * 1.04 : entryPrice * 0.96; // Default 4% (1:2 RR)
       
+      const visiblePriceRange = chartData.yDomain[1] - chartData.yDomain[0];
+      const stopLossOffset = visiblePriceRange * 0.05; // 5% of visible height for stop
+      const takeProfitOffset = visiblePriceRange * 0.10; // 10% of visible height for profit (1:2 RR)
+
+      const stopLoss = placingToolType === 'long' ? entryPrice - stopLossOffset : entryPrice + stopLossOffset;
+      const takeProfit = placingToolType === 'long' ? entryPrice + takeProfitOffset : entryPrice - takeProfitOffset;
+      
+      const visibleIndexRange = chartData.xDomain[1] - chartData.xDomain[0];
+      const widthInPoints = Math.round(visibleIndexRange * 0.25); // 25% of visible width
+
       const newTool: RRToolType = {
         id: `rr-${Date.now()}`,
         entryPrice: entryPrice,
         stopLoss: stopLoss,
         takeProfit: takeProfit,
         entryIndex: chartData.dataIndex,
-        widthInPoints: 100,
+        widthInPoints: widthInPoints,
         position: placingToolType,
       };
       

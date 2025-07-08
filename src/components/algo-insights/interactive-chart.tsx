@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 interface InteractiveChartProps {
   data: PriceData[];
   trades: Trade[];
-  onChartClick: (data: { close: number; date: Date, dataIndex: number }) => void;
+  onChartClick: (data: { close: number; date: Date, dataIndex: number, yDomain: [number, number], xDomain: [number, number] }) => void;
   rrTools: RRToolType[];
   onUpdateTool: (tool: RRToolType) => void;
   onRemoveTool: (id: string) => void;
@@ -252,6 +252,8 @@ export function InteractiveChart({
               close: e.activePayload[0].payload.close,
               date: new Date(e.activePayload[0].payload.date),
               dataIndex: dataIndex,
+              yDomain: yDomain,
+              xDomain: xDomain,
             });
         }
     }
