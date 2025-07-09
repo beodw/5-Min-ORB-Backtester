@@ -148,6 +148,8 @@ export function InteractiveChart({
   const [xDomain, setXDomain] = useState<[number, number]>([0, 100]);
   const [yDomain, setYDomain] = useState<[number, number]>([0, 100]);
   const [isDragging, setIsDragging] = useState(false);
+  const [isYAxisDragging, setIsYAxisDragging] = useState(false);
+  const [cursor, setCursor] = useState('grab');
   const [dragStart, setDragStart] = useState<{ x: number, y: number, xDomain: [number, number], yDomain: [number, number] } | null>(null);
 
 
@@ -304,7 +306,7 @@ export function InteractiveChart({
         const mouseIndex = domainStart + (chartX / plotWidth) * domainWidth;
         
         const zoomFactor = 1.1;
-        let newDomainWidth = e.deltaY < 0 ? domainWidth / zoomFactor : domainWidth * zoomFactor;
+        let newDomainWidth = e.deltaY < 0 ? domainWidth * zoomFactor : domainWidth / zoomFactor;
       
         let newStart = mouseIndex - (mouseIndex - domainStart) * (newDomainWidth / domainWidth);
         
@@ -327,59 +329,105 @@ export function InteractiveChart({
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (isPlacingRR || isPlacingPriceMarker || !chartContainerRef.current) return;
     e.preventDefault();
-    setIsDragging(true);
-    setDragStart({
-      x: e.clientX,
-      y: e.clientY,
-      xDomain: xDomain,
-      yDomain: yDomain,
-    });
-    chartContainerRef.current.style.cursor = 'grabbing';
+    
+    const dragStartPayload = {
+        x: e.clientX,
+        y: e.clientY,
+        xDomain: xDomain,
+        yDomain: yDomain,
+    };
+
+    if (cursor === 'ns-resize' && !isYAxisLocked) {
+        setIsYAxisDragging(true);
+        setDragStart(dragStartPayload);
+    } else {
+        setIsDragging(true);
+        setDragStart(dragStartPayload);
+        setCursor('grabbing');
+    }
   };
   
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isDragging || !dragStart || !chartContainerRef.current) return;
-    e.preventDefault();
-    const { width, height } = chartContainerRef.current.getBoundingClientRect();
-    const plotWidth = width - 80; // recharts default margins
-    const plotHeight = height - 20; // recharts default margins
+    if (!chartContainerRef.current) return;
     
-    if (plotWidth <= 0 || plotHeight <= 0) return;
-    
-    const dx = e.clientX - dragStart.x;
-    const [xStart, xEnd] = dragStart.xDomain;
-    const xDomainWidth = xEnd - xStart;
-    const indexPerPixel = xDomainWidth / plotWidth;
-    const deltaIndex = dx * indexPerPixel;
-    let newXStart = xStart - deltaIndex;
-    if (newXStart < 0) {
-      newXStart = 0;
-    }
-    let newXEnd = newXStart + xDomainWidth;
-    setXDomain([newXStart, newXEnd]);
+    // This part handles the dragging logic
+    if (dragStart) {
+        e.preventDefault();
+        const { width, height } = chartContainerRef.current.getBoundingClientRect();
 
-    if (!isYAxisLocked) {
-      const dy = e.clientY - dragStart.y;
-      const [yStart, yEnd] = dragStart.yDomain;
-      const yDomainWidth = yEnd - yStart;
-      const pricePerPixel = yDomainWidth / plotHeight;
-      const deltaPrice = dy * 1 * pricePerPixel; 
-      
-      const newYStart = yStart - deltaPrice;
-      const newYEnd = newYStart + yDomainWidth;
-      setYDomain([newYStart, newYEnd]);
+        if (isYAxisDragging && !isYAxisLocked) {
+            const plotHeight = height - 20;
+            if (plotHeight <= 0) return;
+            const dy = e.clientY - dragStart.y;
+            const scaleFactor = 1 - (dy / plotHeight) * 2; // Sensitivity factor
+
+            if (scaleFactor <= 0.01) return; // Prevent inverting or collapsing
+
+            const [yStart, yEnd] = dragStart.yDomain;
+            const originalWidth = yEnd - yStart;
+            const centerPrice = (yStart + yEnd) / 2;
+            const newWidth = originalWidth / scaleFactor;
+
+            const newYStart = centerPrice - newWidth / 2;
+            const newYEnd = centerPrice + newWidth / 2;
+
+            if (newYEnd > newYStart) {
+                setYDomain([newYStart, newYEnd]);
+            }
+        } else if (isDragging) {
+            const plotWidth = width - 80;
+            const plotHeight = height - 20; 
+            
+            if (plotWidth > 0) {
+                const dx = e.clientX - dragStart.x;
+                const [xStart, xEnd] = dragStart.xDomain;
+                const xDomainWidth = xEnd - xStart;
+                const indexPerPixel = xDomainWidth / plotWidth;
+                const deltaIndex = dx * indexPerPixel;
+                let newXStart = xStart - deltaIndex;
+                if (newXStart < 0) {
+                  newXStart = 0;
+                }
+                let newXEnd = newXStart + xDomainWidth;
+                setXDomain([newXStart, newXEnd]);
+            }
+        
+            if (!isYAxisLocked && plotHeight > 0) {
+              const dy = e.clientY - dragStart.y;
+              const [yStart, yEnd] = dragStart.yDomain;
+              const yDomainWidth = yEnd - yStart;
+              const pricePerPixel = yDomainWidth / plotHeight;
+              const deltaPrice = dy * 1 * pricePerPixel; 
+              
+              const newYStart = yStart - deltaPrice;
+              const newYEnd = newYStart + yDomainWidth;
+              setYDomain([newYStart, newYEnd]);
+            }
+        }
+    } 
+    // This part handles the cursor style on hover
+    else if (!isPlacingRR && !isPlacingPriceMarker) {
+        const { right } = chartContainerRef.current.getBoundingClientRect();
+        const yAxisAreaStart = right - 80; // approximate axis width
+        if (e.clientX > yAxisAreaStart && !isYAxisLocked) {
+            setCursor('ns-resize');
+        } else {
+             setCursor('grab');
+        }
     }
   };
   
   const handleMouseUp = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!chartContainerRef.current) return;
     setIsDragging(false);
+    setIsYAxisDragging(false);
     setDragStart(null);
-    chartContainerRef.current.style.cursor = isPlacingRR || isPlacingPriceMarker ? 'crosshair' : 'grab';
+    if (!isPlacingRR && !isPlacingPriceMarker) {
+        setCursor('grab');
+    }
   };
   
   const handleMouseLeave = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (isDragging) {
+    if (isDragging || isYAxisDragging) {
         handleMouseUp(e);
     }
   };
@@ -416,7 +464,7 @@ export function InteractiveChart({
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseLeave}
-      style={{ cursor: isPlacingRR || isPlacingPriceMarker ? 'crosshair' : (isDragging ? 'grabbing' : 'grab') }}
+      style={{ cursor: isPlacingRR || isPlacingPriceMarker ? 'crosshair' : cursor }}
     >
       {!aggregatedData || aggregatedData.length === 0 ? (
         <div className="flex items-center justify-center w-full h-full text-muted-foreground">
