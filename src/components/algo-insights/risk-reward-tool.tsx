@@ -122,6 +122,11 @@ export function RiskRewardTool({ tool, onUpdateTool, onRemove, data, xScale, ySc
   
   const rrRatio = tool.entryPrice - tool.stopLoss !== 0 ? Math.abs((tool.takeProfit - tool.entryPrice) / (tool.entryPrice - tool.stopLoss)) : Infinity;
 
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onRemove(tool.id);
+  };
+
   return (
     <g style={{ pointerEvents: 'all' }}>
       {/* Profit Zone */}
@@ -200,7 +205,7 @@ export function RiskRewardTool({ tool, onUpdateTool, onRemove, data, xScale, ySc
       {/* Delete Button */}
       <g 
           transform={`translate(${leftX + width / 2}, ${entryY - 25})`}
-          onClick={() => onRemove(tool.id)}
+          onMouseDown={handleDelete}
           style={{ cursor: 'pointer' }}
       >
         <circle r={8} fill="hsl(var(--card))" stroke="hsl(var(--border))" />
