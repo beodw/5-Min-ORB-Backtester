@@ -285,9 +285,7 @@ export default function AlgoInsightsPage() {
         "Max R", 
         "Comments", 
         "Stop Loss In Pips", 
-        "Minimum Distance To SL (pips)", 
-        "Screenshot Chart Before", 
-        "Screenshot Chart After"
+        "Minimum Distance To SL (pips)"
     ].join(',');
 
     const rows = rrTools.map(tool => {
@@ -393,9 +391,7 @@ export default function AlgoInsightsPage() {
             maxR.toFixed(2),
             '', // Comments
             stopLossPips.toFixed(2),
-            !isNaN(minDistanceToSLPips) ? minDistanceToSLPips.toFixed(2) : '',
-            '', // Screenshot Before
-            ''  // Screenshot After
+            !isNaN(minDistanceToSLPips) ? minDistanceToSLPips.toFixed(2) : ''
         ];
         
         return rowData.map(sanitize).join(',');
