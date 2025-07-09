@@ -26,6 +26,8 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
+
 
 export default function AlgoInsightsPage() {
   const [priceData, setPriceData] = useState<PriceData[]>(mockPriceData);
@@ -46,6 +48,7 @@ export default function AlgoInsightsPage() {
   const [isYAxisLocked, setIsYAxisLocked] = useState(true);
   const [pipValue, setPipValue] = useState(0.0001);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
 
   
   useEffect(() => {
@@ -213,63 +216,96 @@ export default function AlgoInsightsPage() {
 
     reader.onload = (e) => {
       const text = e.target?.result;
-      if (typeof text !== 'string') return;
-
-      const lines = text.split('\n').filter(line => line.trim() !== '');
-      if (lines.length <= 1) {
-        console.error("CSV file is empty or has only a header.");
+      if (typeof text !== 'string') {
+        toast({
+            variant: "destructive",
+            title: "File Read Error",
+            description: "Could not read the contents of the file.",
+        });
         return;
       }
 
-      // Skip header
+      const lines = text.split('\n').filter(line => line.trim() !== '');
+      if (lines.length <= 1) {
+        toast({
+            variant: "destructive",
+            title: "Invalid CSV",
+            description: "The CSV file is empty or contains only a header row.",
+        });
+        return;
+      }
+
       const dataRows = lines.slice(1);
 
-      const parsedData: PriceData[] = dataRows.map(row => {
-        const [localTime, openStr, highStr, lowStr, closeStr] = row.split(',');
+      const parsedData: PriceData[] = dataRows.map((row, index) => {
+        try {
+            const [localTime, openStr, highStr, lowStr, closeStr] = row.split(',');
 
-        // Dukascopy format: 01.05.2024 00:00:00.000 GMT
-        const dateTimeString = localTime.replace(' GMT', '');
-        const [datePart, timePart] = dateTimeString.split(' ');
-        const [day, month, year] = datePart.split('.').map(Number);
-        const [hour, minute, second] = timePart.split(':').map(Number);
-        
-        // Month is 0-indexed in JS Date, create as UTC date
-        const date = new Date(Date.UTC(year, month - 1, day, hour, minute, Math.floor(second)));
+            if (!localTime || !openStr || !highStr || !lowStr || !closeStr) {
+                throw new Error(`Incomplete data on row ${index + 2}`);
+            }
 
-        const open = parseFloat(openStr);
-        const high = parseFloat(highStr);
-        const low = parseFloat(lowStr);
-        const close = parseFloat(closeStr);
+            const dateTimeString = localTime.trim().replace(' GMT', '');
+            const [datePart, timePart] = dateTimeString.split(' ');
+            
+            if (!datePart || !timePart) throw new Error(`Invalid date/time format on row ${index + 2}: ${localTime}`);
 
-        return {
-          date,
-          open,
-          high,
-          low,
-          close,
-          wick: [low, high],
-        };
-      }).filter(p => !isNaN(p.date.getTime())); // Filter out any rows that failed to parse
+            const [day, month, year] = datePart.split('.').map(Number);
+            const [hour, minute, second] = timePart.split(':').map(Number);
+            
+            if (isNaN(day) || isNaN(month) || isNaN(year) || isNaN(hour) || isNaN(minute) || isNaN(second)) {
+                 throw new Error(`Invalid date or time values on row ${index + 2}`);
+            }
+            
+            const date = new Date(Date.UTC(year, month - 1, day, hour, minute, Math.floor(second)));
+            if (isNaN(date.getTime())) throw new Error(`Could not create a valid date on row ${index + 2}`);
+
+            const open = parseFloat(openStr);
+            const high = parseFloat(highStr);
+            const low = parseFloat(lowStr);
+            const close = parseFloat(closeStr);
+            
+            if (isNaN(open) || isNaN(high) || isNaN(low) || isNaN(close)) {
+                throw new Error(`Invalid price data on row ${index + 2}`);
+            }
+
+            return { date, open, high, low, close, wick: [low, high] };
+        } catch (error: any) {
+            console.warn(error.message); // Log warning for individual row failure
+            return null;
+        }
+      }).filter((p): p is PriceData => p !== null);
 
       if (parsedData.length > 0) {
-        // IMPORTANT: Sort data by date to ensure correct rendering and analysis
         parsedData.sort((a, b) => a.date.getTime() - b.date.getTime());
         setPriceData(parsedData);
         setIsDataImported(true);
-        // Reset the view to the end of the new data
         setSelectedDate(parsedData[parsedData.length - 1].date);
       } else {
-        console.error("Failed to parse any valid data from the CSV file.");
+        toast({
+            variant: "destructive",
+            title: "Parsing Failed",
+            description: "Failed to parse any valid data from the CSV file. Please check the file format and console for details.",
+        });
         setIsDataImported(false);
       }
     };
 
     reader.onerror = (e) => {
         console.error("Error reading file:", e);
+        toast({
+            variant: "destructive",
+            title: "File Read Error",
+            description: "An unexpected error occurred while reading the file.",
+        });
         setIsDataImported(false);
     };
 
     reader.readAsText(file);
+    // Reset file input to allow re-uploading the same file
+    if(fileInputRef.current) {
+        fileInputRef.current.value = "";
+    }
   };
 
 
@@ -317,15 +353,13 @@ export default function AlgoInsightsPage() {
 
             for (let i = entryIndex + 1; i < priceData.length; i++) {
                 const candle = priceData[i];
-                maxHighSinceEntry = Math.max(maxHighSinceEntry, candle.high);
-                minLowSinceEntry = Math.min(minLowSinceEntry, candle.low);
-
+                
                 if (candle.high >= tool.takeProfit) {
                     tradeOutcome = 'win';
                     dateClosed = candle.date;
                     const minSlDistPrice = minLowSinceEntry - tool.stopLoss;
                     minDistanceToSLPips = pipValue > 0 ? minSlDistPrice / pipValue : 0;
-                    break; 
+                    break;
                 }
                 
                 if (candle.low <= tool.stopLoss) {
@@ -334,6 +368,9 @@ export default function AlgoInsightsPage() {
                     minDistanceToSLPips = 0;
                     break;
                 }
+                
+                maxHighSinceEntry = Math.max(maxHighSinceEntry, candle.high);
+                minLowSinceEntry = Math.min(minLowSinceEntry, candle.low);
             }
 
             const maxProfitPrice = maxHighSinceEntry - tool.entryPrice;
@@ -347,8 +384,6 @@ export default function AlgoInsightsPage() {
 
             for (let i = entryIndex + 1; i < priceData.length; i++) {
                 const candle = priceData[i];
-                maxHighSinceEntry = Math.max(maxHighSinceEntry, candle.high);
-                minLowSinceEntry = Math.min(minLowSinceEntry, candle.low);
                 
                 if (candle.low <= tool.takeProfit) {
                     tradeOutcome = 'win';
@@ -364,6 +399,9 @@ export default function AlgoInsightsPage() {
                     minDistanceToSLPips = 0;
                     break;
                 }
+
+                maxHighSinceEntry = Math.max(maxHighSinceEntry, candle.high);
+                minLowSinceEntry = Math.min(minLowSinceEntry, candle.low);
             }
             
             const maxProfitPrice = tool.entryPrice - minLowSinceEntry;
@@ -858,5 +896,3 @@ export default function AlgoInsightsPage() {
     </div>
   );
 }
-
-    
