@@ -116,9 +116,9 @@ export default function AlgoInsightsPage() {
   }, [pipValue]);
 
 
-  const handleChartClick = (chartData: { price: number; date: Date, dataIndex: number, yDomain: [number, number], xDomain: [number, number] }) => {
+  const handleChartClick = (chartData: { price: number; date: Date, dataIndex: number, closePrice: number, yDomain: [number, number], xDomain: [number, number] }) => {
     if (placingToolType) {
-      const entryPrice = chartData.price;
+      const entryPrice = chartData.closePrice;
       
       const visiblePriceRange = chartData.yDomain[1] - chartData.yDomain[0];
       const stopLossOffset = visiblePriceRange * 0.05; // 5% of visible height for stop
@@ -135,7 +135,7 @@ export default function AlgoInsightsPage() {
         entryPrice: entryPrice,
         stopLoss: stopLoss,
         takeProfit: takeProfit,
-        entryIndex: chartData.dataIndex,
+        entryDate: chartData.date,
         widthInPoints: widthInPoints,
         position: placingToolType,
       };
@@ -292,10 +292,11 @@ export default function AlgoInsightsPage() {
 
     const rows = rrTools.map(tool => {
         const pair = fileName ? fileName.split('-')[0].trim() : 'N/A';
-        const entryCandle = priceData[tool.entryIndex];
+        const entryIndex = priceData.findIndex(p => p.date.getTime() >= tool.entryDate.getTime());
 
-        if (!entryCandle) return null; // Should not happen but good practice
+        if (entryIndex === -1) return null;
 
+        const entryCandle = priceData[entryIndex];
         const dateTaken = entryCandle.date;
         const dayOfWeek = dateTaken.toLocaleDateString('en-US', { weekday: 'long' });
         
@@ -312,7 +313,7 @@ export default function AlgoInsightsPage() {
             let maxHighSinceEntry = entryCandle.high;
             let stopHit = false;
 
-            for (let i = tool.entryIndex + 1; i < priceData.length; i++) {
+            for (let i = entryIndex + 1; i < priceData.length; i++) {
                 const candle = priceData[i];
                 
                 if (candle.low <= tool.stopLoss) {
@@ -329,7 +330,7 @@ export default function AlgoInsightsPage() {
                     tradeOutcome = 'win';
                     dateClosed = candle.date;
                     // Calculate min distance at the point of winning
-                    const candlesUpToWin = priceData.slice(tool.entryIndex, i + 1);
+                    const candlesUpToWin = priceData.slice(entryIndex, i + 1);
                     const minLowForWin = Math.min(...candlesUpToWin.map(c => c.low));
                     minDistanceToSLPips = (minLowForWin - tool.stopLoss) / pipValue;
                 }
@@ -347,7 +348,7 @@ export default function AlgoInsightsPage() {
             let minLowSinceEntry = entryCandle.low;
             let stopHit = false;
 
-            for (let i = tool.entryIndex + 1; i < priceData.length; i++) {
+            for (let i = entryIndex + 1; i < priceData.length; i++) {
                 const candle = priceData[i];
 
                 if (candle.high >= tool.stopLoss) {
@@ -363,7 +364,7 @@ export default function AlgoInsightsPage() {
                 if (tradeOutcome === 'Incomplete' && candle.low <= tool.takeProfit) {
                     tradeOutcome = 'win';
                     dateClosed = candle.date;
-                    const candlesUpToWin = priceData.slice(tool.entryIndex, i + 1);
+                    const candlesUpToWin = priceData.slice(entryIndex, i + 1);
                     const maxHighForWin = Math.max(...candlesUpToWin.map(c => c.high));
                     minDistanceToSLPips = (tool.stopLoss - maxHighForWin) / pipValue;
                 }

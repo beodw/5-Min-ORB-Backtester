@@ -32,14 +32,12 @@ export function RiskRewardTool({ tool, onUpdateTool, onRemove, data, xScale, ySc
       if (!yScale.invert || !xScale.invert) return;
 
       let newTool = { ...tool };
-
+      const mouseYInSvg = moveEvent.clientY - svgBounds.top;
+      const mouseXInSvg = moveEvent.clientX - svgBounds.left;
+      
       if (part === 'entry') {
-        const mouseXInSvg = moveEvent.clientX - svgBounds.left;
-        const mouseYInSvg = moveEvent.clientY - svgBounds.top;
         const mouseXInPlot = mouseXInSvg - plot.left;
-        const mouseYInPlot = mouseYInSvg - plot.top;
-        
-        const newEntryPrice = yScale.invert(mouseYInPlot);
+        const newEntryPrice = yScale.invert(mouseYInSvg);
         const newTimestamp = xScale.invert(mouseXInPlot);
         
         if (newEntryPrice === undefined || newTimestamp === undefined) return;
@@ -50,25 +48,27 @@ export function RiskRewardTool({ tool, onUpdateTool, onRemove, data, xScale, ySc
         newTool.entryPrice = newEntryPrice;
         newTool.stopLoss = newEntryPrice - stopOffset;
         newTool.takeProfit = newEntryPrice + profitOffset;
-        newTool.entryIndex = findClosestIndex(data, newTimestamp);
+        
+        const newIndex = findClosestIndex(data, newTimestamp);
+        const newCandle = data[newIndex];
+        if (newCandle) {
+          newTool.entryDate = newCandle.date;
+        }
 
       } else if (part === 'stop') {
-        const mouseYInSvg = moveEvent.clientY - svgBounds.top;
         const newPrice = yScale.invert(mouseYInSvg);
         if (newPrice !== undefined) newTool.stopLoss = newPrice;
       
       } else if (part === 'profit') {
-        const mouseYInSvg = moveEvent.clientY - svgBounds.top;
         const newPrice = yScale.invert(mouseYInSvg);
         if (newPrice !== undefined) newTool.takeProfit = newPrice;
       
       } else if (part === 'width') {
-        const mouseXInSvg = moveEvent.clientX - svgBounds.left;
         const mouseXInPlot = mouseXInSvg - plot.left;
         const newTimestamp = xScale.invert(mouseXInPlot);
         
         if (newTimestamp !== undefined) {
-          const entryTimestamp = data[tool.entryIndex]?.date.getTime();
+          const entryTimestamp = tool.entryDate.getTime();
           if (entryTimestamp) {
               const candleInterval = data.length > 1 ? data[1].date.getTime() - data[0].date.getTime() : 60000;
               const newWidthInPoints = Math.round((newTimestamp - entryTimestamp) / candleInterval);
@@ -93,17 +93,17 @@ export function RiskRewardTool({ tool, onUpdateTool, onRemove, data, xScale, ySc
     window.addEventListener('mouseup', handleMouseUp);
   };
 
-  const entryDate = data[tool.entryIndex]?.date.getTime();
+  const entryTimestamp = tool.entryDate.getTime();
 
-  if (!entryDate || !data || data.length === 0) {
+  if (!entryTimestamp || !data || data.length === 0) {
     return null;
   }
   
   const interval = data.length > 1 ? data[1].date.getTime() - data[0].date.getTime() : 60000;
-  const endDate = entryDate + tool.widthInPoints * interval;
+  const endDate = entryTimestamp + tool.widthInPoints * interval;
 
 
-  const leftX = xScale(entryDate);
+  const leftX = xScale(entryTimestamp);
   const rightX = xScale(endDate);
   const width = rightX - leftX;
 

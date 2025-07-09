@@ -23,7 +23,7 @@ import { findClosestIndex } from "@/lib/chart-utils";
 interface InteractiveChartProps {
   data: PriceData[];
   trades: Trade[];
-  onChartClick: (data: { price: number; date: Date, dataIndex: number, yDomain: [number, number], xDomain: [number, number] }) => void;
+  onChartClick: (data: { price: number; date: Date, dataIndex: number, closePrice: number, yDomain: [number, number], xDomain: [number, number] }) => void;
   rrTools: RRToolType[];
   onUpdateTool: (tool: RRToolType) => void;
   onRemoveTool: (id: string) => void;
@@ -273,13 +273,14 @@ export function InteractiveChart({
     const price = yScale.invert(mouseYInPlot);
     const timestamp = xScale.invert(mouseXInPlot);
     const dataIndex = findClosestIndex(aggregatedData, timestamp);
-    const date = aggregatedData[dataIndex]?.date;
+    const candle = aggregatedData[dataIndex];
     
-    if (price !== undefined && date !== undefined) {
+    if (price !== undefined && candle) {
         onChartClick({
           price,
-          date,
+          date: candle.date,
           dataIndex,
+          closePrice: candle.close,
           yDomain: yDomain,
           xDomain: xDomain,
         });
@@ -362,7 +363,7 @@ export function InteractiveChart({
       const [yStart, yEnd] = dragStart.yDomain;
       const yDomainWidth = yEnd - yStart;
       const pricePerPixel = yDomainWidth / plotHeight;
-      const deltaPrice = dy * pricePerPixel * -1; // Invert the drag direction
+      const deltaPrice = dy * 1 * pricePerPixel; 
       
       const newYStart = yStart - deltaPrice;
       const newYEnd = newYStart + yDomainWidth;

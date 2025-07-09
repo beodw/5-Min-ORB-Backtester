@@ -22,7 +22,7 @@ export interface RiskRewardTool {
   entryPrice: number;
   stopLoss: number;
   takeProfit: number;
-  entryIndex: number;
+  entryDate: Date;
   widthInPoints: number;
   position: 'long' | 'short';
 }
