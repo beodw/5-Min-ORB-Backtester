@@ -227,13 +227,14 @@ export default function AlgoInsightsPage() {
       const parsedData: PriceData[] = dataRows.map(row => {
         const [localTime, openStr, highStr, lowStr, closeStr] = row.split(',');
 
-        // Dukascopy format: 01.05.2024 00:00:00.000
-        const [datePart, timePart] = localTime.split(' ');
+        // Dukascopy format: 01.05.2024 00:00:00.000 GMT
+        const dateTimeString = localTime.replace(' GMT', '');
+        const [datePart, timePart] = dateTimeString.split(' ');
         const [day, month, year] = datePart.split('.').map(Number);
         const [hour, minute, second] = timePart.split(':').map(Number);
         
-        // Month is 0-indexed in JS Date
-        const date = new Date(year, month - 1, day, hour, minute, Math.floor(second));
+        // Month is 0-indexed in JS Date, create as UTC date
+        const date = new Date(Date.UTC(year, month - 1, day, hour, minute, Math.floor(second)));
 
         const open = parseFloat(openStr);
         const high = parseFloat(highStr);
@@ -295,15 +296,15 @@ export default function AlgoInsightsPage() {
     const rows = sortedTools.map(tool => {
         const pair = fileName ? fileName.split('-')[0].trim() : 'N/A';
         const entryIndex = priceData.findIndex(p => p.date.getTime() >= tool.entryDate.getTime());
-
+        
         if (entryIndex === -1) return null;
 
         const entryCandle = priceData[entryIndex];
         const dateTaken = entryCandle.date;
-        const dayOfWeek = dateTaken.toLocaleDateString('en-US', { weekday: 'long' });
+        const dayOfWeek = dateTaken.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
         
         const riskAmountPrice = Math.abs(tool.entryPrice - tool.stopLoss);
-        const stopLossPips = pipValue > 0 ? riskAmountPrice / pipValue : 0;
+        const stopLossPips = pipValue > 0 ? (riskAmountPrice / pipValue).toFixed(2) : '0.00';
 
         let tradeOutcome = 'Incomplete';
         let dateClosed: Date | null = null;
@@ -311,49 +312,33 @@ export default function AlgoInsightsPage() {
         let maxR = 0;
 
         if (tool.position === 'long') {
-            let minLowSinceEntry = entryCandle.low;
             let maxHighSinceEntry = entryCandle.high;
-            
+            let minLowSinceEntry = entryCandle.low;
+
             for (let i = entryIndex + 1; i < priceData.length; i++) {
                 const candle = priceData[i];
+                maxHighSinceEntry = Math.max(maxHighSinceEntry, candle.high);
+                minLowSinceEntry = Math.min(minLowSinceEntry, candle.low);
+
+                if (candle.high >= tool.takeProfit) {
+                    tradeOutcome = 'win';
+                    dateClosed = candle.date;
+                    const minSlDistPrice = minLowSinceEntry - tool.stopLoss;
+                    minDistanceToSLPips = pipValue > 0 ? minSlDistPrice / pipValue : 0;
+                    break; 
+                }
                 
-                // First, check for a loss. If the candle's low hits the stop loss.
                 if (candle.low <= tool.stopLoss) {
                     tradeOutcome = 'loss';
                     dateClosed = candle.date;
                     minDistanceToSLPips = 0;
-                    // The trade is over, so we calculate Max R based on the peak high BEFORE this candle
-                    const maxProfitPrice = maxHighSinceEntry - tool.entryPrice;
-                    if (riskAmountPrice > 0) {
-                        maxR = maxProfitPrice / riskAmountPrice;
-                    }
-                    break; // Exit the loop, the trade has concluded.
-                }
-                
-                // If not a loss, check for a win.
-                if (candle.high >= tool.takeProfit) {
-                    tradeOutcome = 'win';
-                    dateClosed = candle.date;
-                    // Min distance to SL is based on the lowest low recorded up to this point.
-                    minDistanceToSLPips = (minLowSinceEntry - tool.stopLoss) / pipValue;
-                }
-
-                // Update the running min/max values for this candle regardless of outcome
-                minLowSinceEntry = Math.min(minLowSinceEntry, candle.low);
-                maxHighSinceEntry = Math.max(maxHighSinceEntry, candle.high);
-                
-                if (tradeOutcome !== 'Incomplete') {
-                    // If trade is won or lost, we still need to calculate the final max R to the end of data
+                    break;
                 }
             }
-            
-            // If the loop completes (i.e., it's a win or incomplete)
-            // calculate the final Max R based on the highest high seen in the entire series.
-            if (tradeOutcome !== 'loss') {
-                const maxProfitPrice = maxHighSinceEntry - tool.entryPrice;
-                if (riskAmountPrice > 0) {
-                    maxR = maxProfitPrice / riskAmountPrice;
-                }
+
+            const maxProfitPrice = maxHighSinceEntry - tool.entryPrice;
+            if (riskAmountPrice > 0) {
+                maxR = maxProfitPrice / riskAmountPrice;
             }
 
         } else { // 'short'
@@ -362,39 +347,28 @@ export default function AlgoInsightsPage() {
 
             for (let i = entryIndex + 1; i < priceData.length; i++) {
                 const candle = priceData[i];
+                maxHighSinceEntry = Math.max(maxHighSinceEntry, candle.high);
+                minLowSinceEntry = Math.min(minLowSinceEntry, candle.low);
+                
+                if (candle.low <= tool.takeProfit) {
+                    tradeOutcome = 'win';
+                    dateClosed = candle.date;
+                    const minSlDistPrice = tool.stopLoss - maxHighSinceEntry;
+                    minDistanceToSLPips = pipValue > 0 ? minSlDistPrice / pipValue : 0;
+                    break; 
+                }
 
-                // First, check for a loss.
                 if (candle.high >= tool.stopLoss) {
                     tradeOutcome = 'loss';
                     dateClosed = candle.date;
                     minDistanceToSLPips = 0;
-                    // Calculate Max R based on the peak low BEFORE this candle
-                    const maxProfitPrice = tool.entryPrice - minLowSinceEntry;
-                    if (riskAmountPrice > 0) {
-                        maxR = maxProfitPrice / riskAmountPrice;
-                    }
-                    break; // Exit loop.
+                    break;
                 }
-                
-                // Check for a win if still open
-                if (candle.low <= tool.takeProfit) {
-                    tradeOutcome = 'win';
-                    dateClosed = candle.date;
-                    // Min distance is based on highest high up to this point
-                    minDistanceToSLPips = (tool.stopLoss - maxHighSinceEntry) / pipValue;
-                }
-                
-                // Update running min/max
-                maxHighSinceEntry = Math.max(maxHighSinceEntry, candle.high);
-                minLowSinceEntry = Math.min(minLowSinceEntry, candle.low);
             }
             
-            // If loop completes without SL being hit, calculate final Max R
-            if (tradeOutcome !== 'loss') {
-                const maxProfitPrice = tool.entryPrice - minLowSinceEntry;
-                if(riskAmountPrice > 0) {
-                    maxR = maxProfitPrice / riskAmountPrice;
-                }
+            const maxProfitPrice = tool.entryPrice - minLowSinceEntry;
+            if (riskAmountPrice > 0) {
+                maxR = maxProfitPrice / riskAmountPrice;
             }
         }
         
@@ -412,7 +386,7 @@ export default function AlgoInsightsPage() {
             dayOfWeek,
             maxR.toFixed(2),
             '', // Comments
-            stopLossPips.toFixed(2),
+            stopLossPips,
             !isNaN(minDistanceToSLPips) ? minDistanceToSLPips.toFixed(2) : ''
         ];
         
@@ -478,19 +452,19 @@ export default function AlgoInsightsPage() {
 
     // Get the day of the candle we are currently on, ignoring time.
     let lastDay = new Date(currentDate);
-    lastDay.setHours(0, 0, 0, 0);
+    lastDay.setUTCHours(0, 0, 0, 0);
 
     for (let i = searchStartIndex; i < priceData.length; i++) {
         const pointDate = priceData[i].date;
         
         const pointDay = new Date(pointDate);
-        pointDay.setHours(0, 0, 0, 0);
+        pointDay.setUTCHours(0, 0, 0, 0);
 
         // Check 1: Is this candle on a day AFTER the last known day?
         if (pointDay.getTime() > lastDay.getTime()) {
             
-            // Check 2: If it's a new day, is this the session start time?
-            if (pointDate.getHours() === sessionHour && pointDate.getMinutes() === sessionMinute) {
+            // Check 2: If it's a new day, is this the session start time? (in UTC)
+            if (pointDate.getUTCHours() === sessionHour && pointDate.getUTCMinutes() === sessionMinute) {
                 return i; // Found the start of the next session.
             }
         }
@@ -628,7 +602,7 @@ export default function AlgoInsightsPage() {
                             </Select>
                         </div>
                         <div className="grid gap-2">
-                            <Label htmlFor="session-start">Session Start Time</Label>
+                            <Label htmlFor="session-start">Session Start Time (UTC)</Label>
                             <Input
                                 id="session-start"
                                 type="time"
