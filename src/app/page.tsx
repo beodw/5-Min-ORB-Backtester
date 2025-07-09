@@ -215,90 +215,61 @@ export default function AlgoInsightsPage() {
     const reader = new FileReader();
 
     reader.onload = (e) => {
-      const text = e.target?.result;
-      if (typeof text !== 'string') {
-        toast({
-          variant: "destructive",
-          title: "File Read Error",
-          description: "Could not read the contents of the file.",
-        });
-        return;
-      }
-
-      const lines = text.split('\n').filter(line => line.trim() !== '');
-      if (lines.length <= 1) {
-        toast({
-          variant: "destructive",
-          title: "Invalid File",
-          description: "The CSV file is empty or contains only a header.",
-        });
-        return;
-      }
-
-      const dataRows = lines.slice(1);
-
-      const parsedData: PriceData[] = dataRows.map((row, index) => {
         try {
-            const columns = row.split(',');
-            if (columns.length < 5) {
-                console.warn(`Skipping incomplete row ${index + 2}: Not enough columns.`);
-                return null;
+            const text = e.target?.result;
+            if (typeof text !== 'string') throw new Error("Could not read file contents.");
+
+            const lines = text.split('\n').filter(line => line.trim() !== '');
+            if (lines.length <= 1) throw new Error("CSV is empty or has only a header.");
+
+            const dataRows = lines.slice(1);
+
+            const parsedData: PriceData[] = dataRows.map((row, index) => {
+                const columns = row.split(',');
+                const [localTime, openStr, highStr, lowStr, closeStr] = columns;
+
+                const dateTimeString = localTime.trim().replace(' GMT', '');
+                const [datePart, timePart] = dateTimeString.split(' ');
+                
+                const [day, month, year] = datePart.split('.').map(Number);
+                const [hour, minute] = timePart.split(':').map(Number);
+                const second = timePart.includes(':') ? Number(timePart.split(':')[2]) || 0 : 0;
+                
+                const date = new Date(Date.UTC(year, month - 1, day, hour, minute, Math.floor(second)));
+                if (isNaN(date.getTime())) throw new Error(`Invalid date on row ${index + 2}.`);
+
+                const open = parseFloat(openStr);
+                const high = parseFloat(highStr);
+                const low = parseFloat(lowStr);
+                const close = parseFloat(closeStr);
+                
+                if (isNaN(open) || isNaN(high) || isNaN(low) || isNaN(close)) {
+                    throw new Error(`Invalid price data on row ${index + 2}.`);
+                }
+
+                return { date, open, high, low, close, wick: [low, high] };
+            });
+
+            if (parsedData.length > 0) {
+                parsedData.sort((a, b) => a.date.getTime() - b.date.getTime());
+                setPriceData(parsedData);
+                setIsDataImported(true);
+                setSelectedDate(parsedData[parsedData.length - 1].date);
+            } else {
+                throw new Error("No valid data rows were parsed.");
             }
-            const [localTime, openStr, highStr, lowStr, closeStr] = columns;
-            
-            if (!localTime || !openStr || !highStr || !lowStr || !closeStr) {
-                console.warn(`Skipping row ${index + 2} due to missing price or time data.`);
-                return null;
-            }
-
-            const dateTimeString = localTime.trim().replace(' GMT', '');
-            const [datePart, timePart] = dateTimeString.split(' ');
-            if (!datePart || !timePart) throw new Error(`Invalid date/time format: ${localTime}`);
-            
-            const dateComponents = datePart.split('.').map(Number);
-            if (dateComponents.length !== 3 || dateComponents.some(isNaN)) throw new Error(`Invalid date part: ${datePart}`);
-            const [day, month, year] = dateComponents;
-
-            const timeComponents = timePart.split(':').map(Number);
-            if (timeComponents.length < 2 || timeComponents.some(isNaN)) throw new Error(`Invalid time part: ${timePart}`);
-            const [hour, minute] = timeComponents;
-            const second = timeComponents[2] || 0;
-            
-            const date = new Date(Date.UTC(year, month - 1, day, hour, minute, Math.floor(second)));
-            if (isNaN(date.getTime())) throw new Error(`Could not create a valid date`);
-
-            const open = parseFloat(openStr);
-            const high = parseFloat(highStr);
-            const low = parseFloat(lowStr);
-            const close = parseFloat(closeStr);
-            
-            if (isNaN(open) || isNaN(high) || isNaN(low) || isNaN(close)) {
-                throw new Error(`Invalid price data`);
-            }
-
-            return { date, open, high, low, close, wick: [low, high] };
         } catch (error: any) {
-            console.warn(`Error parsing row ${index + 2}: ${error.message}`, row);
-            return null;
+            toast({
+                variant: "destructive",
+                title: "CSV Import Failed",
+                description: `Please check the file format. Expected: 'DD.MM.YYYY HH:MM:SS,Open,High,Low,Close'. Error: ${error.message}`,
+                duration: 9000,
+            });
+            setIsDataImported(false);
         }
-      }).filter((p): p is PriceData => p !== null);
-
-      if (parsedData.length > 0) {
-        parsedData.sort((a, b) => a.date.getTime() - b.date.getTime());
-        setPriceData(parsedData);
-        setIsDataImported(true);
-        setSelectedDate(parsedData[parsedData.length - 1].date);
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Parsing Failed",
-          description: "Failed to parse any valid data from the CSV file. Please check the file format.",
-        });
-        setIsDataImported(false);
-      }
     };
 
-    reader.onerror = (e) => {
+    reader.onerror = () => {
         toast({
             variant: "destructive",
             title: "File Read Error",
@@ -308,7 +279,6 @@ export default function AlgoInsightsPage() {
     };
 
     reader.readAsText(file);
-    // Reset file input to allow re-uploading the same file
     if(fileInputRef.current) {
         fileInputRef.current.value = "";
     }
@@ -359,46 +329,38 @@ export default function AlgoInsightsPage() {
         let highSinceEntry = priceData[entryIndex].high;
         let lowSinceEntry = priceData[entryIndex].low;
 
-        for (let i = entryIndex + 1; i < priceData.length; i++) {
+        for (let i = entryIndex; i < priceData.length; i++) {
             const candle = priceData[i];
             
-            // Track max/min for metrics before checking for exit conditions
             highSinceEntry = Math.max(highSinceEntry, candle.high);
             lowSinceEntry = Math.min(lowSinceEntry, candle.low);
             
             if (tool.position === 'long') {
-                // Win condition
+                if (candle.low <= tool.stopLoss) {
+                    tradeOutcome = 'loss';
+                    dateClosed = candle.date;
+                    minDistanceToSLPips = 0;
+                    break;
+                }
                 if (candle.high >= tool.takeProfit) {
                     tradeOutcome = 'win';
                     dateClosed = candle.date;
-                    // For a winning long trade, the closest it got to the SL is the lowest low encountered.
                     const minSlDistPrice = lowSinceEntry - tool.stopLoss;
                     minDistanceToSLPips = pipValue > 0 ? minSlDistPrice / pipValue : 0;
                     break;
                 }
-                // Loss condition
-                if (candle.low <= tool.stopLoss) {
-                    tradeOutcome = 'loss';
-                    dateClosed = candle.date;
-                    minDistanceToSLPips = 0; // Hit the SL
-                    break;
-                }
             } else { // 'short'
-                // Win condition
-                if (candle.low <= tool.takeProfit) {
-                    tradeOutcome = 'win';
-                    dateClosed = candle.date;
-                    // For a winning short trade, the closest it got to the SL is the highest high encountered.
-                    const minSlDistPrice = tool.stopLoss - highSinceEntry;
-                    minDistanceToSLPips = pipValue > 0 ? minSlDistPrice / pipValue : 0;
-                    break;
-                }
-                // Loss condition
                 if (candle.high >= tool.stopLoss) {
                     tradeOutcome = 'loss';
                     dateClosed = candle.date;
-                    minDistanceToSLPips = 0; // Hit the SL
+                    minDistanceToSLPips = 0;
                     break;
+                }
+                if (candle.low <= tool.takeProfit) {
+                    tradeOutcome = 'win';
+                    dateClosed = candle.date;
+                    const minSlDistPrice = tool.stopLoss - highSinceEntry;
+                    minDistanceToSLPips = pipValue > 0 ? minSlDistPrice / pipValue : 0;
                 }
             }
         }
