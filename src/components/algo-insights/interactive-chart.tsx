@@ -306,7 +306,8 @@ export function InteractiveChart({
         const mouseIndex = domainStart + (chartX / plotWidth) * domainWidth;
         
         const zoomFactor = 1.1;
-        let newDomainWidth = e.deltaY < 0 ? domainWidth * zoomFactor : domainWidth / zoomFactor;
+        // scroll down (e.deltaY > 0) zooms out, scroll up zooms in.
+        let newDomainWidth = e.deltaY > 0 ? domainWidth * zoomFactor : domainWidth / zoomFactor;
       
         let newStart = mouseIndex - (mouseIndex - domainStart) * (newDomainWidth / domainWidth);
         
@@ -399,7 +400,7 @@ export function InteractiveChart({
               const pricePerPixel = yDomainWidth / plotHeight;
               const deltaPrice = dy * 1 * pricePerPixel; 
               
-              const newYStart = yStart - deltaPrice;
+              const newYStart = yStart + deltaPrice;
               const newYEnd = newYStart + yDomainWidth;
               setYDomain([newYStart, newYEnd]);
             }
