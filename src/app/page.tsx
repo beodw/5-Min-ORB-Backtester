@@ -216,28 +216,53 @@ export default function AlgoInsightsPage() {
 
     reader.onload = (e) => {
       const text = e.target?.result;
-      if (typeof text !== 'string') return;
+      if (typeof text !== 'string') {
+        toast({
+          variant: "destructive",
+          title: "File Read Error",
+          description: "Could not read the contents of the file.",
+        });
+        return;
+      }
 
       const lines = text.split('\n').filter(line => line.trim() !== '');
-      if (lines.length <= 1) return; // Empty or header only
+      if (lines.length <= 1) {
+        toast({
+          variant: "destructive",
+          title: "Invalid File",
+          description: "The CSV file is empty or contains only a header.",
+        });
+        return;
+      }
 
       const dataRows = lines.slice(1);
 
       const parsedData: PriceData[] = dataRows.map((row, index) => {
         try {
-            const [localTime, openStr, highStr, lowStr, closeStr] = row.split(',');
+            const columns = row.split(',');
+            if (columns.length < 5) {
+                console.warn(`Skipping incomplete row ${index + 2}: Not enough columns.`);
+                return null;
+            }
+            const [localTime, openStr, highStr, lowStr, closeStr] = columns;
             
             if (!localTime || !openStr || !highStr || !lowStr || !closeStr) {
-                console.warn(`Skipping incomplete row ${index + 2}`);
+                console.warn(`Skipping row ${index + 2} due to missing price or time data.`);
                 return null;
             }
 
             const dateTimeString = localTime.trim().replace(' GMT', '');
             const [datePart, timePart] = dateTimeString.split(' ');
             if (!datePart || !timePart) throw new Error(`Invalid date/time format: ${localTime}`);
+            
+            const dateComponents = datePart.split('.').map(Number);
+            if (dateComponents.length !== 3 || dateComponents.some(isNaN)) throw new Error(`Invalid date part: ${datePart}`);
+            const [day, month, year] = dateComponents;
 
-            const [day, month, year] = datePart.split('.').map(Number);
-            const [hour, minute, second] = timePart.split(':').map(Number);
+            const timeComponents = timePart.split(':').map(Number);
+            if (timeComponents.length < 2 || timeComponents.some(isNaN)) throw new Error(`Invalid time part: ${timePart}`);
+            const [hour, minute] = timeComponents;
+            const second = timeComponents[2] || 0;
             
             const date = new Date(Date.UTC(year, month - 1, day, hour, minute, Math.floor(second)));
             if (isNaN(date.getTime())) throw new Error(`Could not create a valid date`);
@@ -264,13 +289,21 @@ export default function AlgoInsightsPage() {
         setIsDataImported(true);
         setSelectedDate(parsedData[parsedData.length - 1].date);
       } else {
-        console.error("Failed to parse any valid data from the CSV file.");
+        toast({
+          variant: "destructive",
+          title: "Parsing Failed",
+          description: "Failed to parse any valid data from the CSV file. Please check the file format.",
+        });
         setIsDataImported(false);
       }
     };
 
     reader.onerror = (e) => {
-        console.error("Error reading file:", e);
+        toast({
+            variant: "destructive",
+            title: "File Read Error",
+            description: "An error occurred while reading the file.",
+        });
         setIsDataImported(false);
     };
 
@@ -284,7 +317,11 @@ export default function AlgoInsightsPage() {
 
   const handleExportCsv = () => {
     if (rrTools.length === 0 || !isDataImported) {
-        alert("Please place at least one trade tool on imported data to generate a report.");
+        toast({
+          variant: "destructive",
+          title: "Cannot Export",
+          description: "Please import data and place at least one trade tool to generate a report.",
+        });
         return;
     }
 
@@ -322,37 +359,45 @@ export default function AlgoInsightsPage() {
         let highSinceEntry = priceData[entryIndex].high;
         let lowSinceEntry = priceData[entryIndex].low;
 
-        for (let i = entryIndex; i < priceData.length; i++) {
+        for (let i = entryIndex + 1; i < priceData.length; i++) {
             const candle = priceData[i];
+            
+            // Track max/min for metrics before checking for exit conditions
             highSinceEntry = Math.max(highSinceEntry, candle.high);
             lowSinceEntry = Math.min(lowSinceEntry, candle.low);
-
+            
             if (tool.position === 'long') {
+                // Win condition
+                if (candle.high >= tool.takeProfit) {
+                    tradeOutcome = 'win';
+                    dateClosed = candle.date;
+                    // For a winning long trade, the closest it got to the SL is the lowest low encountered.
+                    const minSlDistPrice = lowSinceEntry - tool.stopLoss;
+                    minDistanceToSLPips = pipValue > 0 ? minSlDistPrice / pipValue : 0;
+                    break;
+                }
+                // Loss condition
                 if (candle.low <= tool.stopLoss) {
                     tradeOutcome = 'loss';
                     dateClosed = candle.date;
                     minDistanceToSLPips = 0; // Hit the SL
                     break;
                 }
-                if (candle.high >= tool.takeProfit) {
+            } else { // 'short'
+                // Win condition
+                if (candle.low <= tool.takeProfit) {
                     tradeOutcome = 'win';
                     dateClosed = candle.date;
-                    const minSlDistPrice = lowSinceEntry - tool.stopLoss;
+                    // For a winning short trade, the closest it got to the SL is the highest high encountered.
+                    const minSlDistPrice = tool.stopLoss - highSinceEntry;
                     minDistanceToSLPips = pipValue > 0 ? minSlDistPrice / pipValue : 0;
                     break;
                 }
-            } else { // 'short'
+                // Loss condition
                 if (candle.high >= tool.stopLoss) {
                     tradeOutcome = 'loss';
                     dateClosed = candle.date;
                     minDistanceToSLPips = 0; // Hit the SL
-                    break;
-                }
-                if (candle.low <= tool.takeProfit) {
-                    tradeOutcome = 'win';
-                    dateClosed = candle.date;
-                    const minSlDistPrice = tool.stopLoss - highSinceEntry;
-                    minDistanceToSLPips = pipValue > 0 ? minSlDistPrice / pipValue : 0;
                     break;
                 }
             }
@@ -476,7 +521,11 @@ export default function AlgoInsightsPage() {
 
     if (startIndex !== -1) {
         if (startIndex + 4 >= priceData.length) {
-            alert("Not enough data to draw the opening range.");
+            toast({
+                variant: "destructive",
+                title: "Not Enough Data",
+                description: "Not enough data to draw the opening range.",
+            });
             setSelectedDate(priceData[startIndex].date);
             return;
         }
@@ -518,7 +567,11 @@ export default function AlgoInsightsPage() {
         return;
     }
     
-    alert("Could not find the start of the next session in the available data.");
+    toast({
+      variant: "destructive",
+      title: "Session Not Found",
+      description: "Could not find the start of the next session in the available data.",
+    });
   };
 
   const handlePlaceLong = () => {
@@ -854,3 +907,5 @@ export default function AlgoInsightsPage() {
     </div>
   );
 }
+
+    
