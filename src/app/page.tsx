@@ -216,49 +216,31 @@ export default function AlgoInsightsPage() {
 
     reader.onload = (e) => {
       const text = e.target?.result;
-      if (typeof text !== 'string') {
-        toast({
-            variant: "destructive",
-            title: "File Read Error",
-            description: "Could not read the contents of the file.",
-        });
-        return;
-      }
+      if (typeof text !== 'string') return;
 
       const lines = text.split('\n').filter(line => line.trim() !== '');
-      if (lines.length <= 1) {
-        toast({
-            variant: "destructive",
-            title: "Invalid CSV",
-            description: "The CSV file is empty or contains only a header row.",
-        });
-        return;
-      }
+      if (lines.length <= 1) return; // Empty or header only
 
       const dataRows = lines.slice(1);
 
       const parsedData: PriceData[] = dataRows.map((row, index) => {
         try {
             const [localTime, openStr, highStr, lowStr, closeStr] = row.split(',');
-
+            
             if (!localTime || !openStr || !highStr || !lowStr || !closeStr) {
-                throw new Error(`Incomplete data on row ${index + 2}`);
+                console.warn(`Skipping incomplete row ${index + 2}`);
+                return null;
             }
 
             const dateTimeString = localTime.trim().replace(' GMT', '');
             const [datePart, timePart] = dateTimeString.split(' ');
-            
-            if (!datePart || !timePart) throw new Error(`Invalid date/time format on row ${index + 2}: ${localTime}`);
+            if (!datePart || !timePart) throw new Error(`Invalid date/time format: ${localTime}`);
 
             const [day, month, year] = datePart.split('.').map(Number);
             const [hour, minute, second] = timePart.split(':').map(Number);
             
-            if (isNaN(day) || isNaN(month) || isNaN(year) || isNaN(hour) || isNaN(minute) || isNaN(second)) {
-                 throw new Error(`Invalid date or time values on row ${index + 2}`);
-            }
-            
             const date = new Date(Date.UTC(year, month - 1, day, hour, minute, Math.floor(second)));
-            if (isNaN(date.getTime())) throw new Error(`Could not create a valid date on row ${index + 2}`);
+            if (isNaN(date.getTime())) throw new Error(`Could not create a valid date`);
 
             const open = parseFloat(openStr);
             const high = parseFloat(highStr);
@@ -266,12 +248,12 @@ export default function AlgoInsightsPage() {
             const close = parseFloat(closeStr);
             
             if (isNaN(open) || isNaN(high) || isNaN(low) || isNaN(close)) {
-                throw new Error(`Invalid price data on row ${index + 2}`);
+                throw new Error(`Invalid price data`);
             }
 
             return { date, open, high, low, close, wick: [low, high] };
         } catch (error: any) {
-            console.warn(error.message); // Log warning for individual row failure
+            console.warn(`Error parsing row ${index + 2}: ${error.message}`, row);
             return null;
         }
       }).filter((p): p is PriceData => p !== null);
@@ -282,22 +264,13 @@ export default function AlgoInsightsPage() {
         setIsDataImported(true);
         setSelectedDate(parsedData[parsedData.length - 1].date);
       } else {
-        toast({
-            variant: "destructive",
-            title: "Parsing Failed",
-            description: "Failed to parse any valid data from the CSV file. Please check the file format and console for details.",
-        });
+        console.error("Failed to parse any valid data from the CSV file.");
         setIsDataImported(false);
       }
     };
 
     reader.onerror = (e) => {
         console.error("Error reading file:", e);
-        toast({
-            variant: "destructive",
-            title: "File Read Error",
-            description: "An unexpected error occurred while reading the file.",
-        });
         setIsDataImported(false);
     };
 
@@ -335,8 +308,7 @@ export default function AlgoInsightsPage() {
         
         if (entryIndex === -1) return null;
 
-        const entryCandle = priceData[entryIndex];
-        const dateTaken = entryCandle.date;
+        const dateTaken = priceData[entryIndex].date;
         const dayOfWeek = dateTaken.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
         
         const riskAmountPrice = Math.abs(tool.entryPrice - tool.stopLoss);
@@ -347,65 +319,51 @@ export default function AlgoInsightsPage() {
         let minDistanceToSLPips = NaN;
         let maxR = 0;
 
-        if (tool.position === 'long') {
-            let maxHighSinceEntry = entryCandle.high;
-            let minLowSinceEntry = entryCandle.low;
+        let highSinceEntry = priceData[entryIndex].high;
+        let lowSinceEntry = priceData[entryIndex].low;
 
-            for (let i = entryIndex + 1; i < priceData.length; i++) {
-                const candle = priceData[i];
-                
-                if (candle.high >= tool.takeProfit) {
-                    tradeOutcome = 'win';
-                    dateClosed = candle.date;
-                    const minSlDistPrice = minLowSinceEntry - tool.stopLoss;
-                    minDistanceToSLPips = pipValue > 0 ? minSlDistPrice / pipValue : 0;
-                    break;
-                }
-                
+        for (let i = entryIndex; i < priceData.length; i++) {
+            const candle = priceData[i];
+            highSinceEntry = Math.max(highSinceEntry, candle.high);
+            lowSinceEntry = Math.min(lowSinceEntry, candle.low);
+
+            if (tool.position === 'long') {
                 if (candle.low <= tool.stopLoss) {
                     tradeOutcome = 'loss';
                     dateClosed = candle.date;
-                    minDistanceToSLPips = 0;
+                    minDistanceToSLPips = 0; // Hit the SL
                     break;
                 }
-                
-                maxHighSinceEntry = Math.max(maxHighSinceEntry, candle.high);
-                minLowSinceEntry = Math.min(minLowSinceEntry, candle.low);
-            }
-
-            const maxProfitPrice = maxHighSinceEntry - tool.entryPrice;
-            if (riskAmountPrice > 0) {
-                maxR = maxProfitPrice / riskAmountPrice;
-            }
-
-        } else { // 'short'
-            let maxHighSinceEntry = entryCandle.high;
-            let minLowSinceEntry = entryCandle.low;
-
-            for (let i = entryIndex + 1; i < priceData.length; i++) {
-                const candle = priceData[i];
-                
-                if (candle.low <= tool.takeProfit) {
+                if (candle.high >= tool.takeProfit) {
                     tradeOutcome = 'win';
                     dateClosed = candle.date;
-                    const minSlDistPrice = tool.stopLoss - maxHighSinceEntry;
+                    const minSlDistPrice = lowSinceEntry - tool.stopLoss;
                     minDistanceToSLPips = pipValue > 0 ? minSlDistPrice / pipValue : 0;
-                    break; 
+                    break;
                 }
-
+            } else { // 'short'
                 if (candle.high >= tool.stopLoss) {
                     tradeOutcome = 'loss';
                     dateClosed = candle.date;
-                    minDistanceToSLPips = 0;
+                    minDistanceToSLPips = 0; // Hit the SL
                     break;
                 }
-
-                maxHighSinceEntry = Math.max(maxHighSinceEntry, candle.high);
-                minLowSinceEntry = Math.min(minLowSinceEntry, candle.low);
+                if (candle.low <= tool.takeProfit) {
+                    tradeOutcome = 'win';
+                    dateClosed = candle.date;
+                    const minSlDistPrice = tool.stopLoss - highSinceEntry;
+                    minDistanceToSLPips = pipValue > 0 ? minSlDistPrice / pipValue : 0;
+                    break;
+                }
             }
-            
-            const maxProfitPrice = tool.entryPrice - minLowSinceEntry;
-            if (riskAmountPrice > 0) {
+        }
+        
+        if (riskAmountPrice > 0) {
+            if (tool.position === 'long') {
+                const maxProfitPrice = highSinceEntry - tool.entryPrice;
+                maxR = maxProfitPrice / riskAmountPrice;
+            } else { // 'short'
+                const maxProfitPrice = tool.entryPrice - lowSinceEntry;
                 maxR = maxProfitPrice / riskAmountPrice;
             }
         }
