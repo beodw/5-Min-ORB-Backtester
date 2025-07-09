@@ -299,7 +299,7 @@ export default function AlgoInsightsPage() {
         const dayOfWeek = dateTaken.toLocaleDateString('en-US', { weekday: 'long' });
         
         const riskAmountPrice = Math.abs(tool.entryPrice - tool.stopLoss);
-        const stopLossPips = riskAmountPrice / pipValue;
+        const stopLossPips = riskAmountPrice > 0 ? riskAmountPrice / pipValue : 0;
 
         let tradeOutcome = 'Incomplete';
         let dateClosed: Date | null = null;
@@ -309,70 +309,88 @@ export default function AlgoInsightsPage() {
         if (tool.position === 'long') {
             let minLowSinceEntry = entryCandle.low;
             let maxHighSinceEntry = entryCandle.high;
-            let stopHit = false;
-
+            
             for (let i = entryIndex + 1; i < priceData.length; i++) {
                 const candle = priceData[i];
                 
+                // First, check for a loss. If the candle's low hits the stop loss.
                 if (candle.low <= tool.stopLoss) {
                     if (tradeOutcome === 'Incomplete') {
                         tradeOutcome = 'loss';
                         dateClosed = candle.date;
                         minDistanceToSLPips = 0;
                     }
-                    stopHit = true;
-                    break; 
+                    // The trade is over, so we calculate Max R based on the peak high BEFORE this candle
+                    const maxProfitPrice = maxHighSinceEntry - tool.entryPrice;
+                    if (riskAmountPrice > 0) {
+                        maxR = maxProfitPrice / riskAmountPrice;
+                    }
+                    break; // Exit the loop, the trade has concluded.
                 }
                 
+                // If not a loss, update the running min/max values for this candle
+                minLowSinceEntry = Math.min(minLowSinceEntry, candle.low);
+                maxHighSinceEntry = Math.max(maxHighSinceEntry, candle.high);
+
+                // Now, check for a win if the trade is still open
                 if (tradeOutcome === 'Incomplete' && candle.high >= tool.takeProfit) {
                     tradeOutcome = 'win';
                     dateClosed = candle.date;
-                    // Calculate min distance at the point of winning
-                    const candlesUpToWin = priceData.slice(entryIndex, i + 1);
-                    const minLowForWin = Math.min(...candlesUpToWin.map(c => c.low));
-                    minDistanceToSLPips = (minLowForWin - tool.stopLoss) / pipValue;
+                    // Min distance to SL is based on the lowest low recorded up to this point.
+                    minDistanceToSLPips = (minLowSinceEntry - tool.stopLoss) / pipValue;
                 }
-                
-                maxHighSinceEntry = Math.max(maxHighSinceEntry, candle.high);
             }
             
-            const maxProfitPrice = maxHighSinceEntry - tool.entryPrice;
-            if(riskAmountPrice > 0){
-                maxR = maxProfitPrice / riskAmountPrice;
+            // If the loop completes without the stop loss being hit (i.e., it's a win or incomplete)
+            // calculate the final Max R based on the highest high seen in the entire series.
+            if (tradeOutcome !== 'loss') {
+                const maxProfitPrice = maxHighSinceEntry - tool.entryPrice;
+                if (riskAmountPrice > 0) {
+                    maxR = maxProfitPrice / riskAmountPrice;
+                }
             }
 
         } else { // 'short'
             let maxHighSinceEntry = entryCandle.high;
             let minLowSinceEntry = entryCandle.low;
-            let stopHit = false;
 
             for (let i = entryIndex + 1; i < priceData.length; i++) {
                 const candle = priceData[i];
 
+                // First, check for a loss.
                 if (candle.high >= tool.stopLoss) {
                     if (tradeOutcome === 'Incomplete') {
                         tradeOutcome = 'loss';
                         dateClosed = candle.date;
                         minDistanceToSLPips = 0;
                     }
-                    stopHit = true;
-                    break;
+                    // Calculate Max R based on the peak low BEFORE this candle
+                    const maxProfitPrice = tool.entryPrice - minLowSinceEntry;
+                    if (riskAmountPrice > 0) {
+                        maxR = maxProfitPrice / riskAmountPrice;
+                    }
+                    break; // Exit loop.
                 }
                 
+                // Update running min/max
+                maxHighSinceEntry = Math.max(maxHighSinceEntry, candle.high);
+                minLowSinceEntry = Math.min(minLowSinceEntry, candle.low);
+
+                // Check for a win if still open
                 if (tradeOutcome === 'Incomplete' && candle.low <= tool.takeProfit) {
                     tradeOutcome = 'win';
                     dateClosed = candle.date;
-                    const candlesUpToWin = priceData.slice(entryIndex, i + 1);
-                    const maxHighForWin = Math.max(...candlesUpToWin.map(c => c.high));
-                    minDistanceToSLPips = (tool.stopLoss - maxHighForWin) / pipValue;
+                    // Min distance is based on highest high up to this point
+                    minDistanceToSLPips = (tool.stopLoss - maxHighSinceEntry) / pipValue;
                 }
-                
-                minLowSinceEntry = Math.min(minLowSinceEntry, candle.low);
             }
             
-            const maxProfitPrice = tool.entryPrice - minLowSinceEntry;
-            if(riskAmountPrice > 0){
-                maxR = maxProfitPrice / riskAmountPrice;
+            // If loop completes without SL being hit, calculate final Max R
+            if (tradeOutcome !== 'loss') {
+                const maxProfitPrice = tool.entryPrice - minLowSinceEntry;
+                if(riskAmountPrice > 0) {
+                    maxR = maxProfitPrice / riskAmountPrice;
+                }
             }
         }
         
