@@ -149,7 +149,6 @@ export function InteractiveChart({
   const [yDomain, setYDomain] = useState<[number, number]>([0, 100]);
   const [isDragging, setIsDragging] = useState(false);
   const [isYAxisDragging, setIsYAxisDragging] = useState(false);
-  const [cursor, setCursor] = useState('crosshair');
   const [dragStart, setDragStart] = useState<{ x: number, y: number, xDomain: [number, number], yDomain: [number, number] } | null>(null);
 
 
@@ -347,19 +346,19 @@ export function InteractiveChart({
     } else {
         setIsDragging(true);
         setDragStart(dragStartPayload);
-        setCursor('grabbing');
+        chartContainerRef.current.style.cursor = 'grabbing';
     }
   };
   
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!chartContainerRef.current) return;
-    
-    // This part handles the dragging logic
+
     if (dragStart) {
         e.preventDefault();
         const { width, height } = chartContainerRef.current.getBoundingClientRect();
 
         if (isYAxisDragging && !isYAxisLocked) {
+            chartContainerRef.current.style.cursor = 'ns-resize';
             const plotHeight = height - 20;
             if (plotHeight <= 0) return;
             const dy = e.clientY - dragStart.y;
@@ -379,6 +378,7 @@ export function InteractiveChart({
                 setYDomain([newYStart, newYEnd]);
             }
         } else if (isDragging) {
+            chartContainerRef.current.style.cursor = 'grabbing';
             const plotWidth = width - 80;
             const plotHeight = height - 20; 
             
@@ -408,16 +408,16 @@ export function InteractiveChart({
               setYDomain([newYStart, newYEnd]);
             }
         }
-    } 
-    // This part handles the cursor style on hover
-    else if (!isPlacingRR && !isPlacingPriceMarker) {
+    } else if (!isPlacingRR && !isPlacingPriceMarker) {
         const { right } = chartContainerRef.current.getBoundingClientRect();
         const yAxisAreaStart = right - 80; // approximate axis width
         if (e.clientX > yAxisAreaStart && !isYAxisLocked) {
-            setCursor('ns-resize');
+            chartContainerRef.current.style.cursor = 'ns-resize';
         } else {
-             setCursor('crosshair');
+             chartContainerRef.current.style.cursor = 'crosshair';
         }
+    } else {
+        chartContainerRef.current.style.cursor = 'crosshair';
     }
   };
   
@@ -425,8 +425,10 @@ export function InteractiveChart({
     setIsDragging(false);
     setIsYAxisDragging(false);
     setDragStart(null);
-    if (!isPlacingRR && !isPlacingPriceMarker) {
-        setCursor('crosshair');
+    if (chartContainerRef.current) {
+        if (!isPlacingRR && !isPlacingPriceMarker) {
+            chartContainerRef.current.style.cursor = 'crosshair';
+        }
     }
   };
   
@@ -434,7 +436,9 @@ export function InteractiveChart({
     if (isDragging || isYAxisDragging) {
         handleMouseUp(e);
     }
-    setCursor('crosshair'); // Reset cursor on leave
+    if (chartContainerRef.current) {
+      chartContainerRef.current.style.cursor = 'default';
+    }
   };
 
   const formatXAxis = useCallback((tickItem: any) => {
@@ -469,7 +473,6 @@ export function InteractiveChart({
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseLeave}
-      style={{ cursor: isPlacingRR || isPlacingPriceMarker ? 'crosshair' : cursor }}
     >
       {!aggregatedData || aggregatedData.length === 0 ? (
         <div className="flex items-center justify-center w-full h-full text-muted-foreground">
@@ -596,6 +599,5 @@ export function InteractiveChart({
       )}
     </div>
   );
-}
 
     
