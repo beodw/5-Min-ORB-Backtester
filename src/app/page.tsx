@@ -54,7 +54,9 @@ const simulateTrade = (
     pipValue: number
 ): TradeReportRow | null => {
     const entryIndex = priceData.findIndex(p => p.date.getTime() >= tool.entryDate.getTime());
-    if (entryIndex === -1) return null;
+    
+    // A trade cannot be simulated if there are no candles after the entry candle.
+    if (entryIndex === -1 || entryIndex + 1 >= priceData.length) return null;
 
     const dateTaken = priceData[entryIndex].date;
     const dayOfWeek = dateTaken.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
@@ -67,17 +69,17 @@ const simulateTrade = (
     let maxR = 0;
     let comments = '';
 
-    let highSinceEntry = -Infinity;
-    let lowSinceEntry = Infinity;
+    // Initialize high/low with the first candle *after* entry.
+    let highSinceEntry = priceData[entryIndex + 1].high;
+    let lowSinceEntry = priceData[entryIndex + 1].low;
 
     // --- DEBUGGING VARIABLES ---
-    let debug_lowPriceDate: Date | null = null;
-    let debug_highPriceDate: Date | null = null;
+    let debug_lowPriceDate: Date = priceData[entryIndex + 1].date;
+    let debug_highPriceDate: Date = priceData[entryIndex + 1].date;
     // --- END DEBUGGING VARIABLES ---
 
-
-    // Start from the candle *after* entry. A trade cannot be won/lost on the entry candle.
-    for (let i = entryIndex + 1; i < priceData.length; i++) {
+    // Start loop from the second candle *after* entry, since the first was used for initialization.
+    for (let i = entryIndex + 2; i < priceData.length; i++) {
         const candle = priceData[i];
         
         // Update the max/min price seen during the trade's lifetime
