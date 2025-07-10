@@ -65,37 +65,47 @@ const simulateTrade = (
     let dateClosed: Date | null = null;
     let minDistanceToSLPips = NaN;
     let maxR = 0;
+    let comments = '';
 
     let highSinceEntry = -Infinity;
     let lowSinceEntry = Infinity;
+
+    // --- DEBUGGING VARIABLES ---
+    let debug_lowPriceDate: Date | null = null;
+    let debug_highPriceDate: Date | null = null;
+    // --- END DEBUGGING VARIABLES ---
+
 
     // Start from the candle *after* entry. A trade cannot be won/lost on the entry candle.
     for (let i = entryIndex + 1; i < priceData.length; i++) {
         const candle = priceData[i];
         
         // Update the max/min price seen during the trade's lifetime
-        highSinceEntry = Math.max(highSinceEntry, candle.high);
-        lowSinceEntry = Math.min(lowSinceEntry, candle.low);
+        if (candle.high > highSinceEntry) {
+            highSinceEntry = candle.high;
+            debug_highPriceDate = candle.date;
+        }
+        if (candle.low < lowSinceEntry) {
+            lowSinceEntry = candle.low;
+            debug_lowPriceDate = candle.date;
+        }
 
         if (tool.position === 'long') {
              // Check for win condition first
             if (candle.high >= tool.takeProfit) {
                 tradeOutcome = 'win';
                 dateClosed = candle.date;
-                // LOGIC HIGHLIGHT:
-                // For a winning long trade, the minimum distance to the stop loss is the difference
-                // between the lowest price reached during the trade (`lowSinceEntry`) and the stop loss level.
                 const minSlDistPrice = lowSinceEntry - tool.stopLoss;
                 minDistanceToSLPips = pipValue > 0 ? minSlDistPrice / pipValue : 0;
+                comments = `Debug: Low used for calc: ${lowSinceEntry.toFixed(5)} at ${debug_lowPriceDate?.toLocaleString()}`;
                 break; // Exit loop on win
             }
             // Then check for loss condition
             if (candle.low <= tool.stopLoss) {
                 tradeOutcome = 'loss';
                 dateClosed = candle.date;
-                 // LOGIC HIGHLIGHT:
-                // For a losing trade, the price hit the stop loss, so the minimum distance is 0.
                 minDistanceToSLPips = 0;
+                comments = 'Debug: SL was hit.';
                 break; // Exit loop on loss
             }
         } else { // 'short'
@@ -103,20 +113,17 @@ const simulateTrade = (
             if (candle.low <= tool.takeProfit) {
                 tradeOutcome = 'win';
                 dateClosed = candle.date;
-                 // LOGIC HIGHLIGHT:
-                // For a winning short trade, the minimum distance to the stop loss is the difference
-                // between the stop loss level and the highest price reached during the trade (`highSinceEntry`).
                 const minSlDistPrice = tool.stopLoss - highSinceEntry;
                 minDistanceToSLPips = pipValue > 0 ? minSlDistPrice / pipValue : 0;
+                comments = `Debug: High used for calc: ${highSinceEntry.toFixed(5)} at ${debug_highPriceDate?.toLocaleString()}`;
                 break; // Exit loop on win
             }
              // Then check for loss condition
             if (candle.high >= tool.stopLoss) {
                 tradeOutcome = 'loss';
                 dateClosed = candle.date;
-                // LOGIC HIGHLIGHT:
-                // For a losing trade, the price hit the stop loss, so the minimum distance is 0.
                 minDistanceToSLPips = 0;
+                comments = 'Debug: SL was hit.';
                 break; // Exit loop on loss
             }
         }
@@ -146,7 +153,7 @@ const simulateTrade = (
         dateClosed: dateClosed ? dateClosed.toLocaleString() : '',
         dayOfWeek,
         maxR: maxR.toFixed(2),
-        comments: '',
+        comments,
         stopLossPips,
         minDistanceToSLPips: !isNaN(minDistanceToSLPips) ? minDistanceToSLPips.toFixed(2) : ''
     };
@@ -400,15 +407,23 @@ export default function AlgoInsightsPage() {
                 const columns = row.split(',');
                 const [localTime, openStr, highStr, lowStr, closeStr] = columns;
 
+                if (!localTime || !openStr || !highStr || !lowStr || !closeStr) {
+                    throw new Error(`Row ${index + 2} has missing columns. Expected 5, found ${columns.length}.`);
+                }
+
                 const dateTimeString = localTime.trim().replace(' GMT', '');
                 const [datePart, timePart] = dateTimeString.split(' ');
                 
+                if (!datePart || !timePart) {
+                    throw new Error(`Invalid date format on row ${index + 2}. Expected 'DD.MM.YYYY HH:MM:SS', but found '${localTime}'.`);
+                }
+                
                 const [day, month, year] = datePart.split('.').map(Number);
                 const [hour, minute] = timePart.split(':').map(Number);
-                const second = timePart.includes(':') ? Number(timePart.split(':')[2]) || 0 : 0;
+                const second = timePart.includes(':') && timePart.split(':')[2] ? Number(timePart.split(':')[2]) || 0 : 0;
                 
                 if (isNaN(day) || isNaN(month) || isNaN(year) || isNaN(hour) || isNaN(minute) || isNaN(second)) {
-                    throw new Error(`Invalid date format on row ${index + 2}. Could not parse: '${localTime}'`);
+                    throw new Error(`Invalid date values on row ${index + 2}. Could not parse: '${localTime}'`);
                 }
                 const date = new Date(Date.UTC(year, month - 1, day, hour, minute, Math.floor(second)));
                 if (isNaN(date.getTime())) throw new Error(`Invalid date on row ${index + 2}. Parsed to an invalid Date object from: '${localTime}'`);
@@ -437,7 +452,7 @@ export default function AlgoInsightsPage() {
             toast({
                 variant: "destructive",
                 title: "CSV Import Failed",
-                description: `Please check the file format. Expected: 'DD.MM.YYYY HH:MM:SS,Open,High,Low,Close'. Error: ${error.message}`,
+                description: `Please check the file format. Error: ${error.message}`,
                 duration: 9000,
             });
             setIsDataImported(false);
