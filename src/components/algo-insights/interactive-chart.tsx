@@ -64,6 +64,41 @@ const Candlestick = (props: any) => {
     );
 };
 
+const CustomTooltip = ({ active, payload, label, timeZone }: any) => {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    const date = new Date(label);
+
+    const formatValue = (value: number) => value.toFixed(5);
+    const formatLabel = (value: string, color: string) => (
+      <span style={{ color }}>{value}</span>
+    );
+
+    return (
+      <div className="bg-popover/80 backdrop-blur-sm text-popover-foreground rounded-md border border-border p-2 text-xs shadow-lg">
+        <p className="font-bold mb-2">
+            {date.toLocaleString([], {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                timeZone,
+            })}
+        </p>
+        <div className="grid grid-cols-2 gap-x-2 gap-y-1">
+          <span className="font-semibold">Open:</span><span className="text-right font-mono">{formatValue(data.open)}</span>
+          <span className="font-semibold">High:</span><span className="text-right font-mono">{formatValue(data.high)}</span>
+          <span className="font-semibold">Low:</span><span className="text-right font-mono">{formatValue(data.low)}</span>
+          <span className="font-semibold">Close:</span><span className="text-right font-mono">{formatValue(data.close)}</span>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+};
+
 
 export function InteractiveChart({ 
     data, 
@@ -500,14 +535,16 @@ export function InteractiveChart({
             fontSize={12}
             tickLine={false}
             axisLine={false}
-            tickFormatter={(value) => typeof value === 'number' ? value.toFixed(2) : ''}
+            tickFormatter={(value) => typeof value === 'number' ? value.toFixed(5) : ''}
             domain={yDomain}
             allowDataOverflow={true}
             yAxisId="main"
           />
-          <Tooltip 
+          <Tooltip
+            content={<CustomTooltip timeZone={timeZone} />}
             cursor={{ stroke: 'hsl(var(--accent))', strokeWidth: 1, strokeDasharray: '3 3' }}
-            wrapperStyle={{ display: 'none' }}
+            animationDuration={300}
+            animationEasing="ease-out"
           />
           
           <Bar dataKey="wick" shape={<Candlestick />} isAnimationActive={false} xAxisId="main" yAxisId="main"/>
@@ -568,7 +605,7 @@ export function InteractiveChart({
                       key={tool.id}
                       tool={tool}
                       onUpdateTool={onUpdateTool}
-                      onRemove={onRemoveTool}
+                      onRemove={onRemove}
                       data={aggregatedData}
                       xScale={mainXAxis.scale}
                       yScale={mainYAxis.scale}

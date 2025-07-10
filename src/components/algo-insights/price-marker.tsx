@@ -21,7 +21,7 @@ export function PriceMarker({ marker, onRemove, onUpdate, yScale, plot, svgBound
   }
 
   const isDeletable = marker.isDeletable !== false;
-  const labelText = `${marker.label ? `${marker.label}: ` : ''}${marker.price.toFixed(2)}`;
+  const labelText = `${marker.label ? `${marker.label}: ` : ''}${marker.price.toFixed(5)}`;
   const labelWidth = labelText.length * 6.5 + 8; // A reasonable estimate for width
 
   const handleContextMenu = (e: React.MouseEvent) => {
