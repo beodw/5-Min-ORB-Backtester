@@ -47,6 +47,12 @@ type DrawingState = {
     measurementTools: MeasurementToolType[];
 };
 
+type SessionState = {
+    drawingState: DrawingState;
+    selectedDate: string; // Stored as ISO string
+    fileName: string;
+};
+
 
 const simulateTrade = (
     tool: RRToolType,
@@ -55,8 +61,7 @@ const simulateTrade = (
 ): TradeReportRow | null => {
     const entryIndex = priceData.findIndex(p => p.date.getTime() >= tool.entryDate.getTime());
     
-    // A trade cannot be simulated if there are no candles after the entry candle.
-    if (entryIndex === -1 || entryIndex + 1 >= priceData.length) return null;
+    if (entryIndex === -1) return null;
 
     const dateTaken = priceData[entryIndex].date;
     const dayOfWeek = dateTaken.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
@@ -69,20 +74,23 @@ const simulateTrade = (
     let maxR = 0;
     let comments = '';
 
-    // Initialize high/low with the first candle *after* entry.
-    let highSinceEntry = priceData[entryIndex + 1].high;
-    let lowSinceEntry = priceData[entryIndex + 1].low;
+    // Initialize with the first candle *after* entry.
+    const firstCandleIndex = entryIndex + 1;
+    if (firstCandleIndex >= priceData.length) return null; // No candles after entry to simulate
+
+    let highSinceEntry = priceData[firstCandleIndex].high;
+    let lowSinceEntry = priceData[firstCandleIndex].low;
 
     // --- DEBUGGING VARIABLES ---
-    let debug_lowPriceDate: Date = priceData[entryIndex + 1].date;
-    let debug_highPriceDate: Date = priceData[entryIndex + 1].date;
+    let debug_lowPriceDate: Date = priceData[firstCandleIndex].date;
+    let debug_highPriceDate: Date = priceData[firstCandleIndex].date;
     // --- END DEBUGGING VARIABLES ---
 
-    // Start loop from the second candle *after* entry, since the first was used for initialization.
-    for (let i = entryIndex + 2; i < priceData.length; i++) {
+    // Start loop from the second candle *after* entry
+    for (let i = firstCandleIndex; i < priceData.length; i++) {
         const candle = priceData[i];
         
-        // Update the max/min price seen during the trade's lifetime
+        // Update the max/min price seen during the trade's lifetime FIRST
         if (candle.high > highSinceEntry) {
             highSinceEntry = candle.high;
             debug_highPriceDate = candle.date;
@@ -161,6 +169,10 @@ const simulateTrade = (
     };
 };
 
+// Local storage keys
+const APP_SETTINGS_KEY = 'algo-insights-settings';
+const SESSION_KEY = 'algo-insights-session';
+
 
 export default function AlgoInsightsPage() {
   const [priceData, setPriceData] = useState<PriceData[]>(mockPriceData);
@@ -228,7 +240,10 @@ export default function AlgoInsightsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
-  
+  const [showRestoreDialog, setShowRestoreDialog] = useState(false);
+  const [sessionToRestore, setSessionToRestore] = useState<string | null>(null);
+
+  // Effect for loading settings and checking for saved session on initial load
   useEffect(() => {
     const getOffsetInMinutes = (timeZone: string): number => {
         try {
@@ -245,56 +260,126 @@ export default function AlgoInsightsPage() {
         .map(tz => {
             const offset = getOffsetInMinutes(tz);
             if (isNaN(offset)) return null;
-
             const offsetHours = Math.floor(Math.abs(offset) / 60);
             const offsetMinutes = Math.abs(offset) % 60;
             const sign = offset >= 0 ? '+' : '-';
             const offsetString = `(UTC${sign}${String(offsetHours).padStart(2, '0')}:${String(offsetMinutes).padStart(2, '0')})`;
-            
-            return {
-                value: tz,
-                label: `${tz.replace(/_/g, ' ')} ${offsetString}`,
-                offset,
-            };
+            return { value: tz, label: `${tz.replace(/_/g, ' ')} ${offsetString}`, offset };
         })
         .filter((tz): tz is { value: string; label: string; offset: number; } => tz !== null)
         .sort((a, b) => a.offset - b.offset);
-
     setTimezones(tzData);
 
-    const savedTimeZone = localStorage.getItem('algo-insights-timezone');
-    if (savedTimeZone && Intl.supportedValuesOf('timeZone').includes(savedTimeZone)) {
-        setTimeZone(savedTimeZone);
+    const savedSettingsRaw = localStorage.getItem(APP_SETTINGS_KEY);
+    if (savedSettingsRaw) {
+        try {
+            const savedSettings = JSON.parse(savedSettingsRaw);
+            if (savedSettings.timeZone) setTimeZone(savedSettings.timeZone);
+            if (savedSettings.sessionStartTime) setSessionStartTime(savedSettings.sessionStartTime);
+            if (savedSettings.pipValue) setPipValue(savedSettings.pipValue);
+        } catch (e) {
+            console.error("Failed to parse app settings from localStorage", e);
+            setTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+        }
     } else {
         setTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
     }
-
-    const savedSessionStart = localStorage.getItem('algo-insights-session-start');
-    if (savedSessionStart) {
-        setSessionStartTime(savedSessionStart);
-    }
-
-    const savedPipValue = localStorage.getItem('algo-insights-pip-value');
-    if (savedPipValue) {
-        setPipValue(parseFloat(savedPipValue));
+    
+    // Check for a saved session
+    const savedSessionRaw = localStorage.getItem(SESSION_KEY);
+    if (savedSessionRaw) {
+        try {
+            const savedSession: SessionState = JSON.parse(savedSessionRaw);
+            if (savedSession.fileName) {
+                setSessionToRestore(savedSession.fileName);
+                setShowRestoreDialog(true);
+            }
+        } catch (e) {
+            console.error("Failed to parse session from localStorage", e);
+            localStorage.removeItem(SESSION_KEY);
+        }
     }
   }, []);
 
+  // Effect for saving app settings
   useEffect(() => {
-    if (timeZone) {
-        localStorage.setItem('algo-insights-timezone', timeZone);
-    }
-  }, [timeZone]);
+    const settings = { timeZone, sessionStartTime, pipValue };
+    localStorage.setItem(APP_SETTINGS_KEY, JSON.stringify(settings));
+  }, [timeZone, sessionStartTime, pipValue]);
 
+  // Effect for saving session state
   useEffect(() => {
-    if (sessionStartTime) {
-        localStorage.setItem('algo-insights-session-start', sessionStartTime);
+    // Don't save if there's nothing to save or if we are prompting for restore
+    if (!isDataImported && rrTools.length === 0 && priceMarkers.length === 0 && measurementTools.length === 0) {
+        return;
     }
-  }, [sessionStartTime]);
+    
+    // Convert rrTools dates to string to prevent serialization issues
+    const serializableDrawingState = {
+        ...drawingState,
+        rrTools: drawingState.rrTools.map(tool => ({
+            ...tool,
+            entryDate: tool.entryDate.toISOString()
+        })),
+    };
 
-  useEffect(() => {
-      localStorage.setItem('algo-insights-pip-value', String(pipValue));
-  }, [pipValue]);
+    const sessionState: SessionState = {
+        drawingState: serializableDrawingState as any, // Cast because of date string
+        selectedDate: selectedDate.toISOString(),
+        fileName,
+    };
+    localStorage.setItem(SESSION_KEY, JSON.stringify(sessionState));
+
+  }, [drawingState, selectedDate, fileName, isDataImported]);
+
+  const handleRestoreSession = () => {
+    setShowRestoreDialog(false);
+    const savedSessionRaw = localStorage.getItem(SESSION_KEY);
+    if (savedSessionRaw) {
+        try {
+            const savedSession: SessionState = JSON.parse(savedSessionRaw);
+
+            // Restore drawings by converting dates back
+            const restoredRrTools = savedSession.drawingState.rrTools.map(tool => ({
+                ...tool,
+                entryDate: new Date(tool.entryDate),
+            }));
+
+            const restoredDrawingState = {
+                ...savedSession.drawingState,
+                rrTools: restoredRrTools,
+            };
+
+            setDrawingState(restoredDrawingState);
+            setSelectedDate(new Date(savedSession.selectedDate));
+            setFileName(savedSession.fileName);
+            // Don't set price data, wait for user to import
+            setPriceData([]);
+            setIsDataImported(false);
+
+            toast({
+                title: "Session Restored",
+                description: `Drawings and settings loaded. Please re-import "${savedSession.fileName}" to see the chart data.`,
+                duration: 9000
+            });
+        } catch (e) {
+            console.error("Failed to restore session", e);
+            toast({ variant: "destructive", title: "Restore Failed", description: "Could not restore session from storage." });
+            handleDeclineRestore();
+        }
+    }
+  };
+
+  const handleDeclineRestore = () => {
+      setShowRestoreDialog(false);
+      localStorage.removeItem(SESSION_KEY);
+      setDrawingState({ rrTools: [], priceMarkers: [], measurementTools: [] });
+      setHistory([]);
+      setRedoStack([]);
+      setFileName('');
+      setIsDataImported(false);
+      setPriceData(mockPriceData); // Load mock data for a fresh start
+  };
 
 
   const handleChartClick = (chartData: { price: number; date: Date, dataIndex: number, closePrice: number, yDomain: [number, number], xDomain: [number, number] }) => {
@@ -352,22 +437,27 @@ export default function AlgoInsightsPage() {
   };
   
   const handleUpdateTool = (updatedTool: RRToolType) => {
+    pushToHistory(drawingState);
     setRrTools(prevTools => prevTools.map(t => t.id === updatedTool.id ? updatedTool : t));
   };
 
   const handleRemoveTool = (id: string) => {
+    pushToHistory(drawingState);
     setRrTools(prevTools => prevTools.filter(t => t.id !== id));
   };
 
   const handleRemovePriceMarker = (id: string) => {
+    pushToHistory(drawingState);
     setPriceMarkers(prevMarkers => prevMarkers.filter(m => m.id !== id));
   };
 
   const handleRemoveMeasurementTool = (id: string) => {
+    pushToHistory(drawingState);
     setMeasurementTools(prev => prev.filter(t => t.id !== id));
   };
 
   const handleUpdatePriceMarker = (id: string, price: number) => {
+    pushToHistory(drawingState);
     setPriceMarkers(prevMarkers => 
       prevMarkers.map(m => 
         m.id === id ? { ...m, price } : m
@@ -446,7 +536,11 @@ export default function AlgoInsightsPage() {
                 parsedData.sort((a, b) => a.date.getTime() - b.date.getTime());
                 setPriceData(parsedData);
                 setIsDataImported(true);
-                setSelectedDate(parsedData[parsedData.length - 1].date);
+                // On first import, pan to end. On re-import for session restore, selectedDate is already set.
+                const savedSession = localStorage.getItem(SESSION_KEY);
+                if (!savedSession) {
+                    setSelectedDate(parsedData[parsedData.length - 1].date);
+                }
             } else {
                 throw new Error("No valid data rows were parsed from the file.");
             }
@@ -531,7 +625,7 @@ export default function AlgoInsightsPage() {
     }).filter(row => row !== null).join('\n');
 
     const csvContent = `${headers}\n${rows}`;
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-t;' });
     const link = document.createElement("a");
     if (link.href) {
       URL.revokeObjectURL(link.href);
@@ -569,9 +663,9 @@ export default function AlgoInsightsPage() {
 
     setSelectedDate(currentDate => {
       const newDate = new Date(currentDate.getTime() + getDuration(timeframe));
-      const lastAvailableDate = priceData[priceData.length - 1].date;
+      const lastAvailableDate = priceData[priceData.length - 1]?.date;
 
-      if (newDate > lastAvailableDate) {
+      if (lastAvailableDate && newDate > lastAvailableDate) {
         return lastAvailableDate;
       }
       
@@ -652,7 +746,8 @@ export default function AlgoInsightsPage() {
             label: 'Low',
             isDeletable: true,
         };
-
+        
+        pushToHistory(drawingState);
         setPriceMarkers(prev => [...otherMarkers, highMarker, lowMarker]);
 
         // Pan the view to show the opening range and a few subsequent candles
@@ -775,6 +870,23 @@ export default function AlgoInsightsPage() {
       </header>
 
       <main className="flex-1 relative">
+        <AlertDialog open={showRestoreDialog} onOpenChange={setShowRestoreDialog}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Restore Previous Session?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        We found saved drawings and settings for the file: <strong>{sessionToRestore}</strong>.
+                        <br />
+                        Would you like to restore this session? You will be prompted to re-import the file.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel onClick={handleDeclineRestore}>Start New Session</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleRestoreSession}>Restore</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+
         <div className="absolute inset-0">
             <InteractiveChart
                 data={priceData}
@@ -836,7 +948,7 @@ export default function AlgoInsightsPage() {
               <TooltipProvider>
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={handleNextCandle} className="text-muted-foreground">
+                        <Button variant="ghost" size="icon" onClick={handleNextCandle} className="text-muted-foreground" disabled={priceData.length === 0}>
                             <ChevronRight className="h-5 w-5" />
                         </Button>
                     </TooltipTrigger>
@@ -849,7 +961,7 @@ export default function AlgoInsightsPage() {
               <TooltipProvider>
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={handleNextSession} className="text-muted-foreground">
+                        <Button variant="ghost" size="icon" onClick={handleNextSession} className="text-muted-foreground" disabled={priceData.length === 0}>
                             <ChevronsRight className="h-5 w-5" />
                         </Button>
                     </TooltipTrigger>
@@ -865,7 +977,7 @@ export default function AlgoInsightsPage() {
                 <div className="flex justify-center gap-2">
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={handlePlaceLong} disabled={isPlacingAnything}>
+                            <Button variant="ghost" size="icon" onClick={handlePlaceLong} disabled={isPlacingAnything || priceData.length === 0}>
                                 <ArrowUp className="w-5 h-5 text-accent"/>
                             </Button>
                         </TooltipTrigger>
@@ -875,7 +987,7 @@ export default function AlgoInsightsPage() {
                     </Tooltip>
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={handlePlaceShort} disabled={isPlacingAnything}>
+                            <Button variant="ghost" size="icon" onClick={handlePlaceShort} disabled={isPlacingAnything || priceData.length === 0}>
                                 <ArrowDown className="w-5 h-5 text-destructive"/>
                             </Button>
                         </TooltipTrigger>
@@ -919,7 +1031,7 @@ export default function AlgoInsightsPage() {
               <Button
                   variant="ghost" 
                   onClick={handleExportCsv} 
-                  disabled={rrTools.length === 0}
+                  disabled={rrTools.length === 0 || !isDataImported}
                   className="text-foreground"
               >
                   <Download className="mr-2 h-4 w-4" />
@@ -931,7 +1043,7 @@ export default function AlgoInsightsPage() {
                 <TooltipProvider>
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={handlePlaceMarker} disabled={isPlacingAnything}>
+                            <Button variant="ghost" size="icon" onClick={handlePlaceMarker} disabled={isPlacingAnything || priceData.length === 0}>
                                 <Target className="w-5 h-5 text-foreground"/>
                             </Button>
                         </TooltipTrigger>
@@ -955,7 +1067,7 @@ export default function AlgoInsightsPage() {
                 <TooltipProvider>
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={handlePlaceMeasurement} disabled={isPlacingAnything}>
+                            <Button variant="ghost" size="icon" onClick={handlePlaceMeasurement} disabled={isPlacingAnything || priceData.length === 0}>
                                 <Ruler className="w-5 h-5 text-foreground"/>
                             </Button>
                         </TooltipTrigger>
@@ -1006,5 +1118,7 @@ export default function AlgoInsightsPage() {
     </div>
   );
 }
+
+    
 
     
