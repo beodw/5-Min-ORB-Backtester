@@ -82,6 +82,9 @@ const simulateTrade = (
             if (candle.high >= tool.takeProfit) {
                 tradeOutcome = 'win';
                 dateClosed = candle.date;
+                // LOGIC HIGHLIGHT:
+                // For a winning long trade, the minimum distance to the stop loss is the difference
+                // between the lowest price reached during the trade (`lowSinceEntry`) and the stop loss level.
                 const minSlDistPrice = lowSinceEntry - tool.stopLoss;
                 minDistanceToSLPips = pipValue > 0 ? minSlDistPrice / pipValue : 0;
                 break; // Exit loop on win
@@ -90,6 +93,8 @@ const simulateTrade = (
             if (candle.low <= tool.stopLoss) {
                 tradeOutcome = 'loss';
                 dateClosed = candle.date;
+                 // LOGIC HIGHLIGHT:
+                // For a losing trade, the price hit the stop loss, so the minimum distance is 0.
                 minDistanceToSLPips = 0;
                 break; // Exit loop on loss
             }
@@ -98,6 +103,9 @@ const simulateTrade = (
             if (candle.low <= tool.takeProfit) {
                 tradeOutcome = 'win';
                 dateClosed = candle.date;
+                 // LOGIC HIGHLIGHT:
+                // For a winning short trade, the minimum distance to the stop loss is the difference
+                // between the stop loss level and the highest price reached during the trade (`highSinceEntry`).
                 const minSlDistPrice = tool.stopLoss - highSinceEntry;
                 minDistanceToSLPips = pipValue > 0 ? minSlDistPrice / pipValue : 0;
                 break; // Exit loop on win
@@ -106,6 +114,8 @@ const simulateTrade = (
             if (candle.high >= tool.stopLoss) {
                 tradeOutcome = 'loss';
                 dateClosed = candle.date;
+                // LOGIC HIGHLIGHT:
+                // For a losing trade, the price hit the stop loss, so the minimum distance is 0.
                 minDistanceToSLPips = 0;
                 break; // Exit loop on loss
             }
