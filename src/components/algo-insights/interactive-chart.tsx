@@ -465,9 +465,7 @@ export function InteractiveChart({
   return (
     <div 
       ref={chartContainerRef} 
-      className={cn(
-        "w-full h-full relative",
-      )}
+      className="w-full h-full relative"
       onWheel={handleWheel}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
@@ -599,3 +597,4 @@ export function InteractiveChart({
       )}
     </div>
   );
+}
