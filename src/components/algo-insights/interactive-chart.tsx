@@ -599,5 +599,3 @@ export function InteractiveChart({
       )}
     </div>
   );
-
-    
