@@ -2,11 +2,11 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, ChevronRight, ChevronsRight, Target, Trash2, FileUp, Lock, Unlock, Ruler, FileBarChart } from "lucide-react";
+import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, ChevronRight, ChevronsRight, Target, Trash2, FileUp, Lock, Unlock, Ruler, FileBarChart, Undo, Redo } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InteractiveChart } from "@/components/algo-insights/interactive-chart";
 import { mockPriceData } from "@/lib/mock-data";
-import type { RiskRewardTool as RRToolType, PriceMarker, OpeningRange, PriceData, MeasurementTool as MeasurementToolType, MeasurementPoint } from "@/types";
+import type { RiskRewardTool as RRToolType, PriceMarker, MeasurementTool as MeasurementToolType, MeasurementPoint, PriceData } from "@/types";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -39,6 +39,12 @@ type TradeReportRow = {
     comments: string;
     stopLossPips: string;
     minDistanceToSLPips: string;
+};
+
+type DrawingState = {
+    rrTools: RRToolType[];
+    priceMarkers: PriceMarker[];
+    measurementTools: MeasurementToolType[];
 };
 
 
@@ -141,11 +147,56 @@ export default function AlgoInsightsPage() {
   const [priceData, setPriceData] = useState<PriceData[]>(mockPriceData);
   const [isDataImported, setIsDataImported] = useState(false);
   const [fileName, setFileName] = useState('');
-  const [rrTools, setRrTools] = useState<RRToolType[]>([]);
+
+  const [drawingState, setDrawingState] = useState<DrawingState>({
+    rrTools: [],
+    priceMarkers: [],
+    measurementTools: []
+  });
+
+  const [history, setHistory] = useState<DrawingState[]>([]);
+  const [redoStack, setRedoStack] = useState<DrawingState[]>([]);
+
+  const { rrTools, priceMarkers, measurementTools } = drawingState;
+
+  const pushToHistory = (currentState: DrawingState) => {
+    setHistory(prev => [...prev, currentState]);
+    setRedoStack([]); // Clear redo stack on new action
+  };
+
+  const setRrTools = (updater: (prev: RRToolType[]) => RRToolType[]) => {
+    pushToHistory(drawingState);
+    setDrawingState(prev => ({ ...prev, rrTools: updater(prev.rrTools) }));
+  };
+
+  const setPriceMarkers = (updater: (prev: PriceMarker[]) => PriceMarker[]) => {
+    pushToHistory(drawingState);
+    setDrawingState(prev => ({ ...prev, priceMarkers: updater(prev.priceMarkers) }));
+  };
+  
+  const setMeasurementTools = (updater: (prev: MeasurementToolType[]) => MeasurementToolType[]) => {
+    pushToHistory(drawingState);
+    setDrawingState(prev => ({ ...prev, measurementTools: updater(prev.measurementTools) }));
+  };
+  
+  const handleUndo = () => {
+    if (history.length === 0) return;
+    const lastState = history[history.length - 1];
+    setRedoStack(prev => [drawingState, ...prev]);
+    setHistory(prev => prev.slice(0, prev.length - 1));
+    setDrawingState(lastState);
+  };
+  
+  const handleRedo = () => {
+    if (redoStack.length === 0) return;
+    const nextState = redoStack[0];
+    setHistory(prev => [...prev, drawingState]);
+    setRedoStack(prev => prev.slice(1));
+    setDrawingState(nextState);
+  };
+
   const [placingToolType, setPlacingToolType] = useState<'long' | 'short' | null>(null);
-  const [priceMarkers, setPriceMarkers] = useState<PriceMarker[]>([]);
   const [isPlacingPriceMarker, setIsPlacingPriceMarker] = useState(false);
-  const [measurementTools, setMeasurementTools] = useState<MeasurementToolType[]>([]);
   const [isPlacingMeasurement, setIsPlacingMeasurement] = useState(false);
   const [measurementStartPoint, setMeasurementStartPoint] = useState<MeasurementPoint | null>(null);
   const [timeframe, setTimeframe] = useState('1m');
@@ -306,9 +357,12 @@ export default function AlgoInsightsPage() {
   };
 
   const handleClearAllDrawings = () => {
-    setRrTools([]);
-    setPriceMarkers([]);
-    setMeasurementTools([]);
+    pushToHistory(drawingState);
+    setDrawingState({
+        rrTools: [],
+        priceMarkers: [],
+        measurementTools: []
+    });
   };
 
   const handleImportClick = () => {
@@ -572,7 +626,7 @@ export default function AlgoInsightsPage() {
             isDeletable: true,
         };
 
-        setPriceMarkers([...otherMarkers, highMarker, lowMarker]);
+        setPriceMarkers(prev => [...otherMarkers, highMarker, lowMarker]);
 
         // Pan the view to show the opening range and a few subsequent candles
         const viewEndIndex = Math.min(startIndex + 15, priceData.length - 1);
@@ -631,6 +685,14 @@ export default function AlgoInsightsPage() {
         </div>
         <div className="flex items-center gap-4">
             <span className="text-sm text-muted-foreground hidden sm:inline-block">{timeZone.replace(/_/g, ' ')}</span>
+            <div className="flex items-center gap-1">
+                <Button variant="ghost" size="icon" onClick={handleUndo} disabled={history.length === 0}>
+                    <Undo className="h-5 w-5" />
+                </Button>
+                <Button variant="ghost" size="icon" onClick={handleRedo} disabled={redoStack.length === 0}>
+                    <Redo className="h-5 w-5" />
+                </Button>
+            </div>
             <Popover>
                 <PopoverTrigger asChild>
                     <Button variant="ghost" size="icon">

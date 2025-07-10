@@ -302,3 +302,5 @@ export function RiskRewardTool({ tool, onUpdateTool, onRemove, data, xScale, ySc
     </g>
   );
 }
+
+    
