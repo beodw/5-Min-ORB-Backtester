@@ -506,6 +506,7 @@ export function InteractiveChart({
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseLeave}
+      style={{ cursor: isPlacingRR || isPlacingPriceMarker ? 'crosshair' : (isDragging ? 'grabbing' : 'crosshair')}}
     >
       {!aggregatedData || aggregatedData.length === 0 ? (
         <div className="flex items-center justify-center w-full h-full text-muted-foreground">
@@ -605,7 +606,7 @@ export function InteractiveChart({
                       key={tool.id}
                       tool={tool}
                       onUpdateTool={onUpdateTool}
-                      onRemove={onRemove}
+                      onRemove={onRemoveTool}
                       data={aggregatedData}
                       xScale={mainXAxis.scale}
                       yScale={mainYAxis.scale}
