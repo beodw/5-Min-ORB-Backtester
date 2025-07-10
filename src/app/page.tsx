@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, ChevronRight, ChevronsRight, Target, Trash2, FileUp, Lock, Unlock, Ruler } from "lucide-react";
+import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, ChevronRight, ChevronsRight, Target, Trash2, FileUp, Lock, Unlock, Ruler, FileBarChart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InteractiveChart } from "@/components/algo-insights/interactive-chart";
 import { mockPriceData } from "@/lib/mock-data";
@@ -63,48 +63,63 @@ const simulateTrade = (
     let highSinceEntry = -Infinity;
     let lowSinceEntry = Infinity;
 
-    for (let i = entryIndex; i < priceData.length; i++) {
+    // Start from the candle *after* entry. A trade cannot be won/lost on the entry candle.
+    for (let i = entryIndex + 1; i < priceData.length; i++) {
         const candle = priceData[i];
         
+        // Update the max/min price seen during the trade's lifetime
         highSinceEntry = Math.max(highSinceEntry, candle.high);
         lowSinceEntry = Math.min(lowSinceEntry, candle.low);
 
         if (tool.position === 'long') {
-            if (candle.low <= tool.stopLoss) {
-                tradeOutcome = 'loss';
-                dateClosed = candle.date;
-                minDistanceToSLPips = 0;
-                break;
-            }
+             // Check for win condition first
             if (candle.high >= tool.takeProfit) {
                 tradeOutcome = 'win';
                 dateClosed = candle.date;
                 const minSlDistPrice = lowSinceEntry - tool.stopLoss;
                 minDistanceToSLPips = pipValue > 0 ? minSlDistPrice / pipValue : 0;
+                break; // Exit loop on win
             }
-        } else { // 'short'
-            if (candle.high >= tool.stopLoss) {
+            // Then check for loss condition
+            if (candle.low <= tool.stopLoss) {
                 tradeOutcome = 'loss';
                 dateClosed = candle.date;
                 minDistanceToSLPips = 0;
-                break;
+                break; // Exit loop on loss
             }
+        } else { // 'short'
+            // Check for win condition first
             if (candle.low <= tool.takeProfit) {
                 tradeOutcome = 'win';
                 dateClosed = candle.date;
                 const minSlDistPrice = tool.stopLoss - highSinceEntry;
                 minDistanceToSLPips = pipValue > 0 ? minSlDistPrice / pipValue : 0;
+                break; // Exit loop on win
+            }
+             // Then check for loss condition
+            if (candle.high >= tool.stopLoss) {
+                tradeOutcome = 'loss';
+                dateClosed = candle.date;
+                minDistanceToSLPips = 0;
+                break; // Exit loop on loss
             }
         }
     }
     
+    // Calculate Max R based on the entire (completed) trade duration
     if (riskAmountPrice > 0) {
-        if (tool.position === 'long') {
-            const maxProfitPrice = highSinceEntry - tool.entryPrice;
-            maxR = maxProfitPrice / riskAmountPrice;
-        } else { // 'short'
-            const maxProfitPrice = tool.entryPrice - lowSinceEntry;
-            maxR = maxProfitPrice / riskAmountPrice;
+        if (tradeOutcome === 'win') {
+             // For wins, MaxR is just the RR ratio
+             maxR = Math.abs((tool.takeProfit - tool.entryPrice) / (tool.entryPrice - tool.stopLoss));
+        } else if (tradeOutcome === 'loss' || tradeOutcome === 'Incomplete') {
+            // For losses or incomplete trades, calculate realized R
+            if (tool.position === 'long') {
+                const maxProfitPrice = highSinceEntry - tool.entryPrice;
+                maxR = maxProfitPrice / riskAmountPrice;
+            } else { // 'short'
+                const maxProfitPrice = tool.entryPrice - lowSinceEntry;
+                maxR = maxProfitPrice / riskAmountPrice;
+            }
         }
     }
     
@@ -608,11 +623,7 @@ export default function AlgoInsightsPage() {
       <header className="flex items-center justify-between p-4 border-b border-border shadow-md">
         <div className="flex items-center gap-2">
            <div className="p-2 bg-primary rounded-lg">
-             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6 text-primary-foreground">
-                <path d="M4 8h16"/>
-                <path d="M4 12h16"/>
-                <path d="M12 4v16l4-4"/>
-              </svg>
+             <FileBarChart className="w-6 h-6 text-primary-foreground" />
            </div>
           <h1 className="text-2xl font-bold font-headline text-foreground">
             5 Minute ORB Backtester
@@ -906,3 +917,5 @@ export default function AlgoInsightsPage() {
     </div>
   );
 }
+
+    

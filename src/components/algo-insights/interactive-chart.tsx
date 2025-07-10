@@ -149,7 +149,7 @@ export function InteractiveChart({
   const [yDomain, setYDomain] = useState<[number, number]>([0, 100]);
   const [isDragging, setIsDragging] = useState(false);
   const [isYAxisDragging, setIsYAxisDragging] = useState(false);
-  const [cursor, setCursor] = useState('grab');
+  const [cursor, setCursor] = useState('crosshair');
   const [dragStart, setDragStart] = useState<{ x: number, y: number, xDomain: [number, number], yDomain: [number, number] } | null>(null);
 
 
@@ -306,8 +306,8 @@ export function InteractiveChart({
         const mouseIndex = domainStart + (chartX / plotWidth) * domainWidth;
         
         const zoomFactor = 1.1;
-        // scroll down (e.deltaY > 0) zooms out, scroll up zooms in.
-        let newDomainWidth = e.deltaY > 0 ? domainWidth * zoomFactor : domainWidth / zoomFactor;
+        // scroll up (e.deltaY < 0) zooms in, scroll down zooms out.
+        let newDomainWidth = e.deltaY < 0 ? domainWidth / zoomFactor : domainWidth * zoomFactor;
       
         let newStart = mouseIndex - (mouseIndex - domainStart) * (newDomainWidth / domainWidth);
         
@@ -338,7 +338,10 @@ export function InteractiveChart({
         yDomain: yDomain,
     };
 
-    if (cursor === 'ns-resize' && !isYAxisLocked) {
+    const { right } = chartContainerRef.current.getBoundingClientRect();
+    const yAxisAreaStart = right - 80; // approximate axis width
+
+    if (e.clientX > yAxisAreaStart && !isYAxisLocked) {
         setIsYAxisDragging(true);
         setDragStart(dragStartPayload);
     } else {
@@ -400,7 +403,7 @@ export function InteractiveChart({
               const pricePerPixel = yDomainWidth / plotHeight;
               const deltaPrice = dy * 1 * pricePerPixel; 
               
-              const newYStart = yStart + deltaPrice;
+              const newYStart = yStart - deltaPrice; // Inverted logic here
               const newYEnd = newYStart + yDomainWidth;
               setYDomain([newYStart, newYEnd]);
             }
@@ -413,7 +416,7 @@ export function InteractiveChart({
         if (e.clientX > yAxisAreaStart && !isYAxisLocked) {
             setCursor('ns-resize');
         } else {
-             setCursor('grab');
+             setCursor('crosshair');
         }
     }
   };
@@ -423,7 +426,7 @@ export function InteractiveChart({
     setIsYAxisDragging(false);
     setDragStart(null);
     if (!isPlacingRR && !isPlacingPriceMarker) {
-        setCursor('grab');
+        setCursor('crosshair');
     }
   };
   
@@ -431,6 +434,7 @@ export function InteractiveChart({
     if (isDragging || isYAxisDragging) {
         handleMouseUp(e);
     }
+    setCursor('crosshair'); // Reset cursor on leave
   };
 
   const formatXAxis = useCallback((tickItem: any) => {
@@ -593,3 +597,5 @@ export function InteractiveChart({
     </div>
   );
 }
+
+    
