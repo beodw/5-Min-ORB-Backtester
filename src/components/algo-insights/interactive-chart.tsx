@@ -82,10 +82,7 @@ const CustomTooltip = ({ active, payload, label, timeZone }: any) => {
     const date = new Date(label);
 
     const formatValue = (value: number) => value.toFixed(5);
-    const formatLabel = (value: string, color: string) => (
-      <span style={{ color }}>{value}</span>
-    );
-
+    
     return (
       <div className="bg-popover/80 backdrop-blur-sm text-popover-foreground rounded-md border border-border p-2 text-xs shadow-lg">
         <p className="font-bold mb-2">
@@ -136,6 +133,9 @@ export function InteractiveChart({
 }: InteractiveChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartScalesRef = useRef<{x: any, y: any, plot: any} | null>(null);
+  
+  const [tooltipData, setTooltipData] = useState<any>(null);
+  const tooltipTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const aggregatedData = useMemo(() => {
     if (!data || data.length === 0) {
@@ -339,12 +339,46 @@ export function InteractiveChart({
   };
 
     const handleMouseMoveRecharts = (e: any) => {
-        if (isDragging || isYAxisDragging) return; // Don't fire mouse move when panning
+        if (isDragging || isYAxisDragging) { // Don't fire mouse move when panning
+            setTooltipData(null);
+            if (tooltipTimerRef.current) clearTimeout(tooltipTimerRef.current);
+            return;
+        }
+
+        if (tooltipTimerRef.current) clearTimeout(tooltipTimerRef.current);
         const coords = getChartCoordinates(e);
+
         if (coords) {
-            onChartMouseMove(coords);
+            onChartMouseMove(coords); // For live measurement tool
+            
+            const { price, candle } = coords;
+            const bodyTop = Math.max(candle.open, candle.close);
+            const bodyBottom = Math.min(candle.open, candle.close);
+            const isOverBody = price >= bodyBottom && price <= bodyTop;
+            
+            if (isOverBody) {
+                tooltipTimerRef.current = setTimeout(() => {
+                    setTooltipData({
+                        active: true,
+                        payload: [{ payload: candle }],
+                        label: candle.date.getTime(),
+                        coordinate: { x: e.chartX, y: e.chartY },
+                    });
+                }, 1500);
+            } else {
+                setTooltipData(null);
+            }
+        } else {
+            setTooltipData(null);
         }
     };
+
+    const handleMouseLeaveChart = () => {
+        if (tooltipTimerRef.current) {
+            clearTimeout(tooltipTimerRef.current);
+        }
+        setTooltipData(null);
+    }
 
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -495,6 +529,7 @@ export function InteractiveChart({
     if (chartContainerRef.current) {
       chartContainerRef.current.style.cursor = 'default';
     }
+    handleMouseLeaveChart();
   };
 
   const formatXAxis = useCallback((tickItem: any) => {
@@ -539,6 +574,7 @@ export function InteractiveChart({
             data={windowedData} 
             onClick={handleClick}
             onMouseMove={handleMouseMoveRecharts} 
+            onMouseLeave={handleMouseLeaveChart}
             margin={{ top: 10, right: 30, left: 0, bottom: 10 }}
         >
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border) / 0.5)" />
@@ -569,9 +605,14 @@ export function InteractiveChart({
           />
           <Tooltip
             content={<CustomTooltip timeZone={timeZone} />}
-            cursor={{ stroke: 'hsl(var(--accent))', strokeWidth: 1, strokeDasharray: '3 3' }}
+            cursor={false}
+            wrapperStyle={{ pointerEvents: 'none' }}
             animationDuration={300}
             animationEasing="ease-out"
+            position={tooltipData?.coordinate}
+            active={tooltipData?.active}
+            payload={tooltipData?.payload}
+            label={tooltipData?.label}
           />
           
           <Bar dataKey="wick" shape={<Candlestick />} isAnimationActive={false} xAxisId="main" yAxisId="main"/>
