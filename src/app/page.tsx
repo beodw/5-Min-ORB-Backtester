@@ -88,9 +88,6 @@ const simulateTrade = (
     let highSinceEntry = priceData[firstCandleIndex].high;
     let lowSinceEntry = priceData[firstCandleIndex].low;
 
-    let debug_lowPriceDate: Date = priceData[firstCandleIndex].date;
-    let debug_highPriceDate: Date = priceData[firstCandleIndex].date;
-
     // Start loop from the second candle *after* entry
     for (let i = firstCandleIndex + 1; i < priceData.length; i++) {
         const candle = priceData[i];
@@ -98,11 +95,9 @@ const simulateTrade = (
         // Update the max/min price seen during the trade's lifetime FIRST
         if (candle.high > highSinceEntry) {
             highSinceEntry = candle.high;
-            debug_highPriceDate = candle.date;
         }
         if (candle.low < lowSinceEntry) {
             lowSinceEntry = candle.low;
-            debug_lowPriceDate = candle.date;
         }
 
         if (tool.position === 'long') {
@@ -112,7 +107,6 @@ const simulateTrade = (
                 dateClosed = candle.date;
                 const minSlDistPrice = lowSinceEntry - tool.stopLoss;
                 minDistanceToSLPips = pipValue > 0 ? minSlDistPrice / pipValue : 0;
-                comments = `Debug: Low used for calc: ${lowSinceEntry.toFixed(5)} at ${debug_lowPriceDate?.toLocaleString()}`;
                 break; // Exit loop on win
             }
             // Then check for loss condition
@@ -120,7 +114,6 @@ const simulateTrade = (
                 tradeOutcome = 'loss';
                 dateClosed = candle.date;
                 minDistanceToSLPips = 0;
-                comments = 'Debug: SL was hit.';
                 break; // Exit loop on loss
             }
         } else { // 'short'
@@ -130,7 +123,6 @@ const simulateTrade = (
                 dateClosed = candle.date;
                 const minSlDistPrice = tool.stopLoss - highSinceEntry;
                 minDistanceToSLPips = pipValue > 0 ? minSlDistPrice / pipValue : 0;
-                comments = `Debug: High used for calc: ${highSinceEntry.toFixed(5)} at ${debug_highPriceDate?.toLocaleString()}`;
                 break; // Exit loop on win
             }
              // Then check for loss condition
@@ -138,7 +130,6 @@ const simulateTrade = (
                 tradeOutcome = 'loss';
                 dateClosed = candle.date;
                 minDistanceToSLPips = 0;
-                comments = 'Debug: SL was hit.';
                 break; // Exit loop on loss
             }
         }
@@ -1255,7 +1246,3 @@ export default function AlgoInsightsPage() {
     </div>
   );
 }
-
-    
-
-    
