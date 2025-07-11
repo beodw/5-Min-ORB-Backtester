@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, ChevronRight, ChevronsRight, Target, Trash2, FileUp, Lock, Unlock, Ruler, FileBarChart, Undo, Redo } from "lucide-react";
+import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, ChevronRight, ChevronsRight, Target, Trash2, FileUp, Lock, Unlock, Ruler, FileBarChart, Undo, Redo, GripVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InteractiveChart, type ChartClickData } from "@/components/algo-insights/interactive-chart";
 import { mockPriceData } from "@/lib/mock-data";
@@ -53,6 +53,10 @@ type SessionState = {
     fileName: string;
 };
 
+type ToolbarPositions = {
+    main: { x: number; y: number };
+    secondary: { x: number; y: number };
+};
 
 const simulateTrade = (
     tool: RRToolType,
@@ -173,7 +177,7 @@ const simulateTrade = (
 // Local storage keys
 const APP_SETTINGS_KEY = 'algo-insights-settings';
 const SESSION_KEY = 'algo-insights-session';
-
+const TOOLBAR_POS_KEY = 'algo-insights-toolbar-positions';
 
 export default function AlgoInsightsPage() {
   const [priceData, setPriceData] = useState<PriceData[]>(mockPriceData);
@@ -188,6 +192,16 @@ export default function AlgoInsightsPage() {
 
   const [history, setHistory] = useState<DrawingState[]>([]);
   const [redoStack, setRedoStack] = useState<DrawingState[]>([]);
+  
+  const [toolbarPositions, setToolbarPositions] = useState<ToolbarPositions>({
+    main: { x: 16, y: 16 },
+    secondary: { x: 16, y: 88 }
+  });
+  const dragInfo = useRef<{
+    target: 'main' | 'secondary' | null;
+    offsetX: number;
+    offsetY: number;
+  }>({ target: null, offsetX: 0, offsetY: 0 });
 
   const { rrTools, priceMarkers, measurementTools } = drawingState;
 
@@ -302,6 +316,18 @@ export default function AlgoInsightsPage() {
             localStorage.removeItem(SESSION_KEY);
         }
     }
+    
+    // Load toolbar positions
+    const savedToolbarPosRaw = localStorage.getItem(TOOLBAR_POS_KEY);
+    if (savedToolbarPosRaw) {
+        try {
+            const savedPos: ToolbarPositions = JSON.parse(savedToolbarPosRaw);
+            setToolbarPositions(savedPos);
+        } catch (e) {
+            console.error("Failed to parse toolbar positions from localStorage", e);
+        }
+    }
+
   }, []);
 
   // Effect for saving app settings
@@ -665,7 +691,7 @@ export default function AlgoInsightsPage() {
     }).filter(row => row !== null).join('\n');
 
     const csvContent = `${headers}\n${rows}`;
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-t;' });
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     if (link.href) {
       URL.revokeObjectURL(link.href);
@@ -836,6 +862,46 @@ export default function AlgoInsightsPage() {
     setIsPlacingMeasurement(true);
   };
 
+  const handleMouseDownOnToolbar = (e: React.MouseEvent, target: 'main' | 'secondary') => {
+    // Only drag with left mouse button
+    if (e.button !== 0) return;
+    
+    const targetElement = e.currentTarget as HTMLDivElement;
+    const rect = targetElement.getBoundingClientRect();
+    
+    dragInfo.current = {
+      target,
+      offsetX: e.clientX - rect.left,
+      offsetY: e.clientY - rect.top,
+    };
+    
+    window.addEventListener('mousemove', handleToolbarMouseMove);
+    window.addEventListener('mouseup', handleToolbarMouseUp);
+  };
+
+  const handleToolbarMouseMove = (e: MouseEvent) => {
+    if (!dragInfo.current.target) return;
+    
+    const { target, offsetX, offsetY } = dragInfo.current;
+    
+    setToolbarPositions(prev => ({
+      ...prev,
+      [target]: {
+        x: e.clientX - offsetX,
+        y: e.clientY - offsetY
+      }
+    }));
+  };
+
+  const handleToolbarMouseUp = () => {
+    if (dragInfo.current.target) {
+        localStorage.setItem(TOOLBAR_POS_KEY, JSON.stringify(toolbarPositions));
+    }
+    dragInfo.current.target = null;
+    window.removeEventListener('mousemove', handleToolbarMouseMove);
+    window.removeEventListener('mouseup', handleToolbarMouseUp);
+  };
+
   const isPlacingAnything = !!placingToolType || isPlacingPriceMarker || isPlacingMeasurement;
 
   return (
@@ -913,7 +979,7 @@ export default function AlgoInsightsPage() {
         </div>
       </header>
 
-      <main className="flex-1 relative">
+      <main className="flex-1 relative overflow-hidden">
         <AlertDialog open={showRestoreDialog} onOpenChange={setShowRestoreDialog}>
             <AlertDialogContent>
                 <AlertDialogHeader>
@@ -956,8 +1022,19 @@ export default function AlgoInsightsPage() {
             />
         </div>
 
-        <div className="absolute top-4 left-4 z-10 flex flex-col items-start gap-2">
-            <div className="flex items-center gap-2 bg-card/80 backdrop-blur-sm p-2 rounded-lg shadow-lg">
+        <div 
+          className="absolute z-10 flex flex-col items-start gap-2"
+          style={{ top: `${toolbarPositions.main.y}px`, left: `${toolbarPositions.main.x}px` }}
+        >
+            <div
+                className="flex items-center gap-2 bg-card/80 backdrop-blur-sm p-2 rounded-lg shadow-lg"
+            >
+              <div
+                  onMouseDown={(e) => handleMouseDownOnToolbar(e, 'main')}
+                  className="cursor-grab active:cursor-grabbing p-1 -ml-1"
+              >
+                  <GripVertical className="h-5 w-5 text-muted-foreground/50" />
+              </div>
               <Select value={timeframe} onValueChange={setTimeframe}>
                   <SelectTrigger className="w-[120px]">
                       <SelectValue placeholder="Timeframe" />
@@ -1020,33 +1097,6 @@ export default function AlgoInsightsPage() {
               <div className="h-6 border-l border-border/50"></div>
               
               <TooltipProvider>
-                <div className="flex justify-center gap-2">
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={handlePlaceLong} disabled={isPlacingAnything || priceData.length === 0}>
-                                <ArrowUp className="w-5 h-5 text-accent"/>
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                            <p>Place Long Position</p>
-                        </TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={handlePlaceShort} disabled={isPlacingAnything || priceData.length === 0}>
-                                <ArrowDown className="w-5 h-5 text-destructive"/>
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                            <p>Place Short Position</p>
-                        </TooltipContent>
-                    </Tooltip>
-                </div>
-              </TooltipProvider>
-
-              <div className="h-6 border-l border-border/50"></div>
-
-              <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
@@ -1085,7 +1135,52 @@ export default function AlgoInsightsPage() {
               </Button>
             </div>
             
+            {fileName && (
+                <div className="bg-card/70 backdrop-blur-sm rounded-md px-2 py-1 shadow-md ml-8">
+                    <p className="text-xs text-muted-foreground/80">
+                        Loaded: <span className="font-medium text-foreground/90">{fileName}</span>
+                    </p>
+                </div>
+            )}
+        </div>
+        <div
+            className="absolute z-10"
+            style={{ top: `${toolbarPositions.secondary.y}px`, left: `${toolbarPositions.secondary.x}px` }}
+        >
             <div className="flex items-center gap-2 bg-card/80 backdrop-blur-sm p-2 rounded-lg shadow-lg">
+                <div
+                    onMouseDown={(e) => handleMouseDownOnToolbar(e, 'secondary')}
+                    className="cursor-grab active:cursor-grabbing p-1 -ml-1"
+                >
+                    <GripVertical className="h-5 w-5 text-muted-foreground/50" />
+                </div>
+                <TooltipProvider>
+                    <div className="flex justify-center gap-1">
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" onClick={handlePlaceLong} disabled={isPlacingAnything || priceData.length === 0}>
+                                    <ArrowUp className="w-5 h-5 text-accent"/>
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p>Place Long Position</p>
+                            </TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" onClick={handlePlaceShort} disabled={isPlacingAnything || priceData.length === 0}>
+                                    <ArrowDown className="w-5 h-5 text-destructive"/>
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p>Place Short Position</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </div>
+                </TooltipProvider>
+
+                <div className="h-6 border-l border-border/50"></div>
+
                 <TooltipProvider>
                     <Tooltip>
                         <TooltipTrigger asChild>
@@ -1122,45 +1217,45 @@ export default function AlgoInsightsPage() {
                         </TooltipContent>
                     </Tooltip>
                 </TooltipProvider>
-                <AlertDialog>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="destructive" size="icon" disabled={rrTools.length === 0 && priceMarkers.length === 0 && measurementTools.length === 0}>
-                            <Trash2 className="h-5 w-5" />
-                          </Button>
-                        </AlertDialogTrigger>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Clear all drawings</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        This action cannot be undone. This will permanently delete all placed tools and markers from the chart.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={handleClearAllDrawings}>Continue</AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
+                 <AlertDialog>
+                    <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <div // Wrapping button in div to prevent Tooltip error with AlertDialogTrigger
+                                    className={cn(
+                                        (rrTools.length === 0 && priceMarkers.length === 0 && measurementTools.length === 0) && "pointer-events-none"
+                                    )}
+                                >
+                                    <AlertDialogTrigger asChild>
+                                        <Button variant="destructive" size="icon" disabled={rrTools.length === 0 && priceMarkers.length === 0 && measurementTools.length === 0}>
+                                            <Trash2 className="h-5 w-5" />
+                                        </Button>
+                                    </AlertDialogTrigger>
+                                </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p>Clear all drawings</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This action cannot be undone. This will permanently delete all placed tools and markers from the chart.
+                        </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleClearAllDrawings}>Continue</AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
                 </AlertDialog>
             </div>
-
-            {fileName && (
-                <div className="bg-card/70 backdrop-blur-sm rounded-md px-2 py-1 shadow-md">
-                    <p className="text-xs text-muted-foreground/80">
-                        Loaded: <span className="font-medium text-foreground/90">{fileName}</span>
-                    </p>
-                </div>
-            )}
         </div>
       </main>
     </div>
   );
 }
+
+    
