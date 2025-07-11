@@ -20,11 +20,21 @@ import { useMemo, useRef, useState, useCallback, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { findClosestIndex } from "@/lib/chart-utils";
 
+export type ChartClickData = {
+    price: number;
+    date: Date;
+    dataIndex: number;
+    closePrice: number;
+    yDomain: [number, number];
+    xDomain: [number, number];
+    candle: PriceData;
+};
+
 interface InteractiveChartProps {
   data: PriceData[];
   trades: Trade[];
-  onChartClick: (data: { price: number; date: Date, dataIndex: number, closePrice: number, yDomain: [number, number], xDomain: [number, number] }) => void;
-  onChartMouseMove: (data: { price: number; date: Date, dataIndex: number }) => void;
+  onChartClick: (data: ChartClickData) => void;
+  onChartMouseMove: (data: ChartClickData) => void;
   rrTools: RRToolType[];
   onUpdateTool: (tool: RRToolType) => void;
   onRemoveTool: (id: string) => void;
@@ -297,7 +307,7 @@ export function InteractiveChart({
 
   }, [aggregatedData, xDomain]);
 
-    const getChartCoordinates = (e: any) => {
+    const getChartCoordinates = (e: any): ChartClickData | null => {
         if (!e || !chartScalesRef.current) return null;
         
         const { x: xScale, y: yScale, plot } = chartScalesRef.current;
@@ -315,7 +325,7 @@ export function InteractiveChart({
         const candle = aggregatedData[dataIndex];
         
         if (price !== undefined && candle) {
-            return { price, date: candle.date, dataIndex, closePrice: candle.close, yDomain, xDomain };
+            return { price, date: candle.date, dataIndex, closePrice: candle.close, yDomain, xDomain, candle };
         }
         return null;
     }
@@ -358,8 +368,6 @@ export function InteractiveChart({
       
         if (newDomainWidth < 10) {
           newDomainWidth = 10;
-          const center = mouseIndex;
-          newStart = center - newDomainWidth / 2;
         }
         
         let newStart = mouseIndex - (mouseIndex - domainStart) * (newDomainWidth / domainWidth);
@@ -451,7 +459,7 @@ export function InteractiveChart({
               const pricePerPixel = yDomainWidth / plotHeight;
               const deltaPrice = dy * pricePerPixel; 
               
-              const newYStart = yStart - deltaPrice; // Inverted scrolling
+              const newYStart = yStart + deltaPrice;
               const newYEnd = newYStart + yDomainWidth;
               setYDomain([newYStart, newYEnd]);
             }

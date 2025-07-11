@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, ChevronRight, ChevronsRight, Target, Trash2, FileUp, Lock, Unlock, Ruler, FileBarChart, Undo, Redo } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { InteractiveChart } from "@/components/algo-insights/interactive-chart";
+import { InteractiveChart, type ChartClickData } from "@/components/algo-insights/interactive-chart";
 import { mockPriceData } from "@/lib/mock-data";
 import type { RiskRewardTool as RRToolType, PriceMarker, MeasurementTool as MeasurementToolType, MeasurementPoint, PriceData } from "@/types";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -79,13 +79,13 @@ const simulateTrade = (
 
     // Initialize with the first candle *after* entry.
     const firstCandleIndex = entryIndex + 1;
+    if (firstCandleIndex >= priceData.length) return null; // No candles to simulate
+
     let highSinceEntry = priceData[firstCandleIndex].high;
     let lowSinceEntry = priceData[firstCandleIndex].low;
 
-    // --- DEBUGGING VARIABLES ---
     let debug_lowPriceDate: Date = priceData[firstCandleIndex].date;
     let debug_highPriceDate: Date = priceData[firstCandleIndex].date;
-    // --- END DEBUGGING VARIABLES ---
 
     // Start loop from the second candle *after* entry
     for (let i = firstCandleIndex + 1; i < priceData.length; i++) {
@@ -385,7 +385,7 @@ export default function AlgoInsightsPage() {
   };
 
 
-  const handleChartClick = (chartData: { price: number; date: Date, dataIndex: number, closePrice: number, yDomain: [number, number], xDomain: [number, number] }) => {
+  const handleChartClick = (chartData: ChartClickData) => {
     if (placingToolType) {
       const entryPrice = chartData.closePrice;
       
@@ -420,12 +420,26 @@ export default function AlgoInsightsPage() {
       setPriceMarkers(prev => [...prev, newMarker]);
       setIsPlacingPriceMarker(false);
     } else if (isPlacingMeasurement) {
+        const { price, dataIndex, candle } = chartData;
+
+        // Snapping logic
+        const bodyTop = Math.max(candle.open, candle.close);
+        const bodyBottom = Math.min(candle.open, candle.close);
+        const snappedPrice = (price >= bodyBottom && price <= bodyTop) ? candle.open : price;
+
         const currentPoint = {
-            index: chartData.dataIndex,
-            price: chartData.price
+            index: dataIndex,
+            price: snappedPrice,
         };
+
         if (!measurementStartPoint) {
             setMeasurementStartPoint(currentPoint);
+            // Also set live tool so the starting dot appears immediately
+            setLiveMeasurementTool({
+                id: 'live-measure',
+                startPoint: currentPoint,
+                endPoint: currentPoint,
+            });
         } else {
             const newTool: MeasurementToolType = {
                 id: `measure-${Date.now()}`,
@@ -440,12 +454,20 @@ export default function AlgoInsightsPage() {
     }
   };
 
-    const handleChartMouseMove = (chartData: { price: number; date: Date, dataIndex: number }) => {
+    const handleChartMouseMove = (chartData: ChartClickData) => {
         if (isPlacingMeasurement && measurementStartPoint) {
+            const { price, dataIndex, candle } = chartData;
+            
+            // Snapping logic for the live endpoint
+            const bodyTop = Math.max(candle.open, candle.close);
+            const bodyBottom = Math.min(candle.open, candle.close);
+            const snappedPrice = (price >= bodyBottom && price <= bodyTop) ? candle.open : price;
+
             const currentPoint = {
-                index: chartData.dataIndex,
-                price: chartData.price,
+                index: dataIndex,
+                price: snappedPrice,
             };
+            
             setLiveMeasurementTool({
                 id: 'live-measure',
                 startPoint: measurementStartPoint,
