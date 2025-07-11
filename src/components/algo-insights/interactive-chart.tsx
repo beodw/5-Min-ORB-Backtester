@@ -7,7 +7,6 @@ import {
   CartesianGrid,
   XAxis,
   YAxis,
-  Tooltip,
   ReferenceDot,
   Bar,
   Customized,
@@ -76,39 +75,6 @@ const Candlestick = (props: any) => {
     );
 };
 
-const CustomTooltip = ({ active, payload, label, timeZone }: any) => {
-  if (active && payload && payload.length) {
-    const data = payload[0].payload;
-    const date = new Date(label);
-
-    const formatValue = (value: number) => value.toFixed(5);
-    
-    return (
-      <div className="bg-popover/80 backdrop-blur-sm text-popover-foreground rounded-md border border-border p-2 text-xs shadow-lg">
-        <p className="font-bold mb-2">
-            {date.toLocaleString([], {
-                year: 'numeric',
-                month: 'short',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-                timeZone,
-            })}
-        </p>
-        <div className="grid grid-cols-2 gap-x-2 gap-y-1">
-          <span className="font-semibold">Open:</span><span className="text-right font-mono">{formatValue(data.open)}</span>
-          <span className="font-semibold">High:</span><span className="text-right font-mono">{formatValue(data.high)}</span>
-          <span className="font-semibold">Low:</span><span className="text-right font-mono">{formatValue(data.low)}</span>
-          <span className="font-semibold">Close:</span><span className="text-right font-mono">{formatValue(data.close)}</span>
-        </div>
-      </div>
-    );
-  }
-
-  return null;
-};
-
-
 export function InteractiveChart({ 
     data, 
     trades, 
@@ -134,9 +100,6 @@ export function InteractiveChart({
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartScalesRef = useRef<{x: any, y: any, plot: any} | null>(null);
   
-  const [tooltipData, setTooltipData] = useState<any>(null);
-  const tooltipTimerRef = useRef<NodeJS.Timeout | null>(null);
-
   const aggregatedData = useMemo(() => {
     if (!data || data.length === 0) {
       return [];
@@ -339,45 +302,19 @@ export function InteractiveChart({
   };
 
     const handleMouseMoveRecharts = (e: any) => {
-        if (isDragging || isYAxisDragging) { // Don't fire mouse move when panning
-            setTooltipData(null);
-            if (tooltipTimerRef.current) clearTimeout(tooltipTimerRef.current);
+        if (isDragging || isYAxisDragging) {
             return;
         }
 
-        if (tooltipTimerRef.current) clearTimeout(tooltipTimerRef.current);
         const coords = getChartCoordinates(e);
 
         if (coords) {
             onChartMouseMove(coords); // For live measurement tool
-            
-            const { price, candle } = coords;
-            const bodyTop = Math.max(candle.open, candle.close);
-            const bodyBottom = Math.min(candle.open, candle.close);
-            const isOverBody = price >= bodyBottom && price <= bodyTop;
-            
-            if (isOverBody) {
-                tooltipTimerRef.current = setTimeout(() => {
-                    setTooltipData({
-                        active: true,
-                        payload: [{ payload: candle }],
-                        label: candle.date.getTime(),
-                        coordinate: { x: e.chartX, y: e.chartY },
-                    });
-                }, 1500);
-            } else {
-                setTooltipData(null);
-            }
-        } else {
-            setTooltipData(null);
         }
     };
 
     const handleMouseLeaveChart = () => {
-        if (tooltipTimerRef.current) {
-            clearTimeout(tooltipTimerRef.current);
-        }
-        setTooltipData(null);
+        // Placeholder for any future leave logic
     }
 
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
@@ -493,7 +430,7 @@ export function InteractiveChart({
               const pricePerPixel = yDomainWidth / plotHeight;
               const deltaPrice = dy * pricePerPixel; 
               
-              const newYStart = yStart + deltaPrice;
+              const newYStart = yStart - deltaPrice;
               const newYEnd = newYStart + yDomainWidth;
               setYDomain([newYStart, newYEnd]);
             }
@@ -602,17 +539,6 @@ export function InteractiveChart({
             domain={yDomain}
             allowDataOverflow={true}
             yAxisId="main"
-          />
-          <Tooltip
-            content={<CustomTooltip timeZone={timeZone} />}
-            cursor={false}
-            wrapperStyle={{ pointerEvents: 'none' }}
-            animationDuration={300}
-            animationEasing="ease-out"
-            position={tooltipData?.coordinate}
-            active={tooltipData?.active}
-            payload={tooltipData?.payload}
-            label={tooltipData?.label}
           />
           
           <Bar dataKey="wick" shape={<Candlestick />} isAnimationActive={false} xAxisId="main" yAxisId="main"/>
