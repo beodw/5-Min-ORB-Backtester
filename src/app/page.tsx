@@ -63,6 +63,9 @@ const simulateTrade = (
     
     if (entryIndex === -1) return null;
 
+    // Check if there's at least one candle after the entry for simulation
+    if (entryIndex + 1 >= priceData.length) return null;
+
     const dateTaken = priceData[entryIndex].date;
     const dayOfWeek = dateTaken.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
     const riskAmountPrice = Math.abs(tool.entryPrice - tool.stopLoss);
@@ -76,8 +79,6 @@ const simulateTrade = (
 
     // Initialize with the first candle *after* entry.
     const firstCandleIndex = entryIndex + 1;
-    if (firstCandleIndex >= priceData.length) return null; // No candles after entry to simulate
-
     let highSinceEntry = priceData[firstCandleIndex].high;
     let lowSinceEntry = priceData[firstCandleIndex].low;
 
@@ -87,7 +88,7 @@ const simulateTrade = (
     // --- END DEBUGGING VARIABLES ---
 
     // Start loop from the second candle *after* entry
-    for (let i = firstCandleIndex; i < priceData.length; i++) {
+    for (let i = firstCandleIndex + 1; i < priceData.length; i++) {
         const candle = priceData[i];
         
         // Update the max/min price seen during the trade's lifetime FIRST
@@ -230,6 +231,8 @@ export default function AlgoInsightsPage() {
   const [isPlacingPriceMarker, setIsPlacingPriceMarker] = useState(false);
   const [isPlacingMeasurement, setIsPlacingMeasurement] = useState(false);
   const [measurementStartPoint, setMeasurementStartPoint] = useState<MeasurementPoint | null>(null);
+  const [liveMeasurementTool, setLiveMeasurementTool] = useState<MeasurementToolType | null>(null);
+
   const [timeframe, setTimeframe] = useState('1m');
   const [timeZone, setTimeZone] = useState<string>('');
   const [timezones, setTimezones] = useState<{ value: string; label: string }[]>([]);
@@ -432,9 +435,24 @@ export default function AlgoInsightsPage() {
             setMeasurementTools(prev => [...prev, newTool]);
             setMeasurementStartPoint(null);
             setIsPlacingMeasurement(false);
+            setLiveMeasurementTool(null);
         }
     }
   };
+
+    const handleChartMouseMove = (chartData: { price: number; date: Date, dataIndex: number }) => {
+        if (isPlacingMeasurement && measurementStartPoint) {
+            const currentPoint = {
+                index: chartData.dataIndex,
+                price: chartData.price,
+            };
+            setLiveMeasurementTool({
+                id: 'live-measure',
+                startPoint: measurementStartPoint,
+                endPoint: currentPoint,
+            });
+        }
+    };
   
   const handleUpdateTool = (updatedTool: RRToolType) => {
     pushToHistory(drawingState);
@@ -768,6 +786,7 @@ export default function AlgoInsightsPage() {
     setIsPlacingPriceMarker(false);
     setIsPlacingMeasurement(false);
     setMeasurementStartPoint(null);
+    setLiveMeasurementTool(null);
     setPlacingToolType('long');
   };
 
@@ -775,6 +794,7 @@ export default function AlgoInsightsPage() {
     setIsPlacingPriceMarker(false);
     setIsPlacingMeasurement(false);
     setMeasurementStartPoint(null);
+    setLiveMeasurementTool(null);
     setPlacingToolType('short');
   };
 
@@ -782,13 +802,15 @@ export default function AlgoInsightsPage() {
     setPlacingToolType(null);
     setIsPlacingMeasurement(false);
     setMeasurementStartPoint(null);
+    setLiveMeasurementTool(null);
     setIsPlacingPriceMarker(true);
   };
 
   const handlePlaceMeasurement = () => {
     setPlacingToolType(null);
     setIsPlacingPriceMarker(false);
-    setMeasurementStartPoint(null);
+    setMeasurementStartPoint(null); // Will be set on first click
+    setLiveMeasurementTool(null);
     setIsPlacingMeasurement(true);
   };
 
@@ -892,6 +914,7 @@ export default function AlgoInsightsPage() {
                 data={priceData}
                 trades={[]}
                 onChartClick={handleChartClick}
+                onChartMouseMove={handleChartMouseMove}
                 rrTools={rrTools}
                 onUpdateTool={handleUpdateTool}
                 onRemoveTool={handleRemoveTool}
@@ -902,6 +925,7 @@ export default function AlgoInsightsPage() {
                 onUpdatePriceMarker={handleUpdatePriceMarker}
                 measurementTools={measurementTools}
                 onRemoveMeasurementTool={handleRemoveMeasurementTool}
+                liveMeasurementTool={liveMeasurementTool}
                 pipValue={pipValue}
                 timeframe={timeframe}
                 timeZone={timeZone}
@@ -1118,7 +1142,3 @@ export default function AlgoInsightsPage() {
     </div>
   );
 }
-
-    
-
-    

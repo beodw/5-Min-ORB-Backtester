@@ -12,9 +12,10 @@ interface MeasurementToolProps {
   yScale: ((price: number) => number);
   plot: { width: number; height: number; top: number; left: number };
   pipValue: number;
+  isLive?: boolean;
 }
 
-export function MeasurementTool({ tool, onRemove, data, xScale, yScale, plot, pipValue }: MeasurementToolProps) {
+export function MeasurementTool({ tool, onRemove, data, xScale, yScale, plot, pipValue, isLive = false }: MeasurementToolProps) {
   
   const startDate = data[tool.startPoint.index]?.date;
   const endDate = data[tool.endPoint.index]?.date;
@@ -31,6 +32,7 @@ export function MeasurementTool({ tool, onRemove, data, xScale, yScale, plot, pi
   }
 
   const handleContextMenu = (e: React.MouseEvent) => {
+    if (isLive) return;
     e.preventDefault();
     e.stopPropagation();
     onRemove(tool.id);
@@ -49,17 +51,21 @@ export function MeasurementTool({ tool, onRemove, data, xScale, yScale, plot, pi
   const labelYOffset = -20;
 
   return (
-    <g onContextMenu={handleContextMenu}>
-       {/* Invisible hitbox for easier interaction */}
-       <line
-        x1={startX}
-        y1={startY}
-        x2={endX}
-        y2={endY}
-        stroke="transparent"
-        strokeWidth={10}
-        style={{ cursor: 'pointer' }}
-      />
+    <g onContextMenu={handleContextMenu} style={{ pointerEvents: isLive ? 'none' : 'all' }}>
+       {/* Invisible hitbox for easier interaction on finalized tools */}
+       {!isLive && (
+            <line
+                x1={startX}
+                y1={startY}
+                x2={endX}
+                y2={endY}
+                stroke="transparent"
+                strokeWidth={10}
+                style={{ cursor: 'pointer' }}
+            />
+       )}
+
+      {/* Dotted line connecting the points */}
       <line
         x1={startX}
         y1={startY}
@@ -70,6 +76,13 @@ export function MeasurementTool({ tool, onRemove, data, xScale, yScale, plot, pi
         strokeDasharray="4 4"
         style={{ pointerEvents: 'none' }}
       />
+      
+      {/* Start and End point markers */}
+      <circle cx={startX} cy={startY} r="3" fill="hsl(var(--foreground))" style={{ pointerEvents: 'none' }} />
+      {!isLive && <circle cx={endX} cy={endY} r="3" fill="hsl(var(--foreground))" style={{ pointerEvents: 'none' }} />}
+
+
+      {/* Label with background */}
       <g transform={`translate(${midX}, ${midY})`}>
         <g transform={`translate(0, ${labelYOffset})`}>
             <rect 

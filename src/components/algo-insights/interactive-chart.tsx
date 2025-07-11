@@ -24,6 +24,7 @@ interface InteractiveChartProps {
   data: PriceData[];
   trades: Trade[];
   onChartClick: (data: { price: number; date: Date, dataIndex: number, closePrice: number, yDomain: [number, number], xDomain: [number, number] }) => void;
+  onChartMouseMove: (data: { price: number; date: Date, dataIndex: number }) => void;
   rrTools: RRToolType[];
   onUpdateTool: (tool: RRToolType) => void;
   onRemoveTool: (id: string) => void;
@@ -34,6 +35,7 @@ interface InteractiveChartProps {
   onUpdatePriceMarker: (id: string, price: number) => void;
   measurementTools: MeasurementToolType[];
   onRemoveMeasurementTool: (id: string) => void;
+  liveMeasurementTool: MeasurementToolType | null;
   pipValue: number;
   timeframe: string;
   timeZone: string;
@@ -104,6 +106,7 @@ export function InteractiveChart({
     data, 
     trades, 
     onChartClick, 
+    onChartMouseMove,
     rrTools, 
     onUpdateTool, 
     onRemoveTool, 
@@ -114,6 +117,7 @@ export function InteractiveChart({
     onUpdatePriceMarker,
     measurementTools,
     onRemoveMeasurementTool,
+    liveMeasurementTool,
     pipValue,
     timeframe, 
     timeZone, 
@@ -293,35 +297,44 @@ export function InteractiveChart({
 
   }, [aggregatedData, xDomain]);
 
+    const getChartCoordinates = (e: any) => {
+        if (!e || !chartScalesRef.current) return null;
+        
+        const { x: xScale, y: yScale, plot } = chartScalesRef.current;
+        
+        const mouseXInPlot = e.chartX - plot.left;
+        const mouseYInPlot = e.chartY - plot.top;
+        
+        if (mouseXInPlot < 0 || mouseXInPlot > plot.width || mouseYInPlot < 0 || mouseYInPlot > plot.height) {
+            return null;
+        }
+
+        const price = yScale.invert(mouseYInPlot);
+        const timestamp = xScale.invert(mouseXInPlot);
+        const dataIndex = findClosestIndex(aggregatedData, timestamp);
+        const candle = aggregatedData[dataIndex];
+        
+        if (price !== undefined && candle) {
+            return { price, date: candle.date, dataIndex, closePrice: candle.close, yDomain, xDomain };
+        }
+        return null;
+    }
+
 
   const handleClick = (e: any) => {
-    if (!e || !chartScalesRef.current) return;
-
-    const { x: xScale, y: yScale, plot } = chartScalesRef.current;
-    
-    const mouseXInPlot = e.chartX - plot.left;
-    const mouseYInPlot = e.chartY - plot.top;
-    
-    if (mouseXInPlot < 0 || mouseXInPlot > plot.width || mouseYInPlot < 0 || mouseYInPlot > plot.height) {
-        return;
-    }
-
-    const price = yScale.invert(mouseYInPlot);
-    const timestamp = xScale.invert(mouseXInPlot);
-    const dataIndex = findClosestIndex(aggregatedData, timestamp);
-    const candle = aggregatedData[dataIndex];
-    
-    if (price !== undefined && candle) {
-        onChartClick({
-          price,
-          date: candle.date,
-          dataIndex,
-          closePrice: candle.close,
-          yDomain: yDomain,
-          xDomain: xDomain,
-        });
+    const coords = getChartCoordinates(e);
+    if (coords) {
+        onChartClick(coords);
     }
   };
+
+    const handleMouseMoveRecharts = (e: any) => {
+        if (isDragging || isYAxisDragging) return; // Don't fire mouse move when panning
+        const coords = getChartCoordinates(e);
+        if (coords) {
+            onChartMouseMove(coords);
+        }
+    };
 
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -343,14 +356,14 @@ export function InteractiveChart({
         // scroll up (e.deltaY < 0) zooms in, scroll down zooms out.
         let newDomainWidth = e.deltaY < 0 ? domainWidth / zoomFactor : domainWidth * zoomFactor;
       
-        let newStart = mouseIndex - (mouseIndex - domainStart) * (newDomainWidth / domainWidth);
-        
         if (newDomainWidth < 10) {
           newDomainWidth = 10;
           const center = mouseIndex;
           newStart = center - newDomainWidth / 2;
         }
         
+        let newStart = mouseIndex - (mouseIndex - domainStart) * (newDomainWidth / domainWidth);
+
         if (newStart < 0) {
           newStart = 0;
         }
@@ -438,7 +451,7 @@ export function InteractiveChart({
               const pricePerPixel = yDomainWidth / plotHeight;
               const deltaPrice = dy * pricePerPixel; 
               
-              const newYStart = yStart + deltaPrice; // Natural scrolling
+              const newYStart = yStart - deltaPrice; // Inverted scrolling
               const newYEnd = newYStart + yDomainWidth;
               setYDomain([newYStart, newYEnd]);
             }
@@ -514,7 +527,12 @@ export function InteractiveChart({
         </div>
       ) : (
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={windowedData} onClick={handleClick} margin={{ top: 10, right: 30, left: 0, bottom: 10 }}>
+        <ComposedChart 
+            data={windowedData} 
+            onClick={handleClick}
+            onMouseMove={handleMouseMoveRecharts} 
+            margin={{ top: 10, right: 30, left: 0, bottom: 10 }}
+        >
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border) / 0.5)" />
           <XAxis
             dataKey="date"
@@ -588,6 +606,10 @@ export function InteractiveChart({
                 plot: plot
               };
 
+              const allMeasurementTools = liveMeasurementTool 
+                ? [...measurementTools, liveMeasurementTool] 
+                : measurementTools;
+
               return (
                 <g>
                   {priceMarkers.map(marker => (
@@ -614,7 +636,7 @@ export function InteractiveChart({
                       svgBounds={svgBounds}
                     />
                   ))}
-                  {measurementTools.map(tool => (
+                  {allMeasurementTools.map(tool => (
                     <MeasurementTool
                       key={tool.id}
                       tool={tool}
@@ -624,6 +646,7 @@ export function InteractiveChart({
                       yScale={mainYAxis.scale}
                       plot={plot}
                       pipValue={pipValue}
+                      isLive={tool.id === 'live-measure'}
                     />
                   ))}
                 </g>
