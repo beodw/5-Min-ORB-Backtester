@@ -908,7 +908,7 @@ export default function AlgoInsightsPage() {
     <div className="flex flex-col h-screen bg-background text-foreground font-body">
       <header className="flex items-center justify-between p-4 border-b border-border shadow-md">
         <div className="flex items-center gap-4">
-            <FileBarChart className="w-8 h-8 text-primary" />
+            <FileBarChart className="w-8 h-8 text-foreground" />
             <h1 className="text-2xl font-bold font-headline text-foreground">
                 5 Minute ORB Backtester
             </h1>
