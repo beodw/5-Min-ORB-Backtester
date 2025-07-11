@@ -10,6 +10,8 @@ import {
   ReferenceDot,
   Bar,
   Customized,
+  Tooltip,
+  Cross,
 } from "recharts";
 import type { PriceData, Trade, RiskRewardTool as RRToolType, PriceMarker as PriceMarkerType, MeasurementTool as MeasurementToolType } from "@/types";
 import { RiskRewardTool } from "./risk-reward-tool";
@@ -430,7 +432,7 @@ export function InteractiveChart({
               const pricePerPixel = yDomainWidth / plotHeight;
               const deltaPrice = dy * pricePerPixel; 
               
-              const newYStart = yStart - deltaPrice;
+              const newYStart = yStart + deltaPrice;
               const newYEnd = newYStart + yDomainWidth;
               setYDomain([newYStart, newYEnd]);
             }
@@ -541,6 +543,12 @@ export function InteractiveChart({
             yAxisId="main"
           />
           
+           <Tooltip 
+                content={() => null} // Render no content for the tooltip box
+                cursor={{ stroke: 'hsl(var(--foreground))', strokeWidth: 1, strokeDasharray: '3 3' }}
+                isAnimationActive={false}
+            />
+
           <Bar dataKey="wick" shape={<Candlestick />} isAnimationActive={false} xAxisId="main" yAxisId="main"/>
 
           {trades.map((trade) => (
