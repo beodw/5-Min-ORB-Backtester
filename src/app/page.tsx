@@ -173,6 +173,42 @@ const simulateTrade = (
     };
 };
 
+const fillGapsInData = (data: PriceData[]): PriceData[] => {
+    if (data.length < 2) {
+        return data;
+    }
+
+    const processedData: PriceData[] = [data[0]];
+    const oneMinute = 60 * 1000;
+
+    for (let i = 1; i < data.length; i++) {
+        const prevPoint = processedData[processedData.length - 1];
+        const currentPoint = data[i];
+
+        const timeDiff = currentPoint.date.getTime() - prevPoint.date.getTime();
+
+        if (timeDiff > oneMinute) {
+            const gapsToFill = Math.floor(timeDiff / oneMinute) - 1;
+            const fillPrice = prevPoint.close;
+
+            for (let j = 1; j <= gapsToFill; j++) {
+                const gapDate = new Date(prevPoint.date.getTime() + j * oneMinute);
+                processedData.push({
+                    date: gapDate,
+                    open: fillPrice,
+                    high: fillPrice,
+                    low: fillPrice,
+                    close: fillPrice,
+                    wick: [fillPrice, fillPrice],
+                });
+            }
+        }
+        processedData.push(currentPoint);
+    }
+    return processedData;
+};
+
+
 // Local storage keys
 const APP_SETTINGS_KEY = 'algo-insights-settings';
 const SESSION_KEY = 'algo-insights-session';
@@ -599,12 +635,13 @@ export default function AlgoInsightsPage() {
 
             if (parsedData.length > 0) {
                 parsedData.sort((a, b) => a.date.getTime() - b.date.getTime());
-                setPriceData(parsedData);
+                const processedData = fillGapsInData(parsedData);
+                setPriceData(processedData);
                 setIsDataImported(true);
                 // On first import, pan to end. On re-import for session restore, selectedDate is already set.
                 const savedSession = localStorage.getItem(SESSION_KEY);
                 if (!savedSession) {
-                    setSelectedDate(parsedData[parsedData.length - 1].date);
+                    setSelectedDate(processedData[processedData.length - 1].date);
                 }
             } else {
                 throw new Error("No valid data rows were parsed from the file.");
@@ -1254,3 +1291,5 @@ export default function AlgoInsightsPage() {
     </div>
   );
 }
+
+    
