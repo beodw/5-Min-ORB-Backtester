@@ -58,6 +58,14 @@ type ToolbarPositions = {
     secondary: { x: number; y: number };
 };
 
+const formatDateForCsv = (date: Date | null): string => {
+    if (!date) return '';
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0'); // Month is 0-indexed
+    const year = date.getUTCFullYear();
+    return `${month}/${day}/${year}`;
+};
+
 const simulateTrade = (
     tool: RRToolType,
     priceData: PriceData[],
@@ -155,8 +163,8 @@ const simulateTrade = (
     return {
         tradeOutcome,
         pair: '', // Pair will be added later
-        dateTaken: dateTaken.toLocaleString(),
-        dateClosed: dateClosed ? dateClosed.toLocaleString() : '',
+        dateTaken: formatDateForCsv(dateTaken),
+        dateClosed: formatDateForCsv(dateClosed),
         dayOfWeek,
         maxR: maxR.toFixed(2),
         comments,
