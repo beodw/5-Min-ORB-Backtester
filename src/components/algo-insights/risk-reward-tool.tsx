@@ -200,7 +200,7 @@ export function RiskRewardTool({ tool, onUpdateTool, onRemove, data, xScale, ySc
       />
       
       {/* Label Group */}
-      <g transform={`translate(${leftX + width / 2}, ${entryY})`}>
+      <g transform={`translate(${leftX + width / 2}, ${entryY})`} style={{ userSelect: 'none' }}>
           <rect x={-40} y={-15} width={80} height={30} fill="hsla(0, 0%, 10%, 0.6)" rx="3" />
           <text textAnchor="middle" x="0" y="-3" fill="white" fontSize="10">RR: {isFinite(rrRatio) ? rrRatio.toFixed(2) : '∞'}</text>
           <text textAnchor="middle" x="0" y="10" fill="white" fontSize="10" style={{textTransform: 'capitalize'}}>{tool.position}</text>
@@ -277,6 +277,7 @@ export function RiskRewardTool({ tool, onUpdateTool, onRemove, data, xScale, ySc
                 fontFamily: 'sans-serif',
                 fontSize: '12px',
                 boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
+                userSelect: 'none'
               }}
               onMouseDown={(e) => e.stopPropagation()} // Prevent chart drag when interacting with popup
             >
@@ -302,5 +303,3 @@ export function RiskRewardTool({ tool, onUpdateTool, onRemove, data, xScale, ySc
     </g>
   );
 }
-
-    

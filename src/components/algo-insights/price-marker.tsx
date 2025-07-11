@@ -102,7 +102,7 @@ export function PriceMarker({ marker, onRemove, onUpdate, yScale, plot, svgBound
           alignmentBaseline="middle"
           fontSize="12"
           fill="hsl(var(--primary))"
-          style={{ pointerEvents: 'none' }}
+          style={{ pointerEvents: 'none', userSelect: 'none' }}
         >
           {labelText}
         </text>
