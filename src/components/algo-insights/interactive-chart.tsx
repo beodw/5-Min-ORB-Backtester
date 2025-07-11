@@ -436,9 +436,9 @@ export function InteractiveChart({
               const [yStart, yEnd] = dragStart.yDomain;
               const yDomainWidth = yEnd - yStart;
               const pricePerPixel = yDomainWidth / plotHeight;
-              const deltaPrice = dy * 1 * pricePerPixel; 
+              const deltaPrice = dy * pricePerPixel; 
               
-              const newYStart = yStart - deltaPrice; // Inverted logic here
+              const newYStart = yStart + deltaPrice; // Natural scrolling
               const newYEnd = newYStart + yDomainWidth;
               setYDomain([newYStart, newYEnd]);
             }
