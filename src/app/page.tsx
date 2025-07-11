@@ -907,13 +907,11 @@ export default function AlgoInsightsPage() {
   return (
     <div className="flex flex-col h-screen bg-background text-foreground font-body">
       <header className="flex items-center justify-between p-4 border-b border-border shadow-md">
-        <div className="flex items-center gap-2">
-           <div className="p-2 bg-primary rounded-lg">
-             <FileBarChart className="w-6 h-6 text-primary-foreground" />
-           </div>
-          <h1 className="text-2xl font-bold font-headline text-foreground">
-            5 Minute ORB Backtester
-          </h1>
+        <div className="flex items-center gap-4">
+            <FileBarChart className="w-8 h-8 text-primary" />
+            <h1 className="text-2xl font-bold font-headline text-foreground">
+                5 Minute ORB Backtester
+            </h1>
         </div>
         <div className="flex items-center gap-4">
             <span className="text-sm text-muted-foreground hidden sm:inline-block">{timeZone.replace(/_/g, ' ')}</span>
@@ -1257,5 +1255,7 @@ export default function AlgoInsightsPage() {
     </div>
   );
 }
+
+    
 
     
