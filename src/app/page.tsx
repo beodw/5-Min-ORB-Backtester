@@ -80,15 +80,16 @@ const simulateTrade = (
     const dateTaken = priceData[entryIndex].date;
     const dayOfWeek = dateTaken.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
     const riskAmountPrice = Math.abs(tool.entryPrice - tool.stopLoss);
+    if (riskAmountPrice <= 0) return null; // Avoid division by zero
+
     const stopLossPips = pipValue > 0 ? (riskAmountPrice / pipValue).toFixed(2) : '0.00';
 
-    let tradeOutcome = 'win'; // Assume win (runner) until stopped out
-    let dateClosed: Date | null = null;
+    let tradeOutcome = 'loss'; // Default to loss, prove it's a win
     let comments = '';
-    
-    // Initialize high/low with the entry candle itself
+    let dateClosed: Date | null = null;
     let highSinceEntry = priceData[entryIndex].high;
     let lowSinceEntry = priceData[entryIndex].low;
+    let isWin = false; // Flag to track if 2R was ever hit
 
     // Start simulation from the candle *after* entry
     for (let i = entryIndex + 1; i < priceData.length; i++) {
@@ -98,43 +99,55 @@ const simulateTrade = (
         highSinceEntry = Math.max(highSinceEntry, candle.high);
         lowSinceEntry = Math.min(lowSinceEntry, candle.low);
 
+        // Calculate current max profit to check for 2R win condition
+        let currentMaxProfitPrice = 0;
+        if (tool.position === 'long') {
+            currentMaxProfitPrice = highSinceEntry - tool.entryPrice;
+        } else { // 'short'
+            currentMaxProfitPrice = tool.entryPrice - lowSinceEntry;
+        }
+        const currentMaxR = currentMaxProfitPrice / riskAmountPrice;
+
+        // Check for win condition (>= 2R)
+        if (currentMaxR >= 2) {
+            isWin = true;
+            tradeOutcome = 'win';
+        }
+
         // Check for stop loss hit
         if (tool.position === 'long' && candle.low <= tool.stopLoss) {
-            tradeOutcome = 'loss';
+            if (!isWin) tradeOutcome = 'loss'; // Only a loss if it wasn't already a win
             dateClosed = candle.date;
             break; // Stop simulation on loss
         } else if (tool.position === 'short' && candle.high >= tool.stopLoss) {
-            tradeOutcome = 'loss';
+            if (!isWin) tradeOutcome = 'loss'; // Only a loss if it wasn't already a win
             dateClosed = candle.date;
             break; // Stop simulation on loss
         }
     }
-
-    // If loop finished without SL hit, it's a runner
-    if (tradeOutcome === 'win') {
-        comments = 'Runner - End of data reached.';
-        // The last candle in the dataset is the 'closing' point for the report
+    
+    // If loop finished without SL hit, it's a runner (and a win)
+    if (!dateClosed) {
+        tradeOutcome = 'win';
+        comments = 'Runner';
         dateClosed = priceData[priceData.length - 1].date;
     }
     
     // Unified Max R calculation
     let maxR = 0;
-    if (riskAmountPrice > 0) {
-        let maxProfitPrice = 0;
-        if (tool.position === 'long') {
-            maxProfitPrice = highSinceEntry - tool.entryPrice;
-        } else { // 'short'
-            maxProfitPrice = tool.entryPrice - lowSinceEntry;
-        }
-        maxR = maxProfitPrice / riskAmountPrice;
+    let maxProfitPrice = 0;
+    if (tool.position === 'long') {
+        maxProfitPrice = highSinceEntry - tool.entryPrice;
+    } else { // 'short'
+        maxProfitPrice = tool.entryPrice - lowSinceEntry;
     }
-
+    maxR = maxProfitPrice / riskAmountPrice;
+    
     // Final adjustment for losing trades that never went into profit
     if (tradeOutcome === 'loss' && maxR <= 0) {
         maxR = -1;
     }
 
-    // Min distance to SL is no longer relevant with this simulation model
     const minDistanceToSLPips = ''; 
     
     return {
@@ -1268,5 +1281,7 @@ export default function AlgoInsightsPage() {
     </div>
   );
 }
+
+    
 
     
