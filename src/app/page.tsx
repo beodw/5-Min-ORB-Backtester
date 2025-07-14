@@ -157,7 +157,7 @@ const simulateTrade = (
             minDistancePrice = tool.stopLoss - highSinceEntry;
         }
         if (pipValue > 0) {
-            minDistanceToSLPips = (minDistancePrice / pipValue).toFixed(2);
+            minDistanceToSLPips = (Math.abs(minDistancePrice) / pipValue).toFixed(2);
         }
     }
     
@@ -1296,3 +1296,4 @@ export default function AlgoInsightsPage() {
     
 
     
+
