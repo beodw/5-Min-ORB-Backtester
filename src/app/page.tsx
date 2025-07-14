@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, ChevronRight, ChevronsRight, Target, Trash2, FileUp, Lock, Unlock, Ruler, FileBarChart, Undo, Redo, GripVertical } from "lucide-react";
+import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, ChevronRight, ChevronsRight, Target, Trash2, FileUp, Lock, Unlock, Ruler, FileBarChart, Undo, Redo, GripVertical, Power } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InteractiveChart, type ChartClickData } from "@/components/algo-insights/interactive-chart";
 import { mockPriceData } from "@/lib/mock-data";
@@ -27,6 +27,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { usePolygonWebSocket } from "@/hooks/use-polygon-websocket";
+import { Switch } from "@/components/ui/switch";
 
 
 type TradeReportRow = {
@@ -87,8 +89,8 @@ const simulateTrade = (
     let tradeOutcome = 'loss'; // Default to loss, prove it's a win
     let comments = '';
     let dateClosed: Date | null = null;
-    let highSinceEntry = priceData[entryIndex].high;
-    let lowSinceEntry = priceData[entryIndex].low;
+    let highSinceEntry = tool.entryPrice;
+    let lowSinceEntry = tool.entryPrice;
     let isWin = false; // Flag to track if 2R was ever hit
 
     // Start simulation from the candle *after* entry
@@ -106,7 +108,7 @@ const simulateTrade = (
         } else { // 'short'
             currentMaxProfitPrice = tool.entryPrice - lowSinceEntry;
         }
-        const currentMaxR = currentMaxProfitPrice / riskAmountPrice;
+        const currentMaxR = riskAmountPrice > 0 ? currentMaxProfitPrice / riskAmountPrice : 0;
 
         // Check for win condition (>= 2R)
         if (currentMaxR >= 2) {
@@ -115,11 +117,7 @@ const simulateTrade = (
         }
 
         // Check for stop loss hit
-        if (tool.position === 'long' && candle.low <= tool.stopLoss) {
-            if (!isWin) tradeOutcome = 'loss'; // Only a loss if it wasn't already a win
-            dateClosed = candle.date;
-            break; // Stop simulation on loss
-        } else if (tool.position === 'short' && candle.high >= tool.stopLoss) {
+        if ((tool.position === 'long' && candle.low <= tool.stopLoss) || (tool.position === 'short' && candle.high >= tool.stopLoss)) {
             if (!isWin) tradeOutcome = 'loss'; // Only a loss if it wasn't already a win
             dateClosed = candle.date;
             break; // Stop simulation on loss
@@ -141,7 +139,7 @@ const simulateTrade = (
     } else { // 'short'
         maxProfitPrice = tool.entryPrice - lowSinceEntry;
     }
-    maxR = maxProfitPrice / riskAmountPrice;
+    maxR = riskAmountPrice > 0 ? maxProfitPrice / riskAmountPrice : 0;
     
     // Final adjustment for losing trades that never went into profit
     if (tradeOutcome === 'loss' && maxR <= 0) {
@@ -219,6 +217,15 @@ export default function AlgoInsightsPage() {
   const [priceData, setPriceData] = useState<PriceData[]>(mockPriceData);
   const [isDataImported, setIsDataImported] = useState(false);
   const [fileName, setFileName] = useState('');
+  
+  const [isLiveMode, setIsLiveMode] = useState(false);
+  const [ticker, setTicker] = useState("AAPL");
+  const { 
+    data: livePriceData, 
+    status: liveStatus, 
+    connect: connectToSocket, 
+    disconnect: disconnectFromSocket 
+  } = usePolygonWebSocket();
 
   const [drawingState, setDrawingState] = useState<DrawingState>({
     rrTools: [],
@@ -374,12 +381,11 @@ export default function AlgoInsightsPage() {
 
   // Effect for saving session state
   useEffect(() => {
-    // Don't save if there's nothing to save or if we are prompting for restore
-    if (!isDataImported && rrTools.length === 0 && priceMarkers.length === 0 && measurementTools.length === 0) {
+    // Don't save if in live mode or nothing to save
+    if (isLiveMode || (!isDataImported && rrTools.length === 0 && priceMarkers.length === 0 && measurementTools.length === 0)) {
         return;
     }
     
-    // Convert rrTools dates to string to prevent serialization issues
     const serializableDrawingState = {
         ...drawingState,
         rrTools: drawingState.rrTools.map(tool => ({
@@ -389,13 +395,13 @@ export default function AlgoInsightsPage() {
     };
 
     const sessionState: SessionState = {
-        drawingState: serializableDrawingState as any, // Cast because of date string
+        drawingState: serializableDrawingState as any,
         selectedDate: selectedDate.toISOString(),
         fileName,
     };
     localStorage.setItem(SESSION_KEY, JSON.stringify(sessionState));
 
-  }, [drawingState, selectedDate, fileName, isDataImported]);
+  }, [drawingState, selectedDate, fileName, isDataImported, isLiveMode]);
 
   const handleRestoreSession = () => {
     setShowRestoreDialog(false);
@@ -404,7 +410,6 @@ export default function AlgoInsightsPage() {
         try {
             const savedSession: SessionState = JSON.parse(savedSessionRaw);
 
-            // Restore drawings by converting dates back
             const restoredRrTools = savedSession.drawingState.rrTools.map(tool => ({
                 ...tool,
                 entryDate: new Date(tool.entryDate),
@@ -418,7 +423,6 @@ export default function AlgoInsightsPage() {
             setDrawingState(restoredDrawingState);
             setSelectedDate(new Date(savedSession.selectedDate));
             setFileName(savedSession.fileName);
-            // Don't set price data, wait for user to import
             setPriceData([]);
             setIsDataImported(false);
 
@@ -443,7 +447,7 @@ export default function AlgoInsightsPage() {
       setRedoStack([]);
       setFileName('');
       setIsDataImported(false);
-      setPriceData(mockPriceData); // Load mock data for a fresh start
+      setPriceData(mockPriceData);
   };
 
 
@@ -459,7 +463,7 @@ export default function AlgoInsightsPage() {
       const takeProfit = placingToolType === 'long' ? entryPrice + takeProfitOffset : entryPrice - takeProfitOffset;
       
       const visibleIndexRange = chartData.xDomain[1] - chartData.xDomain[0];
-      const widthInPoints = Math.round(visibleIndexRange * 0.25); // 25% of visible width
+      const widthInPoints = Math.round(visibleIndexRange * 0.25);
 
       const newTool: RRToolType = {
         id: `rr-${Date.now()}`,
@@ -939,7 +943,40 @@ export default function AlgoInsightsPage() {
     window.removeEventListener('mouseup', handleToolbarMouseUp);
   };
 
+  const toggleLiveMode = (checked: boolean) => {
+    setIsLiveMode(checked);
+    if (!checked) {
+        disconnectFromSocket();
+    }
+  };
+
+  const handleLiveConnectToggle = () => {
+    if (liveStatus === 'connected') {
+        disconnectFromSocket();
+    } else if (liveStatus === 'disconnected') {
+        if (!process.env.NEXT_PUBLIC_POLYGON_API_KEY) {
+            toast({
+                variant: 'destructive',
+                title: 'API Key Missing',
+                description: 'Please set NEXT_PUBLIC_POLYGON_API_KEY in your .env file.',
+                duration: 9000
+            });
+            return;
+        }
+        if (!ticker) {
+            toast({
+                variant: 'destructive',
+                title: 'Ticker Missing',
+                description: 'Please enter a stock ticker symbol.',
+            });
+            return;
+        }
+        connectToSocket(`AM.${ticker.toUpperCase()}`);
+    }
+  };
+
   const isPlacingAnything = !!placingToolType || isPlacingPriceMarker || isPlacingMeasurement;
+  const chartDataToShow = isLiveMode ? livePriceData : priceData;
 
   return (
     <div className="flex flex-col h-screen bg-background text-foreground font-body">
@@ -947,16 +984,16 @@ export default function AlgoInsightsPage() {
         <div className="flex items-center gap-4">
             <FileBarChart className="w-8 h-8 text-foreground" />
             <h1 className="text-2xl font-bold font-headline text-foreground">
-                5 Minute ORB Backtester
+                Algo Insights
             </h1>
         </div>
         <div className="flex items-center gap-4">
             <span className="text-sm text-muted-foreground hidden sm:inline-block">{timeZone.replace(/_/g, ' ')}</span>
             <div className="flex items-center gap-1">
-                <Button variant="ghost" size="icon" onClick={handleUndo} disabled={history.length === 0}>
+                <Button variant="ghost" size="icon" onClick={handleUndo} disabled={history.length === 0 || isLiveMode}>
                     <Undo className="h-5 w-5" />
                 </Button>
-                <Button variant="ghost" size="icon" onClick={handleRedo} disabled={redoStack.length === 0}>
+                <Button variant="ghost" size="icon" onClick={handleRedo} disabled={redoStack.length === 0 || isLiveMode}>
                     <Redo className="h-5 w-5" />
                 </Button>
             </div>
@@ -1034,7 +1071,7 @@ export default function AlgoInsightsPage() {
 
         <div className="absolute inset-0">
             <InteractiveChart
-                data={priceData}
+                data={chartDataToShow}
                 trades={[]}
                 onChartClick={handleChartClick}
                 onChartMouseMove={handleChartMouseMove}
@@ -1054,6 +1091,7 @@ export default function AlgoInsightsPage() {
                 timeZone={timeZone}
                 endDate={selectedDate}
                 isYAxisLocked={isYAxisLocked}
+                isLive={isLiveMode}
             />
         </div>
 
@@ -1070,110 +1108,154 @@ export default function AlgoInsightsPage() {
               >
                   <GripVertical className="h-5 w-5 text-muted-foreground/50" />
               </div>
-              <Select value={timeframe} onValueChange={setTimeframe}>
-                  <SelectTrigger className="w-[120px]">
-                      <SelectValue placeholder="Timeframe" />
-                  </SelectTrigger>
-                  <SelectContent>
-                      <SelectItem value="1m">1 Minute</SelectItem>
-                      <SelectItem value="30m">30 Minutes</SelectItem>
-                      <SelectItem value="1H">1 Hour</SelectItem>
-                      <SelectItem value="4H">4 Hours</SelectItem>
-                      <SelectItem value="1D">1 Day</SelectItem>
-                  </SelectContent>
-              </Select>
 
-              <Popover>
-                  <PopoverTrigger asChild>
-                      <Button variant="ghost" size="icon" className="text-muted-foreground">
-                          <CalendarIcon className="h-5 w-5" />
-                      </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0">
-                      <Calendar
-                          mode="single"
-                          selected={selectedDate}
-                          onSelect={handleDateSelect}
-                          defaultMonth={selectedDate}
-                          initialFocus
-                          disabled={(date) =>
-                              date > new Date() || date < new Date("1900-01-01")
-                            }
-                      />
-                  </PopoverContent>
-              </Popover>
+                <div className="flex items-center gap-2">
+                    <Label htmlFor="live-mode-switch" className="text-sm">Live</Label>
+                    <Switch
+                        id="live-mode-switch"
+                        checked={isLiveMode}
+                        onCheckedChange={toggleLiveMode}
+                    />
+                </div>
+                
+                <div className="h-6 border-l border-border/50"></div>
 
-              <TooltipProvider>
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={handleNextCandle} className="text-muted-foreground" disabled={priceData.length === 0}>
-                            <ChevronRight className="h-5 w-5" />
-                        </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                        <p>Next Candle</p>
-                    </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              {isLiveMode ? (
+                <>
+                  <Input 
+                    placeholder="Ticker (e.g. AAPL)" 
+                    className="w-[150px]" 
+                    value={ticker}
+                    onChange={(e) => setTicker(e.target.value)}
+                    disabled={liveStatus === 'connected' || liveStatus === 'connecting'}
+                  />
+                  <Button onClick={handleLiveConnectToggle} disabled={liveStatus === 'connecting'} size="sm">
+                    <Power className="mr-2 h-4 w-4" />
+                    {liveStatus === 'connected' ? 'Disconnect' : (liveStatus === 'connecting' ? 'Connecting...' : 'Connect')}
+                  </Button>
+                </>
+              ) : (
+                <>
+                    <Select value={timeframe} onValueChange={setTimeframe}>
+                        <SelectTrigger className="w-[120px]">
+                            <SelectValue placeholder="Timeframe" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="1m">1 Minute</SelectItem>
+                            <SelectItem value="30m">30 Minutes</SelectItem>
+                            <SelectItem value="1H">1 Hour</SelectItem>
+                            <SelectItem value="4H">4 Hours</SelectItem>
+                            <SelectItem value="1D">1 Day</SelectItem>
+                        </SelectContent>
+                    </Select>
 
-              <TooltipProvider>
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={handleNextSession} className="text-muted-foreground" disabled={priceData.length === 0}>
-                            <ChevronsRight className="h-5 w-5" />
-                        </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                        <p>Next Session Open</p>
-                    </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <Button variant="ghost" size="icon" className="text-muted-foreground">
+                                <CalendarIcon className="h-5 w-5" />
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                            <Calendar
+                                mode="single"
+                                selected={selectedDate}
+                                onSelect={handleDateSelect}
+                                defaultMonth={selectedDate}
+                                initialFocus
+                                disabled={(date) =>
+                                    date > new Date() || date < new Date("1900-01-01")
+                                    }
+                            />
+                        </PopoverContent>
+                    </Popover>
 
-              <div className="h-6 border-l border-border/50"></div>
-              
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
+                    <TooltipProvider>
+                      <Tooltip>
+                          <TooltipTrigger asChild>
+                              <Button variant="ghost" size="icon" onClick={handleNextCandle} className="text-muted-foreground" disabled={priceData.length === 0}>
+                                  <ChevronRight className="h-5 w-5" />
+                              </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                              <p>Next Candle</p>
+                          </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+
+                    <TooltipProvider>
+                      <Tooltip>
+                          <TooltipTrigger asChild>
+                              <Button variant="ghost" size="icon" onClick={handleNextSession} className="text-muted-foreground" disabled={priceData.length === 0}>
+                                  <ChevronsRight className="h-5 w-5" />
+                              </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                              <p>Next Session Open</p>
+                          </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    
+                    <div className="h-6 border-l border-border/50"></div>
+                
+                    <TooltipProvider>
+                        <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={handleImportClick}
+                          >
+                            <FileUp className={cn(
+                              "h-5 w-5",
+                              isDataImported ? "text-chart-3" : "text-muted-foreground"
+                            )} />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>{isDataImported ? "CSV Data Loaded" : "Import Dukascopy CSV"}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleFileChange}
+                      accept=".csv"
+                      className="hidden"
+                    />
+
                     <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={handleImportClick}
+                        variant="ghost" 
+                        onClick={handleExportCsv} 
+                        disabled={rrTools.length === 0 || !isDataImported}
+                        className="text-foreground"
                     >
-                      <FileUp className={cn(
-                        "h-5 w-5",
-                        isDataImported ? "text-chart-3" : "text-muted-foreground"
-                      )} />
+                        <Download className="mr-2 h-4 w-4" />
+                        Download Report
                     </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>{isDataImported ? "CSV Data Loaded" : "Import Dukascopy CSV"}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileChange}
-                accept=".csv"
-                className="hidden"
-              />
-
-              <Button
-                  variant="ghost" 
-                  onClick={handleExportCsv} 
-                  disabled={rrTools.length === 0 || !isDataImported}
-                  className="text-foreground"
-              >
-                  <Download className="mr-2 h-4 w-4" />
-                  Download Report
-              </Button>
+                </>
+              )}
             </div>
             
-            {fileName && (
+            {!isLiveMode && fileName && (
                 <div className="bg-card/70 backdrop-blur-sm rounded-md px-2 py-1 shadow-md ml-8">
                     <p className="text-xs text-muted-foreground/80">
                         Loaded: <span className="font-medium text-foreground/90">{fileName}</span>
+                    </p>
+                </div>
+            )}
+             {isLiveMode && (
+                <div className="bg-card/70 backdrop-blur-sm rounded-md px-2 py-1 shadow-md ml-8">
+                    <p className="text-xs text-muted-foreground/80">
+                        Live Feed: <span className={cn(
+                            "font-medium",
+                            liveStatus === 'connected' && 'text-green-400',
+                            liveStatus === 'connecting' && 'text-yellow-400',
+                            liveStatus === 'disconnected' && 'text-red-400'
+                        )}>
+                            {ticker.toUpperCase()} - {liveStatus.charAt(0).toUpperCase() + liveStatus.slice(1)}
+                        </span>
                     </p>
                 </div>
             )}
@@ -1193,7 +1275,7 @@ export default function AlgoInsightsPage() {
                     <div className="flex justify-center gap-1">
                         <Tooltip>
                             <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" onClick={handlePlaceLong} disabled={isPlacingAnything || priceData.length === 0}>
+                                <Button variant="ghost" size="icon" onClick={handlePlaceLong} disabled={isPlacingAnything || chartDataToShow.length === 0}>
                                     <ArrowUp className="w-5 h-5 text-accent"/>
                                 </Button>
                             </TooltipTrigger>
@@ -1203,7 +1285,7 @@ export default function AlgoInsightsPage() {
                         </Tooltip>
                         <Tooltip>
                             <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" onClick={handlePlaceShort} disabled={isPlacingAnything || priceData.length === 0}>
+                                <Button variant="ghost" size="icon" onClick={handlePlaceShort} disabled={isPlacingAnything || chartDataToShow.length === 0}>
                                     <ArrowDown className="w-5 h-5 text-destructive"/>
                                 </Button>
                             </TooltipTrigger>
@@ -1219,7 +1301,7 @@ export default function AlgoInsightsPage() {
                 <TooltipProvider>
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={handlePlaceMarker} disabled={isPlacingAnything || priceData.length === 0}>
+                            <Button variant="ghost" size="icon" onClick={handlePlaceMarker} disabled={isPlacingAnything || chartDataToShow.length === 0}>
                                 <Target className="w-5 h-5 text-foreground"/>
                             </Button>
                         </TooltipTrigger>
@@ -1243,7 +1325,7 @@ export default function AlgoInsightsPage() {
                 <TooltipProvider>
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={handlePlaceMeasurement} disabled={isPlacingAnything || priceData.length === 0}>
+                            <Button variant="ghost" size="icon" onClick={handlePlaceMeasurement} disabled={isPlacingAnything || chartDataToShow.length === 0}>
                                 <Ruler className="w-5 h-5 text-foreground"/>
                             </Button>
                         </TooltipTrigger>
@@ -1292,8 +1374,3 @@ export default function AlgoInsightsPage() {
     </div>
   );
 }
-
-    
-
-    
-

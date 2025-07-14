@@ -52,6 +52,7 @@ interface InteractiveChartProps {
   timeZone: string;
   endDate?: Date;
   isYAxisLocked: boolean;
+  isLive?: boolean;
 }
 
 const Candlestick = (props: any) => {
@@ -97,7 +98,8 @@ export function InteractiveChart({
     timeframe, 
     timeZone, 
     endDate,
-    isYAxisLocked
+    isYAxisLocked,
+    isLive = false
 }: InteractiveChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartScalesRef = useRef<{x: any, y: any, plot: any} | null>(null);
@@ -107,9 +109,9 @@ export function InteractiveChart({
       return [];
     }
   
-    const filteredByDate = endDate ? data.filter(point => point.date <= endDate) : data;
+    const filteredByDate = isLive || !endDate ? data : data.filter(point => point.date <= endDate);
     
-    if (timeframe === '1m') {
+    if (timeframe === '1m' || isLive) {
       return filteredByDate;
     }
   
@@ -157,7 +159,7 @@ export function InteractiveChart({
     }
     
     return result;
-  }, [data, timeframe, endDate]);
+  }, [data, timeframe, endDate, isLive]);
   
   const [xDomain, setXDomain] = useState<[number, number]>([0, 100]);
   const [yDomain, setYDomain] = useState<[number, number]>([0, 100]);
@@ -169,12 +171,12 @@ export function InteractiveChart({
   const windowedData = useMemo(() => {
     if (!aggregatedData.length) return [];
     const [start, end] = xDomain;
-    const buffer = 100;
+    const buffer = isLive ? 0 : 100;
     const startIndex = Math.max(0, Math.floor(start) - buffer);
     const endIndex = Math.min(aggregatedData.length, Math.ceil(end) + buffer);
     
     return aggregatedData.slice(startIndex, endIndex);
-  }, [xDomain, aggregatedData]);
+  }, [xDomain, aggregatedData, isLive]);
 
   useEffect(() => {
     if (aggregatedData.length === 0) return;
@@ -182,30 +184,29 @@ export function InteractiveChart({
     const panToEnd = () => {
         const domainWidth = 100;
         const targetIndex = aggregatedData.length - 1;
-        // Position the end of the data near the right edge of the viewport, but with a small buffer
         const newEnd = targetIndex + (domainWidth * 0.1); 
         const newStart = newEnd - domainWidth;
         return [newStart > 0 ? newStart : 0, newEnd];
     };
 
     setXDomain(prev => {
-        const isInitialLoad = (prev[0] === 0 && prev[1] === 100);
+        if (isLive) {
+            return panToEnd();
+        }
 
-        // If a date is selected, the data is filtered. We should always pan to the end of this new dataset.
+        const isInitialLoad = (prev[0] === 0 && prev[1] === 100);
+        
         if (endDate) {
             return panToEnd();
         }
         
-        // If no date is selected, only pan to the end on the initial load.
-        // User-initiated pans/zooms shouldn't be overridden.
         if (isInitialLoad) {
             return panToEnd();
         }
-
-        // For all other cases (like user panning/zooming), don't change the domain.
+        
         return prev;
     });
-  }, [endDate, aggregatedData]);
+  }, [endDate, aggregatedData, isLive]);
 
 
   useEffect(() => {
@@ -233,7 +234,7 @@ export function InteractiveChart({
             max = Math.max(max, marker.price);
          }
        } else {
-         return; // No data, do not update domain.
+         return;
        }
     }
 
@@ -475,6 +476,10 @@ export function InteractiveChart({
     const date = new Date(tickItem);
     if (isNaN(date.getTime())) return '';
     
+    if (isLive) {
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone, hour12: false });
+    }
+
     const [start, end] = xDomain;
     const timePerIndex = aggregatedData.length > 1 
       ? aggregatedData[1].date.getTime() - aggregatedData[0].date.getTime() 
@@ -490,7 +495,7 @@ export function InteractiveChart({
       return date.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone });
     }
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone });
-  }, [xDomain, aggregatedData, timeZone]);
+  }, [xDomain, aggregatedData, timeZone, isLive]);
 
   return (
     <div 
@@ -505,7 +510,7 @@ export function InteractiveChart({
     >
       {!aggregatedData || aggregatedData.length === 0 ? (
         <div className="flex items-center justify-center w-full h-full text-muted-foreground">
-          No data available for the selected time range.
+          {isLive ? "Connecting to live feed or waiting for data..." : "No data available. Please import a CSV file."}
         </div>
       ) : (
       <ResponsiveContainer width="100%" height="100%">
@@ -537,7 +542,7 @@ export function InteractiveChart({
             fontSize={12}
             tickLine={false}
             axisLine={false}
-            tickFormatter={(value) => typeof value === 'number' ? value.toFixed(5) : ''}
+            tickFormatter={(value) => typeof value === 'number' ? value.toFixed(isLive ? 2 : 5) : ''}
             domain={yDomain}
             allowDataOverflow={true}
             yAxisId="main"
@@ -604,6 +609,7 @@ export function InteractiveChart({
                       yScale={mainYAxis.scale}
                       plot={plot}
                       svgBounds={svgBounds}
+                      isLive={isLive}
                     />
                   ))}
                   {rrTools.map(tool => (
