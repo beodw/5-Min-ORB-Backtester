@@ -148,7 +148,18 @@ const simulateTrade = (
         maxR = -1;
     }
 
-    const minDistanceToSLPips = ''; 
+    let minDistanceToSLPips = '0.00';
+    if (tradeOutcome === 'win') {
+        let minDistancePrice = 0;
+        if (tool.position === 'long') {
+            minDistancePrice = lowSinceEntry - tool.stopLoss;
+        } else { // short
+            minDistancePrice = tool.stopLoss - highSinceEntry;
+        }
+        if (pipValue > 0) {
+            minDistanceToSLPips = (minDistancePrice / pipValue).toFixed(2);
+        }
+    }
     
     return {
         tradeOutcome,
