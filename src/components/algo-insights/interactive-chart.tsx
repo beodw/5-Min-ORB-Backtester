@@ -52,7 +52,6 @@ interface InteractiveChartProps {
   timeZone: string;
   endDate?: Date;
   isYAxisLocked: boolean;
-  isLive?: boolean;
 }
 
 const Candlestick = (props: any) => {
@@ -99,7 +98,6 @@ export function InteractiveChart({
     timeZone, 
     endDate,
     isYAxisLocked,
-    isLive = false
 }: InteractiveChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartScalesRef = useRef<{x: any, y: any, plot: any} | null>(null);
@@ -109,9 +107,9 @@ export function InteractiveChart({
       return [];
     }
   
-    const filteredByDate = isLive || !endDate ? data : data.filter(point => point.date <= endDate);
+    const filteredByDate = !endDate ? data : data.filter(point => point.date <= endDate);
     
-    if (timeframe === '1m' || isLive) {
+    if (timeframe === '1m') {
       return filteredByDate;
     }
   
@@ -159,7 +157,7 @@ export function InteractiveChart({
     }
     
     return result;
-  }, [data, timeframe, endDate, isLive]);
+  }, [data, timeframe, endDate]);
   
   const [xDomain, setXDomain] = useState<[number, number]>([0, 100]);
   const [yDomain, setYDomain] = useState<[number, number]>([0, 100]);
@@ -171,12 +169,12 @@ export function InteractiveChart({
   const windowedData = useMemo(() => {
     if (!aggregatedData.length) return [];
     const [start, end] = xDomain;
-    const buffer = isLive ? 0 : 100;
+    const buffer = 100;
     const startIndex = Math.max(0, Math.floor(start) - buffer);
     const endIndex = Math.min(aggregatedData.length, Math.ceil(end) + buffer);
     
     return aggregatedData.slice(startIndex, endIndex);
-  }, [xDomain, aggregatedData, isLive]);
+  }, [xDomain, aggregatedData]);
 
   useEffect(() => {
     if (aggregatedData.length === 0) return;
@@ -190,10 +188,6 @@ export function InteractiveChart({
     };
 
     setXDomain(prev => {
-        if (isLive) {
-            return panToEnd();
-        }
-
         const isInitialLoad = (prev[0] === 0 && prev[1] === 100);
         
         if (endDate) {
@@ -206,7 +200,7 @@ export function InteractiveChart({
         
         return prev;
     });
-  }, [endDate, aggregatedData, isLive]);
+  }, [endDate, aggregatedData]);
 
 
   useEffect(() => {
@@ -476,10 +470,6 @@ export function InteractiveChart({
     const date = new Date(tickItem);
     if (isNaN(date.getTime())) return '';
     
-    if (isLive) {
-        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone, hour12: false });
-    }
-
     const [start, end] = xDomain;
     const timePerIndex = aggregatedData.length > 1 
       ? aggregatedData[1].date.getTime() - aggregatedData[0].date.getTime() 
@@ -495,7 +485,7 @@ export function InteractiveChart({
       return date.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone });
     }
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone });
-  }, [xDomain, aggregatedData, timeZone, isLive]);
+  }, [xDomain, aggregatedData, timeZone]);
 
   return (
     <div 
@@ -510,7 +500,7 @@ export function InteractiveChart({
     >
       {!aggregatedData || aggregatedData.length === 0 ? (
         <div className="flex items-center justify-center w-full h-full text-muted-foreground">
-          {isLive ? "Connecting to live feed or waiting for data..." : "No data available. Please import a CSV file."}
+          No data available. Please import a CSV file.
         </div>
       ) : (
       <ResponsiveContainer width="100%" height="100%">
@@ -542,7 +532,7 @@ export function InteractiveChart({
             fontSize={12}
             tickLine={false}
             axisLine={false}
-            tickFormatter={(value) => typeof value === 'number' ? value.toFixed(isLive ? 2 : 5) : ''}
+            tickFormatter={(value) => typeof value === 'number' ? value.toFixed(5) : ''}
             domain={yDomain}
             allowDataOverflow={true}
             yAxisId="main"
@@ -609,7 +599,6 @@ export function InteractiveChart({
                       yScale={mainYAxis.scale}
                       plot={plot}
                       svgBounds={svgBounds}
-                      isLive={isLive}
                     />
                   ))}
                   {rrTools.map(tool => (

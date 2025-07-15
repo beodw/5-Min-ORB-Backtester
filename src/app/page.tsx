@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, ChevronRight, ChevronsRight, Target, Trash2, FileUp, Lock, Unlock, Ruler, FileBarChart, Undo, Redo, GripVertical, Power } from "lucide-react";
+import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, ChevronRight, ChevronsRight, Target, Trash2, FileUp, Lock, Unlock, Ruler, FileBarChart, Undo, Redo, GripVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InteractiveChart, type ChartClickData } from "@/components/algo-insights/interactive-chart";
 import { mockPriceData } from "@/lib/mock-data";
@@ -27,9 +27,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import { usePolygonWebSocket } from "@/hooks/use-polygon-websocket";
-import { Switch } from "@/components/ui/switch";
-
 
 type TradeReportRow = {
     tradeOutcome: string;
@@ -97,7 +94,7 @@ const simulateTrade = (
     for (let i = entryIndex + 1; i < priceData.length; i++) {
         const candle = priceData[i];
 
-        // Update high/low tracking
+        // Update high/low tracking before checking conditions
         highSinceEntry = Math.max(highSinceEntry, candle.high);
         lowSinceEntry = Math.min(lowSinceEntry, candle.low);
 
@@ -110,16 +107,18 @@ const simulateTrade = (
         }
         const currentMaxR = riskAmountPrice > 0 ? currentMaxProfitPrice / riskAmountPrice : 0;
 
-        // Check for win condition (>= 2R)
-        if (currentMaxR >= 2) {
+        // Check for win condition (>= 2R) - this sets the status permanently
+        if (!isWin && currentMaxR >= 2) {
             isWin = true;
             tradeOutcome = 'win';
         }
 
         // Check for stop loss hit
         if ((tool.position === 'long' && candle.low <= tool.stopLoss) || (tool.position === 'short' && candle.high >= tool.stopLoss)) {
-            if (!isWin) tradeOutcome = 'loss'; // Only a loss if it wasn't already a win
             dateClosed = candle.date;
+            // Stop updating high/low from this point on
+            highSinceEntry = Math.min(highSinceEntry, candle.high); // Use SL hit candle's data
+            lowSinceEntry = Math.max(lowSinceEntry, candle.low);
             break; // Stop simulation on loss
         }
     }
@@ -218,15 +217,6 @@ export default function AlgoInsightsPage() {
   const [isDataImported, setIsDataImported] = useState(false);
   const [fileName, setFileName] = useState('');
   
-  const [isLiveMode, setIsLiveMode] = useState(false);
-  const [ticker, setTicker] = useState("AAPL");
-  const { 
-    data: livePriceData, 
-    status: liveStatus, 
-    connect: connectToSocket, 
-    disconnect: disconnectFromSocket 
-  } = usePolygonWebSocket();
-
   const [drawingState, setDrawingState] = useState<DrawingState>({
     rrTools: [],
     priceMarkers: [],
@@ -381,8 +371,8 @@ export default function AlgoInsightsPage() {
 
   // Effect for saving session state
   useEffect(() => {
-    // Don't save if in live mode or nothing to save
-    if (isLiveMode || (!isDataImported && rrTools.length === 0 && priceMarkers.length === 0 && measurementTools.length === 0)) {
+    // Don't save if nothing to save
+    if (!isDataImported && rrTools.length === 0 && priceMarkers.length === 0 && measurementTools.length === 0) {
         return;
     }
     
@@ -401,7 +391,7 @@ export default function AlgoInsightsPage() {
     };
     localStorage.setItem(SESSION_KEY, JSON.stringify(sessionState));
 
-  }, [drawingState, selectedDate, fileName, isDataImported, isLiveMode]);
+  }, [drawingState, selectedDate, fileName, isDataImported]);
 
   const handleRestoreSession = () => {
     setShowRestoreDialog(false);
@@ -943,40 +933,7 @@ export default function AlgoInsightsPage() {
     window.removeEventListener('mouseup', handleToolbarMouseUp);
   };
 
-  const toggleLiveMode = (checked: boolean) => {
-    setIsLiveMode(checked);
-    if (!checked) {
-        disconnectFromSocket();
-    }
-  };
-
-  const handleLiveConnectToggle = () => {
-    if (liveStatus === 'connected') {
-        disconnectFromSocket();
-    } else if (liveStatus === 'disconnected') {
-        if (!process.env.NEXT_PUBLIC_POLYGON_API_KEY) {
-            toast({
-                variant: 'destructive',
-                title: 'API Key Missing',
-                description: 'Please set NEXT_PUBLIC_POLYGON_API_KEY in your .env file.',
-                duration: 9000
-            });
-            return;
-        }
-        if (!ticker) {
-            toast({
-                variant: 'destructive',
-                title: 'Ticker Missing',
-                description: 'Please enter a stock ticker symbol.',
-            });
-            return;
-        }
-        connectToSocket(`AM.${ticker.toUpperCase()}`);
-    }
-  };
-
   const isPlacingAnything = !!placingToolType || isPlacingPriceMarker || isPlacingMeasurement;
-  const chartDataToShow = isLiveMode ? livePriceData : priceData;
 
   return (
     <div className="flex flex-col h-screen bg-background text-foreground font-body">
@@ -990,10 +947,10 @@ export default function AlgoInsightsPage() {
         <div className="flex items-center gap-4">
             <span className="text-sm text-muted-foreground hidden sm:inline-block">{timeZone.replace(/_/g, ' ')}</span>
             <div className="flex items-center gap-1">
-                <Button variant="ghost" size="icon" onClick={handleUndo} disabled={history.length === 0 || isLiveMode}>
+                <Button variant="ghost" size="icon" onClick={handleUndo} disabled={history.length === 0}>
                     <Undo className="h-5 w-5" />
                 </Button>
-                <Button variant="ghost" size="icon" onClick={handleRedo} disabled={redoStack.length === 0 || isLiveMode}>
+                <Button variant="ghost" size="icon" onClick={handleRedo} disabled={redoStack.length === 0}>
                     <Redo className="h-5 w-5" />
                 </Button>
             </div>
@@ -1071,7 +1028,7 @@ export default function AlgoInsightsPage() {
 
         <div className="absolute inset-0">
             <InteractiveChart
-                data={chartDataToShow}
+                data={priceData}
                 trades={[]}
                 onChartClick={handleChartClick}
                 onChartMouseMove={handleChartMouseMove}
@@ -1091,7 +1048,6 @@ export default function AlgoInsightsPage() {
                 timeZone={timeZone}
                 endDate={selectedDate}
                 isYAxisLocked={isYAxisLocked}
-                isLive={isLiveMode}
             />
         </div>
 
@@ -1108,33 +1064,6 @@ export default function AlgoInsightsPage() {
               >
                   <GripVertical className="h-5 w-5 text-muted-foreground/50" />
               </div>
-
-                <div className="flex items-center gap-2">
-                    <Label htmlFor="live-mode-switch" className="text-sm">Live</Label>
-                    <Switch
-                        id="live-mode-switch"
-                        checked={isLiveMode}
-                        onCheckedChange={toggleLiveMode}
-                    />
-                </div>
-                
-                <div className="h-6 border-l border-border/50"></div>
-
-              {isLiveMode ? (
-                <>
-                  <Input 
-                    placeholder="Ticker (e.g. AAPL)" 
-                    className="w-[150px]" 
-                    value={ticker}
-                    onChange={(e) => setTicker(e.target.value)}
-                    disabled={liveStatus === 'connected' || liveStatus === 'connecting'}
-                  />
-                  <Button onClick={handleLiveConnectToggle} disabled={liveStatus === 'connecting'} size="sm">
-                    <Power className="mr-2 h-4 w-4" />
-                    {liveStatus === 'connected' ? 'Disconnect' : (liveStatus === 'connecting' ? 'Connecting...' : 'Connect')}
-                  </Button>
-                </>
-              ) : (
                 <>
                     <Select value={timeframe} onValueChange={setTimeframe}>
                         <SelectTrigger className="w-[120px]">
@@ -1235,27 +1164,12 @@ export default function AlgoInsightsPage() {
                         Download Report
                     </Button>
                 </>
-              )}
             </div>
             
-            {!isLiveMode && fileName && (
+            {fileName && (
                 <div className="bg-card/70 backdrop-blur-sm rounded-md px-2 py-1 shadow-md ml-8">
                     <p className="text-xs text-muted-foreground/80">
                         Loaded: <span className="font-medium text-foreground/90">{fileName}</span>
-                    </p>
-                </div>
-            )}
-             {isLiveMode && (
-                <div className="bg-card/70 backdrop-blur-sm rounded-md px-2 py-1 shadow-md ml-8">
-                    <p className="text-xs text-muted-foreground/80">
-                        Live Feed: <span className={cn(
-                            "font-medium",
-                            liveStatus === 'connected' && 'text-green-400',
-                            liveStatus === 'connecting' && 'text-yellow-400',
-                            liveStatus === 'disconnected' && 'text-red-400'
-                        )}>
-                            {ticker.toUpperCase()} - {liveStatus.charAt(0).toUpperCase() + liveStatus.slice(1)}
-                        </span>
                     </p>
                 </div>
             )}
@@ -1275,7 +1189,7 @@ export default function AlgoInsightsPage() {
                     <div className="flex justify-center gap-1">
                         <Tooltip>
                             <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" onClick={handlePlaceLong} disabled={isPlacingAnything || chartDataToShow.length === 0}>
+                                <Button variant="ghost" size="icon" onClick={handlePlaceLong} disabled={isPlacingAnything || priceData.length === 0}>
                                     <ArrowUp className="w-5 h-5 text-accent"/>
                                 </Button>
                             </TooltipTrigger>
@@ -1285,7 +1199,7 @@ export default function AlgoInsightsPage() {
                         </Tooltip>
                         <Tooltip>
                             <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" onClick={handlePlaceShort} disabled={isPlacingAnything || chartDataToShow.length === 0}>
+                                <Button variant="ghost" size="icon" onClick={handlePlaceShort} disabled={isPlacingAnything || priceData.length === 0}>
                                     <ArrowDown className="w-5 h-5 text-destructive"/>
                                 </Button>
                             </TooltipTrigger>
@@ -1301,7 +1215,7 @@ export default function AlgoInsightsPage() {
                 <TooltipProvider>
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={handlePlaceMarker} disabled={isPlacingAnything || chartDataToShow.length === 0}>
+                            <Button variant="ghost" size="icon" onClick={handlePlaceMarker} disabled={isPlacingAnything || priceData.length === 0}>
                                 <Target className="w-5 h-5 text-foreground"/>
                             </Button>
                         </TooltipTrigger>
@@ -1325,7 +1239,7 @@ export default function AlgoInsightsPage() {
                 <TooltipProvider>
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={handlePlaceMeasurement} disabled={isPlacingAnything || chartDataToShow.length === 0}>
+                            <Button variant="ghost" size="icon" onClick={handlePlaceMeasurement} disabled={isPlacingAnything || priceData.length === 0}>
                                 <Ruler className="w-5 h-5 text-foreground"/>
                             </Button>
                         </TooltipTrigger>

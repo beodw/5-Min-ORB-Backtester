@@ -11,10 +11,9 @@ interface PriceMarkerProps {
   yScale: ((price: number) => number) & { invert?: (y: number) => number };
   plot: { width: number; height: number; top: number; left: number };
   svgBounds: DOMRect;
-  isLive?: boolean;
 }
 
-export function PriceMarker({ marker, onRemove, onUpdate, yScale, plot, svgBounds, isLive = false }: PriceMarkerProps) {
+export function PriceMarker({ marker, onRemove, onUpdate, yScale, plot, svgBounds }: PriceMarkerProps) {
   const yPosition = yScale(marker.price);
 
   if (isNaN(yPosition) || yPosition < plot.top || yPosition > plot.top + plot.height) {
@@ -22,8 +21,7 @@ export function PriceMarker({ marker, onRemove, onUpdate, yScale, plot, svgBound
   }
 
   const isDeletable = marker.isDeletable !== false;
-  const priceFixedDigits = isLive ? 2 : 5;
-  const labelText = `${marker.label ? `${marker.label}: ` : ''}${marker.price.toFixed(priceFixedDigits)}`;
+  const labelText = `${marker.label ? `${marker.label}: ` : ''}${marker.price.toFixed(5)}`;
   const labelWidth = labelText.length * 6.5 + 8;
 
   const handleContextMenu = (e: React.MouseEvent) => {
