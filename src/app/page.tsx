@@ -71,10 +71,8 @@ const simulateTrade = (
     pipValue: number
 ): TradeReportRow | null => {
     const entryIndex = priceData.findIndex(p => p.date.getTime() >= tool.entryDate.getTime());
-    
-    if (entryIndex === -1 || entryIndex + 1 >= priceData.length) {
-        return null; // Not enough data to simulate
-    }
+
+    if (entryIndex === -1) return null; // Entry date not found in data
 
     const dateTaken = priceData[entryIndex].date;
     const dayOfWeek = dateTaken.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
@@ -82,69 +80,77 @@ const simulateTrade = (
     if (riskAmountPrice <= 0) return null; // Avoid division by zero
 
     const stopLossPips = pipValue > 0 ? (riskAmountPrice / pipValue).toFixed(2) : '0.00';
-
-    let tradeOutcome = 'loss'; // Default to loss, prove it's a win
+    
+    let isWin = false;
     let comments = '';
     let dateClosed: Date | null = null;
     let highSinceEntry = tool.entryPrice;
     let lowSinceEntry = tool.entryPrice;
-    let isWin = false; // Flag to track if 2R was ever hit
 
     // Start simulation from the candle *after* entry
     for (let i = entryIndex + 1; i < priceData.length; i++) {
         const candle = priceData[i];
 
-        // Update high/low tracking before checking conditions
-        highSinceEntry = Math.max(highSinceEntry, candle.high);
-        lowSinceEntry = Math.min(lowSinceEntry, candle.low);
-
-        // Calculate current max profit to check for 2R win condition
+        // 1. Check for win condition (>= 2R) first
+        // We check against the current candle's high/low to see if the target was hit.
         let currentMaxProfitPrice = 0;
         if (tool.position === 'long') {
-            currentMaxProfitPrice = highSinceEntry - tool.entryPrice;
+            currentMaxProfitPrice = candle.high - tool.entryPrice;
         } else { // 'short'
-            currentMaxProfitPrice = tool.entryPrice - lowSinceEntry;
+            currentMaxProfitPrice = tool.entryPrice - candle.low;
         }
         const currentMaxR = riskAmountPrice > 0 ? currentMaxProfitPrice / riskAmountPrice : 0;
 
-        // Check for win condition (>= 2R) - this sets the status permanently
         if (!isWin && currentMaxR >= 2) {
-            isWin = true;
-            tradeOutcome = 'win';
+            isWin = true; // Mark as win, but continue simulation to find true maxR and if SL is hit
         }
 
-        // Check for stop loss hit
+        // 2. Check for stop loss hit
         if ((tool.position === 'long' && candle.low <= tool.stopLoss) || (tool.position === 'short' && candle.high >= tool.stopLoss)) {
             dateClosed = candle.date;
-            // Stop updating high/low from this point on
-            highSinceEntry = Math.min(highSinceEntry, candle.high); // Use SL hit candle's data
-            lowSinceEntry = Math.max(lowSinceEntry, candle.low);
+            // Update final high/low with the candle that hit the SL
+            highSinceEntry = Math.max(highSinceEntry, candle.high);
+            lowSinceEntry = Math.min(lowSinceEntry, candle.low);
             break; // Stop simulation on loss
+        }
+        
+        // 3. If not stopped out, update the running high/low
+        highSinceEntry = Math.max(highSinceEntry, candle.high);
+        lowSinceEntry = Math.min(lowSinceEntry, candle.low);
+    }
+
+    const tradeOutcome = isWin ? 'win' : 'loss';
+
+    // If loop finished without SL hit, it's either a runner win or a win that was never stopped out
+    if (!dateClosed) {
+        dateClosed = priceData[priceData.length - 1].date;
+        if (isWin) {
+            comments = 'Runner';
+        } else {
+             // If it never hit 2R and never hit SL, it's a loss that timed out
+             // But we still need to calculate its MaxR correctly
         }
     }
     
-    // If loop finished without SL hit, it's a runner (and a win)
-    if (!dateClosed) {
-        tradeOutcome = 'win';
-        comments = 'Runner';
-        dateClosed = priceData[priceData.length - 1].date;
-    }
-    
-    // Unified Max R calculation
-    let maxR = 0;
+    // Final Max R calculation based on the absolute peak price movement during the trade
     let maxProfitPrice = 0;
     if (tool.position === 'long') {
         maxProfitPrice = highSinceEntry - tool.entryPrice;
     } else { // 'short'
         maxProfitPrice = tool.entryPrice - lowSinceEntry;
     }
-    maxR = riskAmountPrice > 0 ? maxProfitPrice / riskAmountPrice : 0;
-    
-    // Final adjustment for losing trades that never went into profit
-    if (tradeOutcome === 'loss' && maxR <= 0) {
-        maxR = -1;
-    }
+    let maxR = riskAmountPrice > 0 ? maxProfitPrice / riskAmountPrice : 0;
 
+    // If a trade is a loss, its maxR cannot be positive. If it is, it should be -1.
+    // This handles cases where price moved slightly in profit before reversing to a loss.
+    if (tradeOutcome === 'loss') {
+        if (maxR > 0) {
+            // It went slightly into profit before losing
+        } else {
+            maxR = -1; // Never went into profit
+        }
+    }
+    
     let minDistanceToSLPips = '0.00';
     if (tradeOutcome === 'win') {
         let minDistancePrice = 0;
@@ -170,6 +176,7 @@ const simulateTrade = (
         minDistanceToSLPips
     };
 };
+
 
 const fillGapsInData = (data: PriceData[]): PriceData[] => {
     if (data.length < 2) {
@@ -1288,3 +1295,5 @@ export default function AlgoInsightsPage() {
     </div>
   );
 }
+
+    
