@@ -34,6 +34,7 @@ type TradeReportRow = {
     dateClosed: string;
     maxR: string;
     stopLossPips: string;
+    timeToMaxR: string;
 };
 
 type DrawingState = {
@@ -66,6 +67,22 @@ const formatDateForCsv = (date: Date | null): string => {
     return `${month}/${day}/${year} ${hours}:${minutes}:${seconds}`;
 };
 
+const formatDuration = (ms: number): string => {
+    if (ms <= 0) return '0m';
+
+    const totalMinutes = Math.floor(ms / (1000 * 60));
+    const days = Math.floor(totalMinutes / (60 * 24));
+    const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+    const minutes = totalMinutes % 60;
+
+    let result = '';
+    if (days > 0) result += `${days}d `;
+    if (hours > 0) result += `${hours}h `;
+    if (minutes > 0 || result === '') result += `${minutes}m`;
+    
+    return result.trim();
+};
+
 const simulateTrade = (
     tool: RRToolType,
     priceData: PriceData[],
@@ -84,19 +101,25 @@ const simulateTrade = (
     let dateClosed: Date | null = null;
     let highSinceEntry = tool.entryPrice;
     let lowSinceEntry = tool.entryPrice;
+    let dateOfHigh: Date = dateTaken;
+    let dateOfLow: Date = dateTaken;
     
     for (let i = entryIndex + 1; i < priceData.length; i++) {
         const candle = priceData[i];
 
+        if (candle.high > highSinceEntry) {
+            highSinceEntry = candle.high;
+            dateOfHigh = candle.date;
+        }
+        if (candle.low < lowSinceEntry) {
+            lowSinceEntry = candle.low;
+            dateOfLow = candle.date;
+        }
+
         if ((tool.position === 'long' && candle.low <= tool.stopLoss) || (tool.position === 'short' && candle.high >= tool.stopLoss)) {
-            highSinceEntry = Math.max(highSinceEntry, candle.high);
-            lowSinceEntry = Math.min(lowSinceEntry, candle.low);
             dateClosed = candle.date;
             break; 
         }
-
-        highSinceEntry = Math.max(highSinceEntry, candle.high);
-        lowSinceEntry = Math.min(lowSinceEntry, candle.low);
     }
     
     if (!dateClosed) {
@@ -111,12 +134,16 @@ const simulateTrade = (
     }
     let maxR = riskAmountPrice > 0 ? maxProfitPrice / riskAmountPrice : 0;
     
+    const dateOfMaxR = tool.position === 'long' ? dateOfHigh : dateOfLow;
+    const timeToMaxRMs = dateOfMaxR.getTime() - dateTaken.getTime();
+
     return {
         pair: '',
         dateTaken: formatDateForCsv(dateTaken),
         dateClosed: formatDateForCsv(dateClosed),
         maxR: maxR.toFixed(2),
         stopLossPips,
+        timeToMaxR: formatDuration(timeToMaxRMs),
     };
 };
 
@@ -634,6 +661,7 @@ export default function AlgoInsightsPage() {
         "Date Closed", 
         "Max R", 
         "Stop Loss In Pips",
+        "Time to Max R"
     ].join(',');
 
     const sortedTools = [...rrTools].sort((a, b) => a.entryDate.getTime() - b.entryDate.getTime());
@@ -657,6 +685,7 @@ export default function AlgoInsightsPage() {
             reportRow.dateClosed,
             reportRow.maxR,
             reportRow.stopLossPips,
+            reportRow.timeToMaxR
         ];
         
         return rowData.map(sanitize).join(',');
