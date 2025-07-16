@@ -29,13 +29,10 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 
 type TradeReportRow = {
-    tradeOutcome: string;
     pair: string;
     dateTaken: string;
     dateClosed: string;
-    dayOfWeek: string;
     maxR: string;
-    comments: string;
     stopLossPips: string;
 };
 
@@ -71,90 +68,53 @@ const simulateTrade = (
 ): TradeReportRow | null => {
     const entryIndex = priceData.findIndex(p => p.date.getTime() >= tool.entryDate.getTime());
 
-    if (entryIndex === -1) return null; // Entry date not found in data
+    if (entryIndex === -1) return null;
 
     const dateTaken = priceData[entryIndex].date;
-    const dayOfWeek = dateTaken.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
     const riskAmountPrice = Math.abs(tool.entryPrice - tool.stopLoss);
-    if (riskAmountPrice <= 0) return null; // Avoid division by zero
+    if (riskAmountPrice <= 0) return null;
 
     const stopLossPips = pipValue > 0 ? (riskAmountPrice / pipValue).toFixed(2) : '0.00';
     
-    let isWin = false;
-    let comments = '';
     let dateClosed: Date | null = null;
     let highSinceEntry = tool.entryPrice;
     let lowSinceEntry = tool.entryPrice;
     
-    // Start simulation from the candle *after* entry
     for (let i = entryIndex + 1; i < priceData.length; i++) {
         const candle = priceData[i];
 
-        // 1. Check for stop loss hit FIRST to end the trade immediately
         if ((tool.position === 'long' && candle.low <= tool.stopLoss) || (tool.position === 'short' && candle.high >= tool.stopLoss)) {
-            // Update final high/low with the candle that hit the SL for accurate maxR calculation
             highSinceEntry = Math.max(highSinceEntry, candle.high);
             lowSinceEntry = Math.min(lowSinceEntry, candle.low);
             dateClosed = candle.date;
-            break; // Stop simulation on loss
+            break; 
         }
 
-        // 2. If not stopped out, update the running high/low
         highSinceEntry = Math.max(highSinceEntry, candle.high);
         lowSinceEntry = Math.min(lowSinceEntry, candle.low);
-
-        // 3. Check for win condition (>= 2R)
-        let currentMaxProfitPrice = 0;
-        if (tool.position === 'long') {
-            currentMaxProfitPrice = highSinceEntry - tool.entryPrice;
-        } else { // 'short'
-            currentMaxProfitPrice = tool.entryPrice - lowSinceEntry;
-        }
-        const currentMaxR = riskAmountPrice > 0 ? currentMaxProfitPrice / riskAmountPrice : 0;
-        
-        if (!isWin && currentMaxR >= 2) {
-            isWin = true; // Mark as a win. The simulation continues to find the true maxR.
-        }
     }
     
-    const tradeOutcome = isWin ? 'win' : 'loss';
-
-    // If loop finished without SL hit, it's either a runner win or an open trade
     if (!dateClosed) {
-        if (isWin) {
-            comments = 'Runner';
-        }
-        // If it was never a win and never stopped, it's an open loser, maxR will be negative.
         dateClosed = priceData[priceData.length - 1].date;
     }
     
-    // Final Max R calculation based on the absolute peak price movement during the trade
     let maxProfitPrice = 0;
     if (tool.position === 'long') {
         maxProfitPrice = highSinceEntry - tool.entryPrice;
-    } else { // 'short'
+    } else {
         maxProfitPrice = tool.entryPrice - lowSinceEntry;
     }
     let maxR = riskAmountPrice > 0 ? maxProfitPrice / riskAmountPrice : 0;
 
-    // If a trade is a loss, its maxR should reflect the maximum loss, which is -1R.
-    // This handles cases where price moved slightly in profit before reversing to a loss.
-    if (tradeOutcome === 'loss') {
-        // A loss can have a positive maxR if it moved into profit before hitting SL.
-        // If it never went into profit, cap the maxR at -1, representing full stop loss hit.
-        if (maxR <= 0) {
-            maxR = -1;
-        }
+    if (maxR < -1) {
+        maxR = -1;
     }
     
     return {
-        tradeOutcome,
-        pair: '', // Pair will be added later
+        pair: '',
         dateTaken: formatDateForCsv(dateTaken),
         dateClosed: formatDateForCsv(dateClosed),
-        dayOfWeek,
         maxR: maxR.toFixed(2),
-        comments,
         stopLossPips,
     };
 };
@@ -668,13 +628,10 @@ export default function AlgoInsightsPage() {
     }
 
     const headers = [
-        "Trade Outcome", 
         "Pair", 
         "Date Taken", 
         "Date Closed", 
-        "Day of the week", 
         "Max R", 
-        "Comments", 
         "Stop Loss In Pips", 
     ].join(',');
 
@@ -694,13 +651,10 @@ export default function AlgoInsightsPage() {
         };
 
         const rowData = [
-            reportRow.tradeOutcome,
             reportRow.pair,
             reportRow.dateTaken,
             reportRow.dateClosed,
-            reportRow.dayOfWeek,
             reportRow.maxR,
-            reportRow.comments,
             reportRow.stopLossPips,
         ];
         
@@ -1275,3 +1229,5 @@ export default function AlgoInsightsPage() {
     </div>
   );
 }
+
+    
