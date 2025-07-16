@@ -34,7 +34,7 @@ type TradeReportRow = {
     dateClosed: string;
     maxR: string;
     stopLossPips: string;
-    timeToMaxR: string;
+    maxRTaken: string;
 };
 
 type DrawingState = {
@@ -49,11 +49,6 @@ type SessionState = {
     fileName: string;
 };
 
-type ToolbarPositions = {
-    main: { x: number; y: number };
-    secondary: { x: number; y: number };
-};
-
 const formatDateForCsv = (date: Date | null): string => {
     if (!date) return '';
     const day = String(date.getUTCDate()).padStart(2, '0');
@@ -65,22 +60,6 @@ const formatDateForCsv = (date: Date | null): string => {
     const seconds = String(date.getUTCSeconds()).padStart(2, '0');
 
     return `${month}/${day}/${year} ${hours}:${minutes}:${seconds}`;
-};
-
-const formatDuration = (ms: number): string => {
-    if (ms <= 0) return '0m';
-
-    const totalMinutes = Math.floor(ms / (1000 * 60));
-    const days = Math.floor(totalMinutes / (60 * 24));
-    const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
-    const minutes = totalMinutes % 60;
-
-    let result = '';
-    if (days > 0) result += `${days}d `;
-    if (hours > 0) result += `${hours}h `;
-    if (minutes > 0 || result === '') result += `${minutes}m`;
-    
-    return result.trim();
 };
 
 const simulateTrade = (
@@ -127,23 +106,23 @@ const simulateTrade = (
     }
     
     let maxProfitPrice = 0;
+    let dateOfMaxR: Date;
     if (tool.position === 'long') {
         maxProfitPrice = highSinceEntry - tool.entryPrice;
+        dateOfMaxR = dateOfHigh;
     } else {
         maxProfitPrice = tool.entryPrice - lowSinceEntry;
+        dateOfMaxR = dateOfLow;
     }
     let maxR = riskAmountPrice > 0 ? maxProfitPrice / riskAmountPrice : 0;
     
-    const dateOfMaxR = tool.position === 'long' ? dateOfHigh : dateOfLow;
-    const timeToMaxRMs = dateOfMaxR.getTime() - dateTaken.getTime();
-
     return {
         pair: '',
         dateTaken: formatDateForCsv(dateTaken),
         dateClosed: formatDateForCsv(dateClosed),
         maxR: maxR.toFixed(2),
         stopLossPips,
-        timeToMaxR: formatDuration(timeToMaxRMs),
+        maxRTaken: formatDateForCsv(dateOfMaxR),
     };
 };
 
@@ -661,7 +640,7 @@ export default function AlgoInsightsPage() {
         "Date Closed", 
         "Max R", 
         "Stop Loss In Pips",
-        "Time to Max R"
+        "Max R Timestamp"
     ].join(',');
 
     const sortedTools = [...rrTools].sort((a, b) => a.entryDate.getTime() - b.entryDate.getTime());
@@ -685,7 +664,7 @@ export default function AlgoInsightsPage() {
             reportRow.dateClosed,
             reportRow.maxR,
             reportRow.stopLossPips,
-            reportRow.timeToMaxR
+            reportRow.maxRTaken
         ];
         
         return rowData.map(sanitize).join(',');
