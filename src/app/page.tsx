@@ -28,17 +28,13 @@ import {
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 
-
 type TradeReportRow = {
-    tradeOutcome: string;
     pair: string;
     dateTaken: string;
     dateClosed: string;
-    dayOfWeek: string;
     maxR: string;
-    comments: string;
     stopLossPips: string;
-    minDistanceToSLPips: string;
+    maxRTaken: string;
 };
 
 type DrawingState = {
@@ -53,9 +49,17 @@ type SessionState = {
     fileName: string;
 };
 
-type ToolbarPositions = {
-    main: { x: number; y: number };
-    secondary: { x: number; y: number };
+const formatDateForCsv = (date: Date | null): string => {
+    if (!date) return '';
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0'); // Month is 0-indexed
+    const year = date.getUTCFullYear();
+    
+    const hours = String(date.getUTCHours()).padStart(2, '0');
+    const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+    const seconds = String(date.getUTCSeconds()).padStart(2, '0');
+
+    return `${month}/${day}/${year} ${hours}:${minutes}:${seconds}`;
 };
 
 const simulateTrade = (
@@ -64,106 +68,100 @@ const simulateTrade = (
     pipValue: number
 ): TradeReportRow | null => {
     const entryIndex = priceData.findIndex(p => p.date.getTime() >= tool.entryDate.getTime());
-    
+
     if (entryIndex === -1) return null;
 
-    // Check if there's at least one candle after the entry for simulation
-    if (entryIndex + 1 >= priceData.length) return null;
-
     const dateTaken = priceData[entryIndex].date;
-    const dayOfWeek = dateTaken.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
     const riskAmountPrice = Math.abs(tool.entryPrice - tool.stopLoss);
+    if (riskAmountPrice <= 0) return null;
+
     const stopLossPips = pipValue > 0 ? (riskAmountPrice / pipValue).toFixed(2) : '0.00';
-
-    let tradeOutcome = 'Incomplete';
+    
     let dateClosed: Date | null = null;
-    let minDistanceToSLPips = NaN;
-    let maxR = 0;
-    let comments = '';
-
-    // Initialize with the first candle *after* entry.
-    const firstCandleIndex = entryIndex + 1;
-    if (firstCandleIndex >= priceData.length) return null; // No candles to simulate
-
-    let highSinceEntry = priceData[firstCandleIndex].high;
-    let lowSinceEntry = priceData[firstCandleIndex].low;
-
-    // Start loop from the second candle *after* entry
-    for (let i = firstCandleIndex + 1; i < priceData.length; i++) {
+    let highSinceEntry = tool.entryPrice;
+    let lowSinceEntry = tool.entryPrice;
+    let dateOfHigh: Date = dateTaken;
+    let dateOfLow: Date = dateTaken;
+    
+    for (let i = entryIndex + 1; i < priceData.length; i++) {
         const candle = priceData[i];
-        
-        // Update the max/min price seen during the trade's lifetime FIRST
+
         if (candle.high > highSinceEntry) {
             highSinceEntry = candle.high;
+            dateOfHigh = candle.date;
         }
         if (candle.low < lowSinceEntry) {
             lowSinceEntry = candle.low;
+            dateOfLow = candle.date;
         }
 
-        if (tool.position === 'long') {
-             // Check for win condition first
-            if (candle.high >= tool.takeProfit) {
-                tradeOutcome = 'win';
-                dateClosed = candle.date;
-                const minSlDistPrice = lowSinceEntry - tool.stopLoss;
-                minDistanceToSLPips = pipValue > 0 ? minSlDistPrice / pipValue : 0;
-                break; // Exit loop on win
-            }
-            // Then check for loss condition
-            if (candle.low <= tool.stopLoss) {
-                tradeOutcome = 'loss';
-                dateClosed = candle.date;
-                minDistanceToSLPips = 0;
-                break; // Exit loop on loss
-            }
-        } else { // 'short'
-            // Check for win condition first
-            if (candle.low <= tool.takeProfit) {
-                tradeOutcome = 'win';
-                dateClosed = candle.date;
-                const minSlDistPrice = tool.stopLoss - highSinceEntry;
-                minDistanceToSLPips = pipValue > 0 ? minSlDistPrice / pipValue : 0;
-                break; // Exit loop on win
-            }
-             // Then check for loss condition
-            if (candle.high >= tool.stopLoss) {
-                tradeOutcome = 'loss';
-                dateClosed = candle.date;
-                minDistanceToSLPips = 0;
-                break; // Exit loop on loss
-            }
+        if ((tool.position === 'long' && candle.low <= tool.stopLoss) || (tool.position === 'short' && candle.high >= tool.stopLoss)) {
+            dateClosed = candle.date;
+            break; 
         }
     }
     
-    // Calculate Max R based on the entire (completed) trade duration
-    if (riskAmountPrice > 0) {
-        if (tradeOutcome === 'win') {
-             // For wins, MaxR is just the RR ratio
-             maxR = Math.abs((tool.takeProfit - tool.entryPrice) / (tool.entryPrice - tool.stopLoss));
-        } else if (tradeOutcome === 'loss' || tradeOutcome === 'Incomplete') {
-            // For losses or incomplete trades, calculate realized R
-            if (tool.position === 'long') {
-                const maxProfitPrice = highSinceEntry - tool.entryPrice;
-                maxR = maxProfitPrice / riskAmountPrice;
-            } else { // 'short'
-                const maxProfitPrice = tool.entryPrice - lowSinceEntry;
-                maxR = maxProfitPrice / riskAmountPrice;
-            }
-        }
+    if (!dateClosed) {
+        dateClosed = priceData[priceData.length - 1].date;
     }
+    
+    let maxProfitPrice = 0;
+    let dateOfMaxR: Date;
+    if (tool.position === 'long') {
+        maxProfitPrice = highSinceEntry - tool.entryPrice;
+        dateOfMaxR = dateOfHigh;
+    } else {
+        maxProfitPrice = tool.entryPrice - lowSinceEntry;
+        dateOfMaxR = dateOfLow;
+    }
+    let maxR = riskAmountPrice > 0 ? maxProfitPrice / riskAmountPrice : 0;
     
     return {
-        tradeOutcome,
-        pair: '', // Pair will be added later
-        dateTaken: dateTaken.toLocaleString(),
-        dateClosed: dateClosed ? dateClosed.toLocaleString() : '',
-        dayOfWeek,
+        pair: '',
+        dateTaken: formatDateForCsv(dateTaken),
+        dateClosed: formatDateForCsv(dateClosed),
         maxR: maxR.toFixed(2),
-        comments,
         stopLossPips,
-        minDistanceToSLPips: !isNaN(minDistanceToSLPips) ? minDistanceToSLPips.toFixed(2) : ''
+        maxRTaken: formatDateForCsv(dateOfMaxR),
     };
 };
+
+
+const fillGapsInData = (data: PriceData[]): PriceData[] => {
+    if (data.length < 2) {
+        return data;
+    }
+
+    const processedData: PriceData[] = [data[0]];
+    const oneMinute = 60 * 1000;
+
+    for (let i = 1; i < data.length; i++) {
+        const prevPoint = processedData[processedData.length - 1];
+        const currentPoint = data[i];
+
+        const timeDiff = currentPoint.date.getTime() - prevPoint.date.getTime();
+
+        if (timeDiff > oneMinute) {
+            const gapsToFill = Math.floor(timeDiff / oneMinute) - 1;
+            const fillPrice = prevPoint.close;
+
+            for (let j = 1; j <= gapsToFill; j++) {
+                const gapDate = new Date(prevPoint.date.getTime() + j * oneMinute);
+                processedData.push({
+                    date: gapDate,
+                    open: fillPrice,
+                    high: fillPrice,
+                    low: fillPrice,
+                    close: fillPrice,
+                    wick: [fillPrice, fillPrice],
+                });
+            }
+        }
+        processedData.push(currentPoint);
+    }
+    return processedData;
+};
+
 
 // Local storage keys
 const APP_SETTINGS_KEY = 'algo-insights-settings';
@@ -174,7 +172,7 @@ export default function AlgoInsightsPage() {
   const [priceData, setPriceData] = useState<PriceData[]>(mockPriceData);
   const [isDataImported, setIsDataImported] = useState(false);
   const [fileName, setFileName] = useState('');
-
+  
   const [drawingState, setDrawingState] = useState<DrawingState>({
     rrTools: [],
     priceMarkers: [],
@@ -329,12 +327,11 @@ export default function AlgoInsightsPage() {
 
   // Effect for saving session state
   useEffect(() => {
-    // Don't save if there's nothing to save or if we are prompting for restore
+    // Don't save if nothing to save
     if (!isDataImported && rrTools.length === 0 && priceMarkers.length === 0 && measurementTools.length === 0) {
         return;
     }
     
-    // Convert rrTools dates to string to prevent serialization issues
     const serializableDrawingState = {
         ...drawingState,
         rrTools: drawingState.rrTools.map(tool => ({
@@ -344,7 +341,7 @@ export default function AlgoInsightsPage() {
     };
 
     const sessionState: SessionState = {
-        drawingState: serializableDrawingState as any, // Cast because of date string
+        drawingState: serializableDrawingState as any,
         selectedDate: selectedDate.toISOString(),
         fileName,
     };
@@ -359,7 +356,6 @@ export default function AlgoInsightsPage() {
         try {
             const savedSession: SessionState = JSON.parse(savedSessionRaw);
 
-            // Restore drawings by converting dates back
             const restoredRrTools = savedSession.drawingState.rrTools.map(tool => ({
                 ...tool,
                 entryDate: new Date(tool.entryDate),
@@ -373,7 +369,6 @@ export default function AlgoInsightsPage() {
             setDrawingState(restoredDrawingState);
             setSelectedDate(new Date(savedSession.selectedDate));
             setFileName(savedSession.fileName);
-            // Don't set price data, wait for user to import
             setPriceData([]);
             setIsDataImported(false);
 
@@ -398,7 +393,7 @@ export default function AlgoInsightsPage() {
       setRedoStack([]);
       setFileName('');
       setIsDataImported(false);
-      setPriceData(mockPriceData); // Load mock data for a fresh start
+      setPriceData(mockPriceData);
   };
 
 
@@ -414,7 +409,7 @@ export default function AlgoInsightsPage() {
       const takeProfit = placingToolType === 'long' ? entryPrice + takeProfitOffset : entryPrice - takeProfitOffset;
       
       const visibleIndexRange = chartData.xDomain[1] - chartData.xDomain[0];
-      const widthInPoints = Math.round(visibleIndexRange * 0.25); // 25% of visible width
+      const widthInPoints = Math.round(visibleIndexRange * 0.25);
 
       const newTool: RRToolType = {
         id: `rr-${Date.now()}`,
@@ -591,12 +586,13 @@ export default function AlgoInsightsPage() {
 
             if (parsedData.length > 0) {
                 parsedData.sort((a, b) => a.date.getTime() - b.date.getTime());
-                setPriceData(parsedData);
+                const processedData = fillGapsInData(parsedData);
+                setPriceData(processedData);
                 setIsDataImported(true);
                 // On first import, pan to end. On re-import for session restore, selectedDate is already set.
                 const savedSession = localStorage.getItem(SESSION_KEY);
                 if (!savedSession) {
-                    setSelectedDate(parsedData[parsedData.length - 1].date);
+                    setSelectedDate(processedData[processedData.length - 1].date);
                 }
             } else {
                 throw new Error("No valid data rows were parsed from the file.");
@@ -639,15 +635,12 @@ export default function AlgoInsightsPage() {
     }
 
     const headers = [
-        "Trade Outcome", 
         "Pair", 
         "Date Taken", 
         "Date Closed", 
-        "Day of the week", 
         "Max R", 
-        "Comments", 
-        "Stop Loss In Pips", 
-        "Minimum Distance To SL (pips)"
+        "Stop Loss In Pips",
+        "Max R Timestamp"
     ].join(',');
 
     const sortedTools = [...rrTools].sort((a, b) => a.entryDate.getTime() - b.entryDate.getTime());
@@ -666,15 +659,12 @@ export default function AlgoInsightsPage() {
         };
 
         const rowData = [
-            reportRow.tradeOutcome,
             reportRow.pair,
             reportRow.dateTaken,
             reportRow.dateClosed,
-            reportRow.dayOfWeek,
             reportRow.maxR,
-            reportRow.comments,
             reportRow.stopLossPips,
-            reportRow.minDistanceToSLPips
+            reportRow.maxRTaken
         ];
         
         return rowData.map(sanitize).join(',');
@@ -901,7 +891,7 @@ export default function AlgoInsightsPage() {
         <div className="flex items-center gap-4">
             <FileBarChart className="w-8 h-8 text-foreground" />
             <h1 className="text-2xl font-bold font-headline text-foreground">
-                5 Minute ORB Backtester
+                Algo Insights
             </h1>
         </div>
         <div className="flex items-center gap-4">
@@ -1024,104 +1014,106 @@ export default function AlgoInsightsPage() {
               >
                   <GripVertical className="h-5 w-5 text-muted-foreground/50" />
               </div>
-              <Select value={timeframe} onValueChange={setTimeframe}>
-                  <SelectTrigger className="w-[120px]">
-                      <SelectValue placeholder="Timeframe" />
-                  </SelectTrigger>
-                  <SelectContent>
-                      <SelectItem value="1m">1 Minute</SelectItem>
-                      <SelectItem value="30m">30 Minutes</SelectItem>
-                      <SelectItem value="1H">1 Hour</SelectItem>
-                      <SelectItem value="4H">4 Hours</SelectItem>
-                      <SelectItem value="1D">1 Day</SelectItem>
-                  </SelectContent>
-              </Select>
+                <>
+                    <Select value={timeframe} onValueChange={setTimeframe}>
+                        <SelectTrigger className="w-[120px]">
+                            <SelectValue placeholder="Timeframe" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="1m">1 Minute</SelectItem>
+                            <SelectItem value="30m">30 Minutes</SelectItem>
+                            <SelectItem value="1H">1 Hour</SelectItem>
+                            <SelectItem value="4H">4 Hours</SelectItem>
+                            <SelectItem value="1D">1 Day</SelectItem>
+                        </SelectContent>
+                    </Select>
 
-              <Popover>
-                  <PopoverTrigger asChild>
-                      <Button variant="ghost" size="icon" className="text-muted-foreground">
-                          <CalendarIcon className="h-5 w-5" />
-                      </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0">
-                      <Calendar
-                          mode="single"
-                          selected={selectedDate}
-                          onSelect={handleDateSelect}
-                          defaultMonth={selectedDate}
-                          initialFocus
-                          disabled={(date) =>
-                              date > new Date() || date < new Date("1900-01-01")
-                            }
-                      />
-                  </PopoverContent>
-              </Popover>
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <Button variant="ghost" size="icon" className="text-muted-foreground">
+                                <CalendarIcon className="h-5 w-5" />
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                            <Calendar
+                                mode="single"
+                                selected={selectedDate}
+                                onSelect={handleDateSelect}
+                                defaultMonth={selectedDate}
+                                initialFocus
+                                disabled={(date) =>
+                                    date > new Date() || date < new Date("1900-01-01")
+                                    }
+                            />
+                        </PopoverContent>
+                    </Popover>
 
-              <TooltipProvider>
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={handleNextCandle} className="text-muted-foreground" disabled={priceData.length === 0}>
-                            <ChevronRight className="h-5 w-5" />
-                        </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                        <p>Next Candle</p>
-                    </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+                    <TooltipProvider>
+                      <Tooltip>
+                          <TooltipTrigger asChild>
+                              <Button variant="ghost" size="icon" onClick={handleNextCandle} className="text-muted-foreground" disabled={priceData.length === 0}>
+                                  <ChevronRight className="h-5 w-5" />
+                              </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                              <p>Next Candle</p>
+                          </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
 
-              <TooltipProvider>
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={handleNextSession} className="text-muted-foreground" disabled={priceData.length === 0}>
-                            <ChevronsRight className="h-5 w-5" />
-                        </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                        <p>Next Session Open</p>
-                    </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+                    <TooltipProvider>
+                      <Tooltip>
+                          <TooltipTrigger asChild>
+                              <Button variant="ghost" size="icon" onClick={handleNextSession} className="text-muted-foreground" disabled={priceData.length === 0}>
+                                  <ChevronsRight className="h-5 w-5" />
+                              </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                              <p>Next Session Open</p>
+                          </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    
+                    <div className="h-6 border-l border-border/50"></div>
+                
+                    <TooltipProvider>
+                        <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={handleImportClick}
+                          >
+                            <FileUp className={cn(
+                              "h-5 w-5",
+                              isDataImported ? "text-chart-3" : "text-muted-foreground"
+                            )} />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>{isDataImported ? "CSV Data Loaded" : "Import Dukascopy CSV"}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleFileChange}
+                      accept=".csv"
+                      className="hidden"
+                    />
 
-              <div className="h-6 border-l border-border/50"></div>
-              
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
                     <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={handleImportClick}
+                        variant="ghost" 
+                        onClick={handleExportCsv} 
+                        disabled={rrTools.length === 0 || !isDataImported}
+                        className="text-foreground"
                     >
-                      <FileUp className={cn(
-                        "h-5 w-5",
-                        isDataImported ? "text-chart-3" : "text-muted-foreground"
-                      )} />
+                        <Download className="mr-2 h-4 w-4" />
+                        Download Report
                     </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>{isDataImported ? "CSV Data Loaded" : "Import Dukascopy CSV"}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileChange}
-                accept=".csv"
-                className="hidden"
-              />
-
-              <Button
-                  variant="ghost" 
-                  onClick={handleExportCsv} 
-                  disabled={rrTools.length === 0 || !isDataImported}
-                  className="text-foreground"
-              >
-                  <Download className="mr-2 h-4 w-4" />
-                  Download Report
-              </Button>
+                </>
             </div>
             
             {fileName && (
