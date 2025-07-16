@@ -58,7 +58,12 @@ const formatDateForCsv = (date: Date | null): string => {
     const day = String(date.getUTCDate()).padStart(2, '0');
     const month = String(date.getUTCMonth() + 1).padStart(2, '0'); // Month is 0-indexed
     const year = date.getUTCFullYear();
-    return `${month}/${day}/${year}`;
+    
+    const hours = String(date.getUTCHours()).padStart(2, '0');
+    const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+    const seconds = String(date.getUTCSeconds()).padStart(2, '0');
+
+    return `${month}/${day}/${year} ${hours}:${minutes}:${seconds}`;
 };
 
 const simulateTrade = (
@@ -105,10 +110,6 @@ const simulateTrade = (
         maxProfitPrice = tool.entryPrice - lowSinceEntry;
     }
     let maxR = riskAmountPrice > 0 ? maxProfitPrice / riskAmountPrice : 0;
-
-    if (maxR < -1) {
-        maxR = -1;
-    }
     
     return {
         pair: '',
@@ -632,7 +633,7 @@ export default function AlgoInsightsPage() {
         "Date Taken", 
         "Date Closed", 
         "Max R", 
-        "Stop Loss In Pips", 
+        "Stop Loss In Pips",
     ].join(',');
 
     const sortedTools = [...rrTools].sort((a, b) => a.entryDate.getTime() - b.entryDate.getTime());
@@ -1229,5 +1230,3 @@ export default function AlgoInsightsPage() {
     </div>
   );
 }
-
-    
