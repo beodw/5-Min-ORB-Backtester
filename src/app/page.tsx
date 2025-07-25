@@ -6,7 +6,7 @@ import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, Chevr
 import { Button } from "@/components/ui/button";
 import { InteractiveChart, type ChartClickData } from "@/components/algo-insights/interactive-chart";
 import { mockPriceData } from "@/lib/mock-data";
-import type { RiskRewardTool as RRToolType, PriceMarker, MeasurementTool as MeasurementToolType, MeasurementPoint, PriceData } from "@/types";
+import type { RiskRewardTool as RRToolType, PriceMarker, MeasurementTool as MeasurementToolType, MeasurementPoint, PriceData, ToolbarPositions } from "@/types";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -740,8 +740,8 @@ export default function AlgoInsightsPage() {
         // Check 1: Is this candle on a day AFTER the last known day?
         if (pointDay.getTime() > lastDay.getTime()) {
             
-            // Check 2: If it's a new day, is this the session start time? (in UTC)
-            if (pointDate.getUTCHours() === sessionHour && pointDate.getUTCMinutes() === sessionMinute) {
+            // Check 2: If it's a new day, is this the first candle at or after the session start time?
+            if (pointDate.getUTCHours() > sessionHour || (pointDate.getUTCHours() === sessionHour && pointDate.getUTCMinutes() >= sessionMinute)) {
                 return i; // Found the start of the next session.
             }
         }
@@ -750,13 +750,15 @@ export default function AlgoInsightsPage() {
     return -1; // Not found
   };
   
+  
   const handleNextSession = () => {
     if (!sessionStartTime || !priceData.length) return;
 
     const startIndex = findNextSessionStartIndex(selectedDate);
 
     if (startIndex !== -1) {
-        if (startIndex + 4 >= priceData.length) {
+        const endIndex = startIndex + 6;
+        if (endIndex > priceData.length) {
             toast({
                 variant: "destructive",
                 title: "Not Enough Data",
@@ -765,8 +767,7 @@ export default function AlgoInsightsPage() {
             setSelectedDate(priceData[startIndex].date);
             return;
         }
-        
-        const openingRangeCandles = priceData.slice(startIndex, startIndex + 5);
+        const openingRangeCandles = priceData.slice(startIndex, endIndex);
 
         let openingRangeHigh = openingRangeCandles[0].high;
         let openingRangeLow = openingRangeCandles[0].low;
