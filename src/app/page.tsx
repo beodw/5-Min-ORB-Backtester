@@ -43,10 +43,16 @@ type DrawingState = {
     measurementTools: MeasurementToolType[];
 };
 
+type SessionInfo = {
+    month: number; // 0-11 for Jan-Dec
+    year: number;
+    fileCount: number;
+};
+
 type SessionState = {
     drawingState: DrawingState;
     selectedDate: string; // Stored as ISO string
-    fileName: string;
+    sessionInfo: SessionInfo | null;
 };
 
 const formatDateForCsv = (date: Date | null): string => {
@@ -112,8 +118,10 @@ const simulateTrade = (
     }
     let maxR = riskAmountPrice > 0 ? maxProfitPrice / riskAmountPrice : 0;
     
+    const pairName = tool.id.split('-')[0] || 'N/A';
+    
     return {
-        pair: '',
+        pair: pairName,
         dateTaken: formatDateForCsv(dateTaken),
         dateClosed: formatDateForCsv(dateClosed),
         maxR: maxR.toFixed(2),
@@ -167,7 +175,7 @@ const TOOLBAR_POS_KEY = 'algo-insights-toolbar-positions';
 export default function AlgoInsightsPage() {
   const [priceData, setPriceData] = useState<PriceData[]>(mockPriceData);
   const [isDataImported, setIsDataImported] = useState(false);
-  const [fileName, setFileName] = useState('');
+  const [sessionInfo, setSessionInfo] = useState<SessionInfo | null>(null);
   
   const [drawingState, setDrawingState] = useState<DrawingState>({
     rrTools: [],
@@ -243,7 +251,7 @@ export default function AlgoInsightsPage() {
   const { toast } = useToast();
 
   const [showRestoreDialog, setShowRestoreDialog] = useState(false);
-  const [sessionToRestore, setSessionToRestore] = useState<string | null>(null);
+  const [sessionToRestore, setSessionToRestore] = useState<SessionInfo | null>(null);
 
   // Effect for loading settings and checking for saved session on initial load
   useEffect(() => {
@@ -292,8 +300,8 @@ export default function AlgoInsightsPage() {
     if (savedSessionRaw) {
         try {
             const savedSession: SessionState = JSON.parse(savedSessionRaw);
-            if (savedSession.fileName) {
-                setSessionToRestore(savedSession.fileName);
+            if (savedSession.sessionInfo) {
+                setSessionToRestore(savedSession.sessionInfo);
                 setShowRestoreDialog(true);
             }
         } catch (e) {
@@ -339,11 +347,11 @@ export default function AlgoInsightsPage() {
     const sessionState: SessionState = {
         drawingState: serializableDrawingState as any,
         selectedDate: selectedDate.toISOString(),
-        fileName,
+        sessionInfo,
     };
     localStorage.setItem(SESSION_KEY, JSON.stringify(sessionState));
 
-  }, [drawingState, selectedDate, fileName, isDataImported]);
+  }, [drawingState, selectedDate, sessionInfo, isDataImported]);
 
   const handleRestoreSession = () => {
     setShowRestoreDialog(false);
@@ -364,13 +372,13 @@ export default function AlgoInsightsPage() {
 
             setDrawingState(restoredDrawingState);
             setSelectedDate(new Date(savedSession.selectedDate));
-            setFileName(savedSession.fileName);
+            setSessionInfo(savedSession.sessionInfo);
             setPriceData([]);
             setIsDataImported(false);
 
             toast({
                 title: "Session Restored",
-                description: `Drawings and settings loaded. Please re-import "${savedSession.fileName}" to see the chart data.`,
+                description: `Drawings and settings loaded. Please re-import the files for ${sessionToRestore ? new Date(sessionToRestore.year, sessionToRestore.month).toLocaleString('default', { month: 'long', year: 'numeric' }) : 'your session'}.`,
                 duration: 9000
             });
         } catch (e) {
@@ -387,7 +395,7 @@ export default function AlgoInsightsPage() {
       setDrawingState({ rrTools: [], priceMarkers: [], measurementTools: [] });
       setHistory([]);
       setRedoStack([]);
-      setFileName('');
+      setSessionInfo(null);
       setIsDataImported(false);
       setPriceData(mockPriceData);
   };
@@ -526,96 +534,124 @@ export default function AlgoInsightsPage() {
     fileInputRef.current?.click();
   };
   
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
 
-    setFileName(file.name);
-    const reader = new FileReader();
+    const filePromises = Array.from(files).map(file => {
+        return new Promise<PriceData[]>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const text = e.target?.result as string;
+                    const lines = text.split('\n').filter(line => line.trim() !== '');
+                    if (lines.length <= 1) {
+                        // Resolve with empty array for files with only headers
+                        resolve([]);
+                        return;
+                    }
+                    const dataRows = lines.slice(1);
+                    const parsedData: PriceData[] = dataRows.map((row, index) => {
+                        const columns = row.split(',');
+                        const [localTime, openStr, highStr, lowStr, closeStr] = columns;
 
-    reader.onload = (e) => {
-        try {
-            const text = e.target?.result;
-            if (typeof text !== 'string') throw new Error("Could not read file contents.");
+                        if (!localTime || !openStr || !highStr || !lowStr || !closeStr) {
+                           throw new Error(`File ${file.name}, Row ${index + 2}: Missing columns.`);
+                        }
 
-            const lines = text.split('\n').filter(line => line.trim() !== '');
-            if (lines.length <= 1) throw new Error("CSV is empty or has only a header.");
-
-            const dataRows = lines.slice(1);
-
-            const parsedData: PriceData[] = dataRows.map((row, index) => {
-                const columns = row.split(',');
-                const [localTime, openStr, highStr, lowStr, closeStr] = columns;
-
-                if (!localTime || !openStr || !highStr || !lowStr || !closeStr) {
-                    throw new Error(`Row ${index + 2} has missing columns. Expected 5, found ${columns.length}.`);
+                        const dateTimeString = localTime.trim().replace(' GMT', '');
+                        const [datePart, timePart] = dateTimeString.split(' ');
+                        
+                        if (!datePart || !timePart) {
+                            throw new Error(`File ${file.name}, Row ${index + 2}: Invalid date format.`);
+                        }
+                        
+                        const [day, month, year] = datePart.split('.').map(Number);
+                        const [hour, minute] = timePart.split(':').map(Number);
+                        const second = Number(timePart.split(':')[2] || 0);
+                        
+                        if (isNaN(day) || isNaN(month) || isNaN(year) || isNaN(hour) || isNaN(minute) || isNaN(second)) {
+                           throw new Error(`File ${file.name}, Row ${index + 2}: Invalid date values.`);
+                        }
+                        const date = new Date(Date.UTC(year, month - 1, day, hour, minute, Math.floor(second)));
+                        if (isNaN(date.getTime())) throw new Error(`File ${file.name}, Row ${index + 2}: Invalid Date object.`);
+                        
+                        return { date, open: parseFloat(openStr), high: parseFloat(highStr), low: parseFloat(lowStr), close: parseFloat(closeStr), wick: [parseFloat(lowStr), parseFloat(highStr)] };
+                    }).filter(d => !isNaN(d.open));
+                    resolve(parsedData);
+                } catch (error: any) {
+                    reject(error);
                 }
+            };
+            reader.onerror = () => reject(new Error(`Failed to read file: ${file.name}`));
+            reader.readAsText(file);
+        });
+    });
 
-                const dateTimeString = localTime.trim().replace(' GMT', '');
-                const [datePart, timePart] = dateTimeString.split(' ');
-                
-                if (!datePart || !timePart) {
-                    throw new Error(`Invalid date format on row ${index + 2}. Expected 'DD.MM.YYYY HH:MM:SS', but found '${localTime}'.`);
-                }
-                
-                const [day, month, year] = datePart.split('.').map(Number);
-                const [hour, minute] = timePart.split(':').map(Number);
-                const second = timePart.includes(':') && timePart.split(':')[2] ? Number(timePart.split(':')[2]) || 0 : 0;
-                
-                if (isNaN(day) || isNaN(month) || isNaN(year) || isNaN(hour) || isNaN(minute) || isNaN(second)) {
-                    throw new Error(`Invalid date values on row ${index + 2}. Could not parse: '${localTime}'`);
-                }
-                const date = new Date(Date.UTC(year, month - 1, day, hour, minute, Math.floor(second)));
-                if (isNaN(date.getTime())) throw new Error(`Invalid date on row ${index + 2}. Parsed to an invalid Date object from: '${localTime}'`);
+    try {
+        const allFilesData = await Promise.all(filePromises);
+        const combinedData = allFilesData.flat();
 
-                const open = parseFloat(openStr);
-                const high = parseFloat(highStr);
-                const low = parseFloat(lowStr);
-                const close = parseFloat(closeStr);
-                
-                if (isNaN(open) || isNaN(high) || isNaN(low) || isNaN(close)) {
-                    throw new Error(`Invalid price data on row ${index + 2}. Check for non-numeric values.`);
-                }
+        if (combinedData.length === 0) {
+            throw new Error("No valid data rows were parsed from the selected files.");
+        }
+        
+        combinedData.sort((a, b) => a.date.getTime() - b.date.getTime());
 
-                return { date, open, high, low, close, wick: [low, high] };
-            });
-
-            if (parsedData.length > 0) {
-                parsedData.sort((a, b) => a.date.getTime() - b.date.getTime());
-                const processedData = fillGapsInData(parsedData);
-                setPriceData(processedData);
-                setIsDataImported(true);
-                // On first import, pan to end. On re-import for session restore, selectedDate is already set.
-                const savedSession = localStorage.getItem(SESSION_KEY);
-                if (!savedSession) {
-                    setSelectedDate(processedData[processedData.length - 1].date);
+        // --- Validation Logic ---
+        const firstPoint = combinedData[0];
+        const month = firstPoint.date.getUTCMonth();
+        const year = firstPoint.date.getUTCFullYear();
+        
+        const getTradingDaysInMonth = (year: number, month: number) => {
+            let count = 0;
+            const date = new Date(Date.UTC(year, month, 1));
+            while(date.getUTCMonth() === month) {
+                const day = date.getUTCDay();
+                if (day > 0 && day < 6) { // Monday to Friday
+                    count++;
                 }
-            } else {
-                throw new Error("No valid data rows were parsed from the file.");
+                date.setDate(date.getDate() + 1);
             }
-        } catch (error: any) {
+            return count;
+        };
+
+        const expectedTradingDays = getTradingDaysInMonth(year, month);
+        const importedFileCount = files.length;
+        const monthName = firstPoint.date.toLocaleString('default', { month: 'long' });
+
+        if (importedFileCount < expectedTradingDays) {
             toast({
-                variant: "destructive",
-                title: "CSV Import Failed",
-                description: `Please check the file format. Error: ${error.message}`,
+                variant: "default",
+                title: "Data Validation Warning",
+                description: `Imported ${importedFileCount} of ${expectedTradingDays} expected trading day files for ${monthName} ${year}. Data may be incomplete.`,
                 duration: 9000,
             });
-            setIsDataImported(false);
+        } else {
+             toast({
+                title: "Import Successful",
+                description: `Successfully imported ${importedFileCount} files for ${monthName} ${year}.`,
+             });
         }
-    };
-
-    reader.onerror = () => {
+        
+        const processedData = fillGapsInData(combinedData);
+        setPriceData(processedData);
+        setSessionInfo({ month, year, fileCount: importedFileCount });
+        setIsDataImported(true);
+        setSelectedDate(processedData[processedData.length - 1].date);
+        
+    } catch (error: any) {
         toast({
             variant: "destructive",
-            title: "File Read Error",
-            description: "An error occurred while reading the file.",
+            title: "CSV Import Failed",
+            description: `Error: ${error.message}`,
+            duration: 9000,
         });
         setIsDataImported(false);
-    };
-
-    reader.readAsText(file);
-    if(fileInputRef.current) {
-        fileInputRef.current.value = "";
+    } finally {
+        if(fileInputRef.current) {
+            fileInputRef.current.value = "";
+        }
     }
   };
 
@@ -644,8 +680,9 @@ export default function AlgoInsightsPage() {
     const rows = sortedTools.map(tool => {
         const reportRow = simulateTrade(tool, priceData, pipValue);
         if (!reportRow) return null;
-
-        const pair = fileName ? fileName.split('-')[0].trim() : 'N/A';
+        
+        // Use month/year from sessionInfo if available
+        const pair = sessionInfo ? `${new Date(sessionInfo.year, sessionInfo.month).toLocaleString('default', { month: 'short' })}${sessionInfo.year}` : 'N/A';
         reportRow.pair = pair;
 
         const sanitize = (val: any) => {
@@ -881,6 +918,10 @@ export default function AlgoInsightsPage() {
   };
 
   const isPlacingAnything = !!placingToolType || isPlacingPriceMarker || isPlacingMeasurement;
+  
+  const restoreMessage = sessionToRestore 
+        ? `We found saved drawings and settings for ${new Date(sessionToRestore.year, sessionToRestore.month).toLocaleString('default', { month: 'long', year: 'numeric' })}. Would you like to restore this session? You will be prompted to re-import the files.`
+        : 'An unknown previous session was found. Restore?';
 
   return (
     <div className="flex flex-col h-screen bg-background text-foreground font-body">
@@ -961,9 +1002,7 @@ export default function AlgoInsightsPage() {
                 <AlertDialogHeader>
                     <AlertDialogTitle>Restore Previous Session?</AlertDialogTitle>
                     <AlertDialogDescription>
-                        We found saved drawings and settings for the file: <strong>{sessionToRestore}</strong>.
-                        <br />
-                        Would you like to restore this session? You will be prompted to re-import the file.
+                        {restoreMessage}
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -1099,6 +1138,7 @@ export default function AlgoInsightsPage() {
                       onChange={handleFileChange}
                       accept=".csv"
                       className="hidden"
+                      multiple
                     />
 
                     <Button
@@ -1113,10 +1153,10 @@ export default function AlgoInsightsPage() {
                 </>
             </div>
             
-            {fileName && (
+            {sessionInfo && (
                 <div className="bg-card/70 backdrop-blur-sm rounded-md px-2 py-1 shadow-md ml-8">
                     <p className="text-xs text-muted-foreground/80">
-                        Loaded: <span className="font-medium text-foreground/90">{fileName}</span>
+                        Loaded: <span className="font-medium text-foreground/90">{sessionInfo.fileCount} files ({new Date(sessionInfo.year, sessionInfo.month).toLocaleString('default', { month: 'long', year: 'numeric' })})</span>
                     </p>
                 </div>
             )}
@@ -1235,3 +1275,5 @@ export default function AlgoInsightsPage() {
     </div>
   );
 }
+
+    
