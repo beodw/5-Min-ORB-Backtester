@@ -44,9 +44,7 @@ type DrawingState = {
 };
 
 type SessionInfo = {
-    month: number; // 0-11 for Jan-Dec
-    year: number;
-    fileCount: number;
+    fileName: string;
 };
 
 type SessionState = {
@@ -378,7 +376,7 @@ export default function AlgoInsightsPage() {
 
             toast({
                 title: "Session Restored",
-                description: `Drawings and settings loaded. Please re-import the files for ${sessionToRestore ? new Date(sessionToRestore.year, sessionToRestore.month).toLocaleString('default', { month: 'long', year: 'numeric' }) : 'your session'}.`,
+                description: `Drawings and settings loaded. Please re-import the file: ${sessionToRestore?.fileName}.`,
                 duration: 9000
             });
         } catch (e) {
@@ -534,125 +532,93 @@ export default function AlgoInsightsPage() {
     fileInputRef.current?.click();
   };
   
-  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (!files || files.length === 0) return;
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
 
-    const filePromises = Array.from(files).map(file => {
-        return new Promise<PriceData[]>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                try {
-                    const text = e.target?.result as string;
-                    const lines = text.split('\n').filter(line => line.trim() !== '');
-                    if (lines.length <= 1) {
-                        // Resolve with empty array for files with only headers
-                        resolve([]);
-                        return;
-                    }
-                    const dataRows = lines.slice(1);
-                    const parsedData: PriceData[] = dataRows.map((row, index) => {
-                        const columns = row.split(',');
-                        const [localTime, openStr, highStr, lowStr, closeStr] = columns;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const text = e.target?.result as string;
+            const lines = text.split('\n').filter(line => line.trim() !== '');
 
-                        if (!localTime || !openStr || !highStr || !lowStr || !closeStr) {
-                           throw new Error(`File ${file.name}, Row ${index + 2}: Missing columns.`);
-                        }
-
-                        const dateTimeString = localTime.trim().replace(' GMT', '');
-                        const [datePart, timePart] = dateTimeString.split(' ');
-                        
-                        if (!datePart || !timePart) {
-                            throw new Error(`File ${file.name}, Row ${index + 2}: Invalid date format.`);
-                        }
-                        
-                        const [day, month, year] = datePart.split('.').map(Number);
-                        const [hour, minute] = timePart.split(':').map(Number);
-                        const second = Number(timePart.split(':')[2] || 0);
-                        
-                        if (isNaN(day) || isNaN(month) || isNaN(year) || isNaN(hour) || isNaN(minute) || isNaN(second)) {
-                           throw new Error(`File ${file.name}, Row ${index + 2}: Invalid date values.`);
-                        }
-                        const date = new Date(Date.UTC(year, month - 1, day, hour, minute, Math.floor(second)));
-                        if (isNaN(date.getTime())) throw new Error(`File ${file.name}, Row ${index + 2}: Invalid Date object.`);
-                        
-                        return { date, open: parseFloat(openStr), high: parseFloat(highStr), low: parseFloat(lowStr), close: parseFloat(closeStr), wick: [parseFloat(lowStr), parseFloat(highStr)] };
-                    }).filter(d => !isNaN(d.open));
-                    resolve(parsedData);
-                } catch (error: any) {
-                    reject(error);
-                }
-            };
-            reader.onerror = () => reject(new Error(`Failed to read file: ${file.name}`));
-            reader.readAsText(file);
-        });
-    });
-
-    try {
-        const allFilesData = await Promise.all(filePromises);
-        const combinedData = allFilesData.flat();
-
-        if (combinedData.length === 0) {
-            throw new Error("No valid data rows were parsed from the selected files.");
-        }
-        
-        combinedData.sort((a, b) => a.date.getTime() - b.date.getTime());
-
-        // --- Validation Logic ---
-        const firstPoint = combinedData[0];
-        const month = firstPoint.date.getUTCMonth();
-        const year = firstPoint.date.getUTCFullYear();
-        
-        const getTradingDaysInMonth = (year: number, month: number) => {
-            let count = 0;
-            const date = new Date(Date.UTC(year, month, 1));
-            while(date.getUTCMonth() === month) {
-                const day = date.getUTCDay();
-                if (day > 0 && day < 6) { // Monday to Friday
-                    count++;
-                }
-                date.setDate(date.getDate() + 1);
+            // Check headers
+            const header = lines[0].trim().split(',');
+            if (header[0].trim() !== 'Time (UTC)' || header[1].trim() !== 'Open') {
+                throw new Error("Invalid CSV header. Expected 'Time (UTC),Open,...'");
             }
-            return count;
-        };
+            if (lines.length <= 1) {
+                throw new Error("CSV file contains no data rows.");
+            }
+            const dataRows = lines.slice(1);
+            const parsedData: PriceData[] = dataRows.map((row, index) => {
+                const columns = row.split(',');
+                const [timeStr, openStr, highStr, lowStr, closeStr] = columns;
 
-        const expectedTradingDays = getTradingDaysInMonth(year, month);
-        const importedFileCount = files.length;
-        const monthName = firstPoint.date.toLocaleString('default', { month: 'long' });
+                if (!timeStr || !openStr || !highStr || !lowStr || !closeStr) {
+                   throw new Error(`Row ${index + 2}: Missing columns.`);
+                }
 
-        if (importedFileCount < expectedTradingDays) {
+                // Handle format "01.07.2024 00:00:00.000 GMT"
+                const dateTimeString = timeStr.trim().replace(' GMT', '');
+                const [datePart, timePart] = dateTimeString.split(' ');
+                
+                if (!datePart || !timePart) {
+                    throw new Error(`Row ${index + 2}: Invalid date format.`);
+                }
+                
+                const [day, month, year] = datePart.split('.').map(Number);
+                const [hour, minute] = timePart.split(':').map(Number);
+                const second = Number(timePart.split(':')[2] || 0);
+                
+                if (isNaN(day) || isNaN(month) || isNaN(year) || isNaN(hour) || isNaN(minute) || isNaN(second)) {
+                   throw new Error(`Row ${index + 2}: Invalid date values.`);
+                }
+                // Construct date as UTC
+                const date = new Date(Date.UTC(year, month - 1, day, hour, minute, Math.floor(second)));
+                if (isNaN(date.getTime())) throw new Error(`Row ${index + 2}: Invalid Date object.`);
+                
+                return { date, open: parseFloat(openStr), high: parseFloat(highStr), low: parseFloat(lowStr), close: parseFloat(closeStr), wick: [parseFloat(lowStr), parseFloat(highStr)] };
+            }).filter(d => !isNaN(d.open));
+
+            if (parsedData.length === 0) {
+                throw new Error("No valid data rows were parsed from the file.");
+            }
+            
+            parsedData.sort((a, b) => a.date.getTime() - b.date.getTime());
+            
+            const processedData = fillGapsInData(parsedData);
+            setPriceData(processedData);
+            setSessionInfo({ fileName: file.name });
+            setIsDataImported(true);
+            setSelectedDate(processedData[processedData.length - 1].date);
             toast({
-                variant: "default",
-                title: "Data Validation Warning",
-                description: `Imported ${importedFileCount} of ${expectedTradingDays} expected trading day files for ${monthName} ${year}. Data may be incomplete.`,
+                title: "Import Successful",
+                description: `Loaded ${file.name}`,
+            });
+            
+        } catch (error: any) {
+            toast({
+                variant: "destructive",
+                title: "CSV Import Failed",
+                description: `Error: ${error.message}`,
                 duration: 9000,
             });
-        } else {
-             toast({
-                title: "Import Successful",
-                description: `Successfully imported ${importedFileCount} files for ${monthName} ${year}.`,
-             });
+            setIsDataImported(false);
+        } finally {
+            if(fileInputRef.current) {
+                fileInputRef.current.value = "";
+            }
         }
-        
-        const processedData = fillGapsInData(combinedData);
-        setPriceData(processedData);
-        setSessionInfo({ month, year, fileCount: importedFileCount });
-        setIsDataImported(true);
-        setSelectedDate(processedData[processedData.length - 1].date);
-        
-    } catch (error: any) {
+    };
+    reader.onerror = () => {
         toast({
             variant: "destructive",
-            title: "CSV Import Failed",
-            description: `Error: ${error.message}`,
-            duration: 9000,
+            title: "File Read Error",
+            description: "Could not read the selected file.",
         });
-        setIsDataImported(false);
-    } finally {
-        if(fileInputRef.current) {
-            fileInputRef.current.value = "";
-        }
-    }
+    };
+    reader.readAsText(file);
   };
 
 
@@ -682,7 +648,7 @@ export default function AlgoInsightsPage() {
         if (!reportRow) return null;
         
         // Use month/year from sessionInfo if available
-        const pair = sessionInfo ? `${new Date(sessionInfo.year, sessionInfo.month).toLocaleString('default', { month: 'short' })}${sessionInfo.year}` : 'N/A';
+        const pair = sessionInfo ? sessionInfo.fileName.split('_')[0] : 'N/A';
         reportRow.pair = pair;
 
         const sanitize = (val: any) => {
@@ -920,7 +886,7 @@ export default function AlgoInsightsPage() {
   const isPlacingAnything = !!placingToolType || isPlacingPriceMarker || isPlacingMeasurement;
   
   const restoreMessage = sessionToRestore 
-        ? `We found saved drawings and settings for ${new Date(sessionToRestore.year, sessionToRestore.month).toLocaleString('default', { month: 'long', year: 'numeric' })}. Would you like to restore this session? You will be prompted to re-import the files.`
+        ? `We found saved drawings and settings for the file "${sessionToRestore.fileName}". Would you like to restore this session? You will be prompted to re-import the file.`
         : 'An unknown previous session was found. Restore?';
 
   return (
@@ -1138,7 +1104,6 @@ export default function AlgoInsightsPage() {
                       onChange={handleFileChange}
                       accept=".csv"
                       className="hidden"
-                      multiple
                     />
 
                     <Button
@@ -1156,7 +1121,7 @@ export default function AlgoInsightsPage() {
             {sessionInfo && (
                 <div className="bg-card/70 backdrop-blur-sm rounded-md px-2 py-1 shadow-md ml-8">
                     <p className="text-xs text-muted-foreground/80">
-                        Loaded: <span className="font-medium text-foreground/90">{sessionInfo.fileCount} files ({new Date(sessionInfo.year, sessionInfo.month).toLocaleString('default', { month: 'long', year: 'numeric' })})</span>
+                        Loaded: <span className="font-medium text-foreground/90">{sessionInfo.fileName}</span>
                     </p>
                 </div>
             )}
