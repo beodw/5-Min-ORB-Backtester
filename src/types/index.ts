@@ -1,5 +1,4 @@
 
-
 export interface PriceData {
   date: Date;
   open: number;
@@ -18,13 +17,14 @@ export interface Trade {
 }
 
 export interface RiskRewardTool {
-  id: string;
+  id:string;
   entryPrice: number;
   stopLoss: number;
   takeProfit: number;
   entryDate: Date;
   widthInPoints: number;
   position: 'long' | 'short';
+  pair: string;
 }
 
 export interface PriceMarker {
@@ -48,4 +48,9 @@ export interface MeasurementTool {
   id: string;
   startPoint: MeasurementPoint;
   endPoint: MeasurementPoint;
+}
+
+export interface ToolbarPositions {
+  main: { x: number; y: number };
+  secondary: { x: number; y: number };
 }

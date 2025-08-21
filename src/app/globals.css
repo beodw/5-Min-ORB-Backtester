@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -86,4 +87,23 @@ body {
     @apply bg-background text-foreground;
     background-color: hsl(0, 0%, 20%); /* #333333 */
   }
+  .rdp-day_selected, .rdp-day_selected:focus-visible, .rdp-day_selected:hover {
+    background-color: hsl(var(--primary)) !important;
+    color: hsl(var(--primary-foreground)) !important;
+  }
+  .rdp-day_win {
+    background-color: hsl(var(--accent));
+    color: hsl(var(--accent-foreground));
+  }
+   .rdp-day_win:hover {
+    background-color: hsl(var(--accent) / 0.9);
+  }
+  .rdp-day_loss {
+    background-color: hsl(var(--destructive));
+    color: hsl(var(--destructive-foreground));
+  }
+  .rdp-day_loss:hover {
+     background-color: hsl(var(--destructive) / 0.9);
+  }
+
 }
