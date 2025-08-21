@@ -131,16 +131,31 @@ export function JournalReconstruction() {
         
         const trades: JournalTrade[] = lines.slice(1).map((line, index) => {
           const columns = line.split(',');
+          if (columns.length <= Math.max(dateIndex, rIndex)) {
+            console.warn(`Skipping malformed row ${index + 2}`);
+            return null;
+          }
+
           const dateStr = columns[dateIndex];
           const rValue = parseFloat(columns[rIndex]);
 
-          if (!dateStr || isNaN(rValue)) throw new Error(`Invalid data on row ${index + 2}`);
+          if (!dateStr || isNaN(rValue)) {
+            console.warn(`Skipping row with invalid data on row ${index + 2}`);
+            return null;
+          }
           
           const date = new Date(dateStr);
-           if (isNaN(date.getTime())) throw new Error(`Invalid date format on row ${index + 2}`);
+           if (isNaN(date.getTime())) {
+            console.warn(`Skipping row with invalid date on row ${index + 2}`);
+            return null;
+           }
 
           return { date, result: rValue >= 2 ? 'win' : 'loss' };
-        });
+        }).filter((trade): trade is JournalTrade => trade !== null);
+
+        if (trades.length === 0) {
+            throw new Error("No valid trades could be parsed from the journal file.");
+        }
 
         setJournalTrades(trades);
         setIsJournalImported(true);
@@ -279,8 +294,8 @@ export function JournalReconstruction() {
                 onMonthChange={setSelectedDate}
                 modifiers={dayResultModifiers}
                 modifiersClassNames={{
-                    win: 'bg-accent text-accent-foreground',
-                    loss: 'bg-destructive text-destructive-foreground',
+                    win: 'rdp-day_win',
+                    loss: 'rdp-day_loss',
                 }}
                 disabled={(date) => !allTradeDates.some(tradeDate => 
                     tradeDate.getDate() === date.getDate() &&
