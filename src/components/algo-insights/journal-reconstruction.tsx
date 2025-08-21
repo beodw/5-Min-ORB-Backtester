@@ -121,12 +121,15 @@ export function JournalReconstruction() {
         const lines = text.split('\n').filter(line => line.trim() !== '');
         if (lines.length <= 1) throw new Error("Journal file is empty or has no data.");
 
-        const header = lines[0].trim().split(',');
-        const dateIndex = header.findIndex(h => h.trim() === "Date Taken (Timestamp)");
-        const rIndex = header.findIndex(h => h.trim() === "Maximum Favourable Excursion (R)");
+        const header = lines[0].trim().split(',').map(h => h.trim());
+        const dateIndex = header.findIndex(h => h === "Date Taken (Timestamp)");
+        const rIndex = header.findIndex(h => h === "Maximum Favourable Excursion (R)");
 
-        if (dateIndex === -1 || rIndex === -1) {
-          throw new Error("CSV must contain 'Date Taken (Timestamp)' and 'Maximum Favourable Excursion (R)' columns.");
+        if (dateIndex === -1) {
+          throw new Error("CSV header is missing the required column: 'Date Taken (Timestamp)'.");
+        }
+        if (rIndex === -1) {
+            throw new Error("CSV header is missing the required column: 'Maximum Favourable Excursion (R)'.");
         }
         
         const dataRows = lines.slice(1);
@@ -137,18 +140,14 @@ export function JournalReconstruction() {
           const rowNum = i + 2;
           const columns = line.split(',');
 
-          if (columns.length <= Math.max(dateIndex, rIndex)) {
-            throw new Error(`Row ${rowNum}: Malformed data. Incorrect number of columns.`);
-          }
-
           const dateStr = columns[dateIndex]?.trim();
           const rValueStr = columns[rIndex]?.trim();
           
           if (!dateStr) {
-             throw new Error(`Row ${rowNum}: 'Date Taken (Timestamp)' value is missing.`);
+             throw new Error(`Row ${rowNum}: 'Date Taken (Timestamp)' value is missing or empty.`);
           }
           if (!rValueStr) {
-             throw new Error(`Row ${rowNum}: 'Maximum Favourable Excursion (R)' value is missing.`);
+             throw new Error(`Row ${rowNum}: 'Maximum Favourable Excursion (R)' value is missing or empty.`);
           }
 
           const rValue = parseFloat(rValueStr);
@@ -161,12 +160,13 @@ export function JournalReconstruction() {
             throw new Error(`Row ${rowNum}: Invalid date format for "${dateStr}". Expected MM/DD/YYYY.`);
           }
           const [month, day, year] = dateParts.map(Number);
-          if (isNaN(month) || isNaN(day) || isNaN(year)) {
+          if (isNaN(month) || isNaN(day) || isNaN(year) || month < 1 || month > 12 || day < 1 || day > 31) {
             throw new Error(`Row ${rowNum}: Invalid date values in "${dateStr}".`);
           }
+          // Note: month is 0-indexed in JavaScript's Date object
           const date = new Date(Date.UTC(year, month - 1, day));
           if (isNaN(date.getTime())) {
-            throw new Error(`Row ${rowNum}: Invalid date format for "${dateStr}".`);
+            throw new Error(`Row ${rowNum}: Could not create a valid date from "${dateStr}".`);
           }
 
           newTrades.push({ date, result: rValue >= 2 ? 'win' : 'loss' });
