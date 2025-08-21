@@ -129,42 +129,54 @@ export function JournalReconstruction() {
           throw new Error("CSV must contain 'Date Taken (Timestamp)' and 'Maximum Favourable Excursion (R)' columns.");
         }
         
-        const trades: JournalTrade[] = lines.slice(1).map((line, index) => {
+        const dataRows = lines.slice(1);
+        const newTrades: JournalTrade[] = [];
+
+        for (let i = 0; i < dataRows.length; i++) {
+          const line = dataRows[i];
+          const rowNum = i + 2;
           const columns = line.split(',');
+
           if (columns.length <= Math.max(dateIndex, rIndex)) {
-            console.warn(`Skipping malformed row ${index + 2}`);
-            return null;
+            throw new Error(`Row ${rowNum}: Malformed data. Incorrect number of columns.`);
           }
 
           const dateStr = columns[dateIndex];
-          const rValue = parseFloat(columns[rIndex]);
-
-          if (!dateStr || isNaN(rValue)) {
-            console.warn(`Skipping row with invalid data on row ${index + 2}`);
-            return null;
-          }
+          const rValueStr = columns[rIndex];
           
-          const date = new Date(dateStr);
-           if (isNaN(date.getTime())) {
-            console.warn(`Skipping row with invalid date on row ${index + 2}`);
-            return null;
+          if (!dateStr) {
+             throw new Error(`Row ${rowNum}: Date value is missing.`);
+          }
+           if (!rValueStr) {
+             throw new Error(`Row ${rowNum}: R-value is missing.`);
+          }
+
+          const rValue = parseFloat(rValueStr);
+           if (isNaN(rValue)) {
+            throw new Error(`Row ${rowNum}: Invalid R-value. Expected a number, but got "${rValueStr}".`);
            }
 
-          return { date, result: rValue >= 2 ? 'win' : 'loss' };
-        }).filter((trade): trade is JournalTrade => trade !== null);
+          const date = new Date(dateStr);
+           if (isNaN(date.getTime())) {
+            throw new Error(`Row ${rowNum}: Invalid date format for "${dateStr}".`);
+           }
 
-        if (trades.length === 0) {
+          newTrades.push({ date, result: rValue >= 2 ? 'win' : 'loss' });
+        }
+
+
+        if (newTrades.length === 0) {
             throw new Error("No valid trades could be parsed from the journal file.");
         }
 
-        setJournalTrades(trades);
+        setJournalTrades(newTrades);
         setIsJournalImported(true);
-        if (trades.length > 0) {
-            setSelectedDate(trades[0].date);
+        if (newTrades.length > 0) {
+            setSelectedDate(newTrades[0].date);
         }
-        toast({ title: "Journal Import Successful", description: `Loaded ${trades.length} trades.` });
+        toast({ title: "Journal Import Successful", description: `Loaded ${newTrades.length} trades.` });
       } catch (error: any) {
-        toast({ variant: "destructive", title: "Journal Import Failed", description: `Error: ${error.message}`, duration: 9000 });
+        toast({ variant: "destructive", title: "Journal Import Failed", description: `${error.message}`, duration: 9000 });
         setIsJournalImported(false);
       } finally {
          if (journalInputRef.current) journalInputRef.current.value = "";
