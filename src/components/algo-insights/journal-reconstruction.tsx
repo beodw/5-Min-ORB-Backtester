@@ -122,8 +122,8 @@ export function JournalReconstruction() {
         if (lines.length <= 1) throw new Error("Journal file is empty or has no data.");
 
         const header = lines[0].trim().split(',');
-        const dateIndex = header.findIndex(h => h.includes("Date Taken (Timestamp)"));
-        const rIndex = header.findIndex(h => h.includes("Maximum Favourable Excursion (R)"));
+        const dateIndex = header.findIndex(h => h.trim() === "Date Taken (Timestamp)");
+        const rIndex = header.findIndex(h => h.trim() === "Maximum Favourable Excursion (R)");
 
         if (dateIndex === -1 || rIndex === -1) {
           throw new Error("CSV must contain 'Date Taken (Timestamp)' and 'Maximum Favourable Excursion (R)' columns.");
@@ -141,25 +141,33 @@ export function JournalReconstruction() {
             throw new Error(`Row ${rowNum}: Malformed data. Incorrect number of columns.`);
           }
 
-          const dateStr = columns[dateIndex];
-          const rValueStr = columns[rIndex];
+          const dateStr = columns[dateIndex]?.trim();
+          const rValueStr = columns[rIndex]?.trim();
           
           if (!dateStr) {
-             throw new Error(`Row ${rowNum}: Date value is missing.`);
+             throw new Error(`Row ${rowNum}: 'Date Taken (Timestamp)' value is missing.`);
           }
-           if (!rValueStr) {
-             throw new Error(`Row ${rowNum}: R-value is missing.`);
+          if (!rValueStr) {
+             throw new Error(`Row ${rowNum}: 'Maximum Favourable Excursion (R)' value is missing.`);
           }
 
           const rValue = parseFloat(rValueStr);
-           if (isNaN(rValue)) {
+          if (isNaN(rValue)) {
             throw new Error(`Row ${rowNum}: Invalid R-value. Expected a number, but got "${rValueStr}".`);
-           }
+          }
 
-          const date = new Date(dateStr);
-           if (isNaN(date.getTime())) {
+          const dateParts = dateStr.split('/');
+          if (dateParts.length !== 3) {
+            throw new Error(`Row ${rowNum}: Invalid date format for "${dateStr}". Expected MM/DD/YYYY.`);
+          }
+          const [month, day, year] = dateParts.map(Number);
+          if (isNaN(month) || isNaN(day) || isNaN(year)) {
+            throw new Error(`Row ${rowNum}: Invalid date values in "${dateStr}".`);
+          }
+          const date = new Date(Date.UTC(year, month - 1, day));
+          if (isNaN(date.getTime())) {
             throw new Error(`Row ${rowNum}: Invalid date format for "${dateStr}".`);
-           }
+          }
 
           newTrades.push({ date, result: rValue >= 2 ? 'win' : 'loss' });
         }
@@ -207,12 +215,23 @@ export function JournalReconstruction() {
   };
   
   const handleDateSelect = (date: Date | undefined) => {
-    if (!date || !isPriceDataImported) {
-        if (isPriceDataImported) {
-            toast({ variant: "destructive", title: "No Trade Data", description: "No trade found for this day in the journal." });
-        } else {
-             toast({ variant: "destructive", title: "Price Data Missing", description: "Please import 1-minute price data first." });
-        }
+    if (!date) return;
+    
+    if (!isPriceDataImported) {
+         toast({ variant: "destructive", title: "Price Data Missing", description: "Please import 1-minute price data first." });
+        return;
+    }
+    
+    const hasTradeOnDay = journalTrades.some(tradeDate => 
+        tradeDate.date.getUTCDate() === date.getUTCDate() &&
+        tradeDate.date.getUTCMonth() === date.getUTCMonth() &&
+        tradeDate.date.getUTCFullYear() === date.getUTCFullYear()
+    );
+
+    if (!hasTradeOnDay) {
+        toast({ variant: "destructive", title: "No Trade Data", description: "No trade found for this day in the journal." });
+        setSelectedDate(date);
+        setPriceMarkers([]);
         return;
     }
 
@@ -310,9 +329,9 @@ export function JournalReconstruction() {
                     loss: 'rdp-day_loss',
                 }}
                 disabled={(date) => !allTradeDates.some(tradeDate => 
-                    tradeDate.getDate() === date.getDate() &&
-                    tradeDate.getMonth() === date.getMonth() &&
-                    tradeDate.getFullYear() === date.getFullYear()
+                    tradeDate.getUTCDate() === date.getUTCDate() &&
+                    tradeDate.getUTCMonth() === date.getUTCMonth() &&
+                    tradeDate.getUTCFullYear() === date.getUTCFullYear()
                 )}
                 className="rounded-md border"
              />
