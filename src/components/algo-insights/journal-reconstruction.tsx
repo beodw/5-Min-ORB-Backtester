@@ -8,7 +8,7 @@ import { InteractiveChart, type ChartClickData } from "@/components/algo-insight
 import { mockPriceData } from "@/lib/mock-data";
 import { useToast } from "@/hooks/use-toast";
 import type { PriceData, PriceMarker, RiskRewardTool as RRToolType, MeasurementTool as MeasurementToolType, DrawingState, ToolbarPositions, MeasurementPoint } from "@/types";
-import { FileUp, Info, Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, ChevronRight, ChevronsRight, Target, Trash2, Lock, Unlock, Ruler, Undo, Redo, GripVertical } from "lucide-react";
+import { FileUp, Info, Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, ChevronRight, ChevronsRight, Target, Trash2, Lock, Unlock, Ruler, Undo, Redo, GripVertical, ChevronLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   AlertDialog,
@@ -837,11 +837,16 @@ export function JournalReconstruction() {
                 <TooltipProvider><Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => setIsYAxisLocked(prev => !prev)}>{isYAxisLocked ? <Lock className="h-5 w-5" /> : <Unlock className="h-5 w-5" />}</Button></TooltipTrigger><TooltipContent><p>{isYAxisLocked ? "Unlock Y-Axis" : "Lock Y-Axis"}</p></TooltipContent></Tooltip></TooltipProvider>
                 <TooltipProvider><Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceMeasurement} disabled={isPlacingAnything || priceData.length === 0}><Ruler className="w-5 h-5 text-foreground"/></Button></TooltipTrigger><TooltipContent><p>Measure Distance</p></TooltipContent></Tooltip></TooltipProvider>
                  <AlertDialog>
-                    <TooltipProvider><Tooltip><TooltipTrigger asChild>
-                        <div className={cn((rrTools.length === 0 && priceMarkers.length === 0 && measurementTools.length === 0) && "pointer-events-none")}>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                         <div className={cn((rrTools.length === 0 && priceMarkers.length === 0 && measurementTools.length === 0) && "pointer-events-none")}>
                             <AlertDialogTrigger asChild><Button variant="destructive" size="icon" disabled={rrTools.length === 0 && priceMarkers.length === 0 && measurementTools.length === 0}><Trash2 className="h-5 w-5" /></Button></AlertDialogTrigger>
-                        </div>
-                    </TooltipTrigger><TooltipContent><p>Clear all drawings</p></TooltipContent></Tooltip></TooltipProvider>
+                         </div>
+                        </TooltipTrigger>
+                        <TooltipContent><p>Clear all drawings</p></TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                     <AlertDialogContent>
                         <AlertDialogHeader><AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle><AlertDialogDescription>This action cannot be undone. This will permanently delete all placed tools and markers from the chart.</AlertDialogDescription></AlertDialogHeader>
                         <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleClearAllDrawings}>Continue</AlertDialogAction></AlertDialogFooter>
@@ -854,3 +859,5 @@ export function JournalReconstruction() {
     </div>
   );
 }
+
+    
