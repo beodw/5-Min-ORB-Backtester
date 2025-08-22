@@ -26,7 +26,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
-import { useDayPicker, CaptionProps } from "react-day-picker";
+import { useDayPicker, type CaptionProps } from "react-day-picker";
 import { format } from "date-fns";
 
 
@@ -62,81 +62,6 @@ const fillGapsInData = (data: PriceData[]): PriceData[] => {
 // Local storage keys
 const TOOLBAR_POS_KEY_JOURNAL = 'algo-insights-toolbar-positions-journal';
 
-function CustomCaption(props: CaptionProps) {
-  const { goToMonth, nextMonth, previousMonth } = useDayPicker();
-  
-  const handleYearChange = (value: string) => {
-    const newDate = new Date(props.displayMonth);
-    newDate.setFullYear(parseInt(value, 10));
-    goToMonth(newDate);
-  };
-  
-  const handleMonthChange = (value: string) => {
-    const newDate = new Date(props.displayMonth);
-    newDate.setMonth(parseInt(value, 10));
-    goToMonth(newDate);
-  };
-
-  const years = Array.from({ length: 20 }, (_, i) => new Date().getFullYear() - 10 + i);
-  const months = Array.from({ length: 12 }, (_, i) => i);
-
-  return (
-    <div className="flex justify-between items-center mb-2 px-1">
-      <div className="flex items-center gap-1">
-        <Select
-          value={props.displayMonth.getFullYear().toString()}
-          onValueChange={handleYearChange}
-        >
-          <SelectTrigger className="w-[80px] h-8 text-xs">
-            <SelectValue>{props.displayMonth.getFullYear()}</SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {years.map((year) => (
-              <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select
-          value={props.displayMonth.getMonth().toString()}
-          onValueChange={handleMonthChange}
-        >
-          <SelectTrigger className="w-[100px] h-8 text-xs">
-            <SelectValue>{format(props.displayMonth, 'MMMM')}</SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {months.map((month) => (
-              <SelectItem key={month} value={month.toString()}>
-                {format(new Date(0, month), 'MMMM')}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="flex items-center gap-1">
-        <Button
-          disabled={!previousMonth}
-          onClick={() => previousMonth && goToMonth(previousMonth)}
-          variant="outline"
-          size="icon"
-          className="h-8 w-8"
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-        <Button
-          disabled={!nextMonth}
-          onClick={() => nextMonth && goToMonth(nextMonth)}
-          variant="outline"
-          size="icon"
-          className="h-8 w-8"
-        >
-          <ChevronRight className="h-4 w-4" />
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 export function JournalReconstruction() {
   const [priceData, setPriceData] = useState<PriceData[]>(mockPriceData);
   const [journalTrades, setJournalTrades] = useState<JournalTrade[]>([]);
@@ -161,6 +86,81 @@ export function JournalReconstruction() {
   }>({ target: null, offsetX: 0, offsetY: 0 });
 
   const { rrTools, priceMarkers, measurementTools } = drawingState;
+
+  function CustomCaption(props: CaptionProps) {
+    const { goToMonth, nextMonth, previousMonth } = useDayPicker();
+    
+    const handleYearChange = (value: string) => {
+      const newDate = new Date(props.displayMonth);
+      newDate.setFullYear(parseInt(value, 10));
+      goToMonth(newDate);
+    };
+    
+    const handleMonthChange = (value: string) => {
+      const newDate = new Date(props.displayMonth);
+      newDate.setMonth(parseInt(value, 10));
+      goToMonth(newDate);
+    };
+  
+    const years = Array.from({ length: 20 }, (_, i) => new Date().getFullYear() - 10 + i);
+    const months = Array.from({ length: 12 }, (_, i) => i);
+  
+    return (
+      <div className="flex justify-between items-center mb-2 px-1">
+        <div className="flex items-center gap-1">
+          <Select
+            value={props.displayMonth.getFullYear().toString()}
+            onValueChange={handleYearChange}
+          >
+            <SelectTrigger className="w-[80px] h-8 text-xs">
+              <SelectValue>{props.displayMonth.getFullYear()}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {years.map((year) => (
+                <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={props.displayMonth.getMonth().toString()}
+            onValueChange={handleMonthChange}
+          >
+            <SelectTrigger className="w-[100px] h-8 text-xs">
+              <SelectValue>{format(props.displayMonth, 'MMMM')}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {months.map((month) => (
+                <SelectItem key={month} value={month.toString()}>
+                  {format(new Date(0, month), 'MMMM')}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+  
+        <div className="flex items-center gap-1">
+          <Button
+            disabled={!previousMonth}
+            onClick={() => previousMonth && goToMonth(previousMonth)}
+            variant="outline"
+            size="icon"
+            className="h-8 w-8"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <Button
+            disabled={!nextMonth}
+            onClick={() => nextMonth && goToMonth(nextMonth)}
+            variant="outline"
+            size="icon"
+            className="h-8 w-8"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   const pushToHistory = (currentState: DrawingState) => {
     setHistory(prev => [...prev, currentState]);
@@ -859,3 +859,5 @@ export function JournalReconstruction() {
     </div>
   );
 }
+
+    
