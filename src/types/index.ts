@@ -7,6 +7,7 @@ export interface PriceData {
   low: number;
   close: number;
   wick: [number, number];
+  index: number;
 }
 
 // Added to fix a type error in InteractiveChart
@@ -61,5 +62,7 @@ export type DrawingState = {
     priceMarkers: PriceMarker[];
     measurementTools: MeasurementTool[];
 };
+
+    
 
     

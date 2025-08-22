@@ -49,9 +49,11 @@ type SessionState = {
 };
 
 
-const fillGapsInData = (data: PriceData[]): PriceData[] => {
-    if (data.length < 2) return data;
-    const processedData: PriceData[] = [data[0]];
+const fillGapsInData = (data: Omit<PriceData, 'index'>[]): PriceData[] => {
+    if (data.length < 2) {
+        return data.map((d, i) => ({...d, index: i}));
+    }
+    const processedData: Omit<PriceData, 'index'>[] = [data[0]];
     const oneMinute = 60 * 1000;
     for (let i = 1; i < data.length; i++) {
         const prevPoint = processedData[processedData.length - 1];
@@ -70,7 +72,7 @@ const fillGapsInData = (data: PriceData[]): PriceData[] => {
         }
         processedData.push(currentPoint);
     }
-    return processedData;
+    return processedData.map((d, i) => ({...d, index: i}));
 };
 
 // Local storage keys
@@ -85,7 +87,7 @@ const formatDateToISO = (date: Date): string => {
 
 export function JournalReconstruction() {
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
-  const [priceData, setPriceData] = useState<PriceData[]>(mockPriceData);
+  const [priceData, setPriceData] = useState<PriceData[]>(() => mockPriceData.map((d, i) => ({...d, index: i})));
   const [journalTrades, setJournalTrades] = useState<JournalTrade[]>([]);
   const [journalHeader, setJournalHeader] = useState<string>('');
   
@@ -292,7 +294,7 @@ export function JournalReconstruction() {
       setJournalTrades([]);
       setTradeDecisions({});
       setLastDecisionDate(null);
-      setPriceData(mockPriceData);
+      setPriceData(mockPriceData.map((d, i) => ({...d, index: i})));
       setSelectedDate(undefined);
       toast({ title: "New Session Started", description: "All previous journal data has been cleared." });
   };
@@ -318,7 +320,7 @@ export function JournalReconstruction() {
             if (lines.length <= 1) throw new Error("CSV file contains no data rows.");
             
             const dataRows = lines.slice(1);
-            const parsedData: PriceData[] = dataRows.map((row, index) => {
+            const parsedData: Omit<PriceData, 'index'>[] = dataRows.map((row, index) => {
                 const columns = row.split(',');
                 const [timeStr, openStr, highStr, lowStr, closeStr] = columns;
                 if (!timeStr || !openStr || !highStr || !lowStr || !closeStr) throw new Error(`Row ${index + 2}: Missing columns.`);
@@ -560,7 +562,7 @@ export function JournalReconstruction() {
       const visiblePriceRange = chartData.yDomain[1] - chartData.yDomain[0];
       const stopLossOffset = visiblePriceRange * 0.05;
       const takeProfitOffset = visiblePriceRange * 0.10;
-      const stopLoss = placingToolType === 'long' ? entryPrice - stopLossOffset : entryPrice + takeProfitOffset;
+      const stopLoss = placingToolType === 'long' ? entryPrice - stopLossOffset : entryPrice + stopLossOffset;
       const takeProfit = placingToolType === 'long' ? entryPrice + takeProfitOffset : entryPrice - takeProfitOffset;
       const visibleIndexRange = chartData.xDomain[1] - chartData.xDomain[0];
       const widthInPoints = Math.round(visibleIndexRange * 0.25);
@@ -1106,3 +1108,5 @@ export function JournalReconstruction() {
     </div>
   );
 }
+
+    

@@ -107,7 +107,9 @@ export function InteractiveChart({
       return [];
     }
   
-    const filteredByDate = !endDate ? data : data.filter(point => point.date <= endDate);
+    const baseData = data.map((d, i) => ({ ...d, index: i }));
+
+    const filteredByDate = !endDate ? baseData : baseData.filter(point => point.date <= endDate);
     
     if (timeframe === '1m') {
       return filteredByDate;
@@ -126,8 +128,8 @@ export function InteractiveChart({
     const interval = getIntervalMinutes(timeframe) * 60 * 1000;
     if (interval <= 60000) return filteredByDate;
   
-    const result: PriceData[] = [];
-    let currentCandle: PriceData | null = null;
+    const result: (PriceData & { index: number })[] = [];
+    let currentCandle: (PriceData & { index: number }) | null = null;
     
     for (const point of filteredByDate) {
       const pointTime = point.date.getTime();
@@ -144,6 +146,7 @@ export function InteractiveChart({
           low: point.low,
           close: point.close,
           wick: [point.low, point.high],
+          index: point.index, // Carry over the index of the first point in the bucket
         };
       } else {
         currentCandle.high = Math.max(currentCandle.high, point.high);
@@ -169,11 +172,11 @@ export function InteractiveChart({
   const windowedData = useMemo(() => {
     if (!aggregatedData.length) return [];
     const [start, end] = xDomain;
-    const buffer = 100;
+    const buffer = 10; 
     const startIndex = Math.max(0, Math.floor(start) - buffer);
     const endIndex = Math.min(aggregatedData.length, Math.ceil(end) + buffer);
     
-    return aggregatedData.slice(startIndex, endIndex).map((d, i) => ({ ...d, index: startIndex + i }));
+    return aggregatedData.slice(startIndex, endIndex);
   }, [xDomain, aggregatedData]);
 
   useEffect(() => {
@@ -480,7 +483,7 @@ export function InteractiveChart({
       ) : (
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart 
-            data={windowedData} 
+            data={aggregatedData} 
             onClick={handleClick}
             onMouseMove={handleMouseMoveRecharts} 
             onMouseLeave={handleMouseLeaveChart}
@@ -519,7 +522,7 @@ export function InteractiveChart({
                 isAnimationActive={false}
             />
 
-          <Bar dataKey="wick" shape={<Candlestick />} isAnimationActive={false} xAxisId="main" yAxisId="main"/>
+          <Bar dataKey="wick" data={windowedData} shape={<Candlestick />} isAnimationActive={false} xAxisId="main" yAxisId="main"/>
 
           {trades.map((trade) => (
             <ReferenceDot
@@ -581,7 +584,7 @@ export function InteractiveChart({
                       key={tool.id}
                       tool={tool}
                       onUpdateTool={onUpdateTool}
-                      onRemove={onRemoveTool}
+                      onRemove={onRemove}
                       data={aggregatedData}
                       xScale={mainXAxis.scale}
                       yScale={mainYAxis.scale}
@@ -612,3 +615,5 @@ export function InteractiveChart({
     </div>
   );
 }
+
+    

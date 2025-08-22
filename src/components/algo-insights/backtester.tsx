@@ -127,12 +127,12 @@ const simulateTrade = (
 };
 
 
-const fillGapsInData = (data: PriceData[]): PriceData[] => {
+const fillGapsInData = (data: Omit<PriceData, 'index'>[]): PriceData[] => {
     if (data.length < 2) {
-        return data;
+        return data.map((d, i) => ({...d, index: i}));
     }
 
-    const processedData: PriceData[] = [data[0]];
+    const processedData: Omit<PriceData, 'index'>[] = [data[0]];
     const oneMinute = 60 * 1000;
 
     for (let i = 1; i < data.length; i++) {
@@ -159,7 +159,7 @@ const fillGapsInData = (data: PriceData[]): PriceData[] => {
         }
         processedData.push(currentPoint);
     }
-    return processedData;
+    return processedData.map((d, i) => ({...d, index: i}));
 };
 
 
@@ -169,7 +169,7 @@ const SESSION_KEY = 'algo-insights-session';
 const TOOLBAR_POS_KEY = 'algo-insights-toolbar-positions';
 
 export function Backtester() {
-  const [priceData, setPriceData] = useState<PriceData[]>(mockPriceData);
+  const [priceData, setPriceData] = useState<PriceData[]>(() => mockPriceData.map((d, i) => ({...d, index: i})));
   const [isDataImported, setIsDataImported] = useState(false);
   const [sessionInfo, setSessionInfo] = useState<SessionInfo | null>(null);
   
@@ -393,7 +393,7 @@ export function Backtester() {
       setRedoStack([]);
       setSessionInfo(null);
       setIsDataImported(false);
-      setPriceData(mockPriceData);
+      setPriceData(mockPriceData.map((d, i) => ({...d, index: i})));
   };
 
 
@@ -552,7 +552,7 @@ export function Backtester() {
                 throw new Error("CSV file contains no data rows.");
             }
             const dataRows = lines.slice(1);
-            const parsedData: PriceData[] = dataRows.map((row, index) => {
+            const parsedData: Omit<PriceData, 'index'>[] = dataRows.map((row, index) => {
                 const columns = row.split(',');
                 const [timeStr, openStr, highStr, lowStr, closeStr] = columns;
 
@@ -1224,4 +1224,5 @@ export function Backtester() {
   );
 }
 
+    
     
