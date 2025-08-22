@@ -859,5 +859,3 @@ export function JournalReconstruction() {
     </div>
   );
 }
-
-    
