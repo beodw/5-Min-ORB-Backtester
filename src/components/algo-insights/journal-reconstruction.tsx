@@ -43,6 +43,7 @@ type SessionInfo = {
 type SessionState = {
     drawingState: DrawingState;
     tradeDecisions: Record<string, TradeDecision>;
+    lastDecisionDate: string | null; // Stored as ISO string
     journalTrades: JournalTrade[];
     sessionInfo: SessionInfo;
 };
@@ -92,6 +93,7 @@ export function JournalReconstruction() {
   });
 
   const [tradeDecisions, setTradeDecisions] = useState<Record<string, TradeDecision>>({});
+  const [lastDecisionDate, setLastDecisionDate] = useState<string | null>(null);
 
   const [history, setHistory] = useState<DrawingState[]>([]);
   const [redoStack, setRedoStack] = useState<DrawingState[]>([]);
@@ -213,12 +215,13 @@ export function JournalReconstruction() {
     const sessionState: SessionState = {
         drawingState: serializableDrawingState as any,
         tradeDecisions,
+        lastDecisionDate,
         journalTrades,
         sessionInfo,
     };
     localStorage.setItem(JOURNAL_SESSION_KEY, JSON.stringify(sessionState));
 
-  }, [drawingState, tradeDecisions, journalTrades, sessionInfo, isPriceDataImported, isJournalImported]);
+  }, [drawingState, tradeDecisions, journalTrades, sessionInfo, isPriceDataImported, isJournalImported, lastDecisionDate]);
 
 
   const handleRestoreSession = () => {
@@ -235,12 +238,14 @@ export function JournalReconstruction() {
 
             setDrawingState({ ...savedSession.drawingState, rrTools: restoredRrTools });
             setTradeDecisions(savedSession.tradeDecisions || {});
+            setLastDecisionDate(savedSession.lastDecisionDate || null);
             setJournalTrades(savedSession.journalTrades || []);
             setSessionInfo(savedSession.sessionInfo);
 
             if (savedSession.journalTrades?.length > 0) {
               setIsJournalImported(true);
-              setSelectedDate(new Date(savedSession.journalTrades[0].date));
+              const lastDate = savedSession.lastDecisionDate ? new Date(savedSession.lastDecisionDate) : new Date(savedSession.journalTrades[0].date);
+              setSelectedDate(lastDate);
             }
             if(savedSession.sessionInfo.priceDataFileName){
               setIsPriceDataImported(false); // It's not *really* imported yet
@@ -249,7 +254,7 @@ export function JournalReconstruction() {
 
             toast({
                 title: "Session Restored",
-                description: `Drawings and decisions loaded. Please re-import your files.`,
+                description: `Drawings and decisions loaded. Please re-import your files. ${savedSession.lastDecisionDate ? `Last marked date: ${new Date(savedSession.lastDecisionDate).toLocaleDateString()}` : ''}`,
                 duration: 9000
             });
         } catch (e) {
@@ -270,6 +275,7 @@ export function JournalReconstruction() {
       setIsJournalImported(false);
       setJournalTrades([]);
       setTradeDecisions({});
+      setLastDecisionDate(null);
       setPriceData(mockPriceData);
       setSelectedDate(undefined);
       toast({ title: "New Session Started", description: "All previous journal data has been cleared." });
@@ -352,9 +358,11 @@ export function JournalReconstruction() {
         const header = headerLine.split(',').map(h => h.trim());
         const dateIndex = header.findIndex(h => h === "Date Taken (Timestamp)");
         const rIndex = header.findIndex(h => h === "Maximum Favourable Excursion (R)");
+        const pairIndex = header.findIndex(h => h === "Pair");
 
-        if (dateIndex === -1) throw new Error("CSV header is missing the required column: 'Date Taken (Timestamp)'.");
-        if (rIndex === -1) throw new Error("CSV header is missing the required column: 'Maximum Favourable Excursion (R)'.");
+        if (dateIndex === -1) throw new Error("CSV header is missing 'Date Taken (Timestamp)'.");
+        if (rIndex === -1) throw new Error("CSV header is missing 'Maximum Favourable Excursion (R)'.");
+        if (pairIndex === -1) throw new Error("CSV header is missing 'Pair'.");
         
         setJournalHeader(headerLine);
         const dataRows = lines.slice(1);
@@ -367,8 +375,14 @@ export function JournalReconstruction() {
           const rowNum = i + 2;
           const columns = line.split(',');
 
-          if (columns.length <= Math.max(dateIndex, rIndex)) {
+          if (columns.length <= Math.max(dateIndex, rIndex, pairIndex)) {
               console.warn(`Skipping malformed row ${rowNum}. Incorrect number of columns.`);
+              continue;
+          }
+
+          // Filter for US30
+          const pair = columns[pairIndex]?.trim();
+          if (pair !== 'US30') {
               continue;
           }
 
@@ -396,13 +410,13 @@ export function JournalReconstruction() {
         }
 
 
-        if (newTrades.length === 0) throw new Error("No valid trades could be parsed from the journal file.");
+        if (newTrades.length === 0) throw new Error("No valid 'US30' trades could be parsed from the journal file.");
 
         setJournalTrades(newTrades);
         setIsJournalImported(true);
         setSessionInfo(prev => ({ ...prev, journalFileName: file.name }));
         if (newTrades.length > 0) setSelectedDate(new Date(newTrades[0].date));
-        toast({ title: "Journal Loaded", description: `${newTrades.length} trades were successfully imported.`, duration: 5000 });
+        toast({ title: "Journal Loaded", description: `${newTrades.length} US30 trades were successfully imported.`, duration: 5000 });
         
       } catch (error: any) {
         toast({ variant: "destructive", title: "Journal Import Failed", description: `${error.message}`, duration: 30000 });
@@ -475,13 +489,14 @@ export function JournalReconstruction() {
     const hasTradeOnDay = journalTrades.some(trade => {
         const tradeDate = new Date(trade.date);
         return tradeDate.getUTCFullYear() === date.getUTCFullYear() &&
-               tradeDate.getUTCMonth() === date.getUTCMonth() &&
+               tradeDate.getUTCMonth() === date.getUTCFullYear() &&
                tradeDate.getUTCDate() === date.getUTCDate()
     });
 
     if (!hasTradeOnDay) {
         toast({ variant: "destructive", title: "No Trade Data", description: "No trade found for this day in the journal." });
-        setPriceMarkers(prev => []);
+        pushToHistory(drawingState);
+        setPriceMarkers(() => []);
         return;
     }
 
@@ -737,11 +752,13 @@ export function JournalReconstruction() {
     if (selectedDate) {
         const dateKey = formatDateToISO(selectedDate);
         setTradeDecisions(prev => ({...prev, [dateKey]: decision}));
+        setLastDecisionDate(selectedDate.toISOString());
     }
   };
 
   const handleResetDecisions = () => {
     setTradeDecisions({});
+    setLastDecisionDate(null);
     toast({ title: "Decisions Reset", description: "All manual trade decisions have been cleared." });
   };
   
@@ -839,7 +856,7 @@ export function JournalReconstruction() {
                 onMonthChange={setSelectedDate}
                 captionLayout="dropdown-buttons"
                 fromYear={new Date().getFullYear() - 10}
-                toYear={new Date().getFullYear() + 10}
+                toYear={new Date().getFullYear()}
                 className="rounded-md border"
              />
         </div>
@@ -853,6 +870,14 @@ export function JournalReconstruction() {
                 disabled={Object.keys(tradeDecisions).length === 0}
             >
                 <RotateCcw className="mr-2 h-4 w-4"/> Reset All Decisions
+            </Button>
+            <Button
+                onClick={handleExportDecisions}
+                variant="default"
+                className="w-full"
+                disabled={!isJournalImported}
+            >
+                <Download className="mr-2 h-4 w-4"/> Export Decisions Report
             </Button>
              <AlertDialog>
                 <AlertDialogTrigger asChild>
@@ -988,17 +1013,7 @@ export function JournalReconstruction() {
                 <TooltipProvider><Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceMarker} disabled={isPlacingAnything || priceData.length === 0}><Target className="w-5 h-5 text-foreground"/></Button></TooltipTrigger><TooltipContent><p>Place Price Marker</p></TooltipContent></Tooltip></TooltipProvider>
                 <TooltipProvider><Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => setIsYAxisLocked(prev => !prev)}>{isYAxisLocked ? <Lock className="h-5 w-5" /> : <Unlock className="h-5 w-5" />}</Button></TooltipTrigger><TooltipContent><p>{isYAxisLocked ? "Unlock Y-Axis" : "Lock Y-Axis"}</p></TooltipContent></Tooltip></TooltipProvider>
                 <TooltipProvider><Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceMeasurement} disabled={isPlacingAnything || priceData.length === 0}><Ruler className="w-5 h-5 text-foreground"/></Button></TooltipTrigger><TooltipContent><p>Measure Distance</p></TooltipContent></Tooltip></TooltipProvider>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button variant="ghost" size="icon" onClick={handleExportDecisions} disabled={!isJournalImported}>
-                          <Download className="w-5 h-5 text-foreground"/>
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent><p>Export Decisions Report</p></TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-
+                
                 <div className="h-6 border-l border-border/50"></div>
                  <TooltipProvider>
                     <div className="flex justify-center gap-1">
@@ -1054,3 +1069,5 @@ export function JournalReconstruction() {
     </div>
   );
 }
+
+    
