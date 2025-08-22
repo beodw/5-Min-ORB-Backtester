@@ -24,9 +24,10 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
+import { useDayPicker, CaptionProps } from "react-day-picker";
+import { format } from "date-fns";
 
 
 type JournalTrade = {
@@ -60,6 +61,81 @@ const fillGapsInData = (data: PriceData[]): PriceData[] => {
 
 // Local storage keys
 const TOOLBAR_POS_KEY_JOURNAL = 'algo-insights-toolbar-positions-journal';
+
+function CustomCaption(props: CaptionProps) {
+  const { goToMonth, nextMonth, previousMonth } = useDayPicker();
+  
+  const handleYearChange = (value: string) => {
+    const newDate = new Date(props.displayMonth);
+    newDate.setFullYear(parseInt(value, 10));
+    goToMonth(newDate);
+  };
+  
+  const handleMonthChange = (value: string) => {
+    const newDate = new Date(props.displayMonth);
+    newDate.setMonth(parseInt(value, 10));
+    goToMonth(newDate);
+  };
+
+  const years = Array.from({ length: 20 }, (_, i) => new Date().getFullYear() - 10 + i);
+  const months = Array.from({ length: 12 }, (_, i) => i);
+
+  return (
+    <div className="flex justify-between items-center mb-2 px-1">
+      <div className="flex items-center gap-1">
+        <Select
+          value={props.displayMonth.getFullYear().toString()}
+          onValueChange={handleYearChange}
+        >
+          <SelectTrigger className="w-[80px] h-8 text-xs">
+            <SelectValue>{props.displayMonth.getFullYear()}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {years.map((year) => (
+              <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
+          value={props.displayMonth.getMonth().toString()}
+          onValueChange={handleMonthChange}
+        >
+          <SelectTrigger className="w-[100px] h-8 text-xs">
+            <SelectValue>{format(props.displayMonth, 'MMMM')}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {months.map((month) => (
+              <SelectItem key={month} value={month.toString()}>
+                {format(new Date(0, month), 'MMMM')}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="flex items-center gap-1">
+        <Button
+          disabled={!previousMonth}
+          onClick={() => previousMonth && goToMonth(previousMonth)}
+          variant="outline"
+          size="icon"
+          className="h-8 w-8"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        <Button
+          disabled={!nextMonth}
+          onClick={() => nextMonth && goToMonth(nextMonth)}
+          variant="outline"
+          size="icon"
+          className="h-8 w-8"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 export function JournalReconstruction() {
   const [priceData, setPriceData] = useState<PriceData[]>(mockPriceData);
@@ -445,33 +521,90 @@ export function JournalReconstruction() {
     });
   };
 
+  const findNextSessionStartIndex = (currentDate: Date): number => {
+    if (!currentDate) return -1;
+    const [sessionHour, sessionMinute] = sessionStartTime.split(':').map(Number);
+    
+    const searchStartIndex = priceData.findIndex(p => p.date > currentDate);
+    if (searchStartIndex === -1) return -1;
+
+    let lastDay = new Date(currentDate);
+    lastDay.setUTCHours(0, 0, 0, 0);
+
+    for (let i = searchStartIndex; i < priceData.length; i++) {
+        const pointDate = priceData[i].date;
+        
+        const pointDay = new Date(pointDate);
+        pointDay.setUTCHours(0, 0, 0, 0);
+
+        if (pointDay.getTime() > lastDay.getTime()) {
+            if (pointDate.getUTCHours() > sessionHour || (pointDate.getUTCHours() === sessionHour && pointDate.getUTCMinutes() >= sessionMinute)) {
+                return i;
+            }
+        }
+    }
+
+    return -1;
+  };
+  
+  
   const handleNextSession = () => {
     if (!sessionStartTime || !priceData.length || !selectedDate) return;
-    const startIndex = findSessionStartIndex(selectedDate);
+
+    const startIndex = findNextSessionStartIndex(selectedDate);
+
     if (startIndex !== -1) {
         const endIndex = startIndex + 5;
         if (endIndex > priceData.length) {
-            toast({ variant: "destructive", title: "Not Enough Data", description: "Not enough data to draw the opening range." });
+            toast({
+                variant: "destructive",
+                title: "Not Enough Data",
+                description: "Not enough data to draw the opening range.",
+            });
             setSelectedDate(priceData[startIndex].date);
             return;
         }
         const openingRangeCandles = priceData.slice(startIndex, endIndex);
+
         let openingRangeHigh = openingRangeCandles[0].high;
         let openingRangeLow = openingRangeCandles[0].low;
+
         for (const candle of openingRangeCandles) {
             openingRangeHigh = Math.max(openingRangeHigh, candle.high);
             openingRangeLow = Math.min(openingRangeLow, candle.low);
         }
-        const otherMarkers = priceMarkers.filter(m => m.label !== "High" && m.label !== "Low");
-        const highMarker: PriceMarker = { id: `or-high-${startIndex}`, price: openingRangeHigh, label: 'High', isDeletable: true };
-        const lowMarker: PriceMarker = { id: `or-low-${startIndex}`, price: openingRangeLow, label: 'Low', isDeletable: true };
+
+        const otherMarkers = priceMarkers.filter(
+            m => m.label !== "High" && m.label !== "Low"
+        );
+        
+        const highMarker: PriceMarker = {
+            id: `or-high-${startIndex}`,
+            price: openingRangeHigh,
+            label: 'High',
+            isDeletable: true,
+        };
+        const lowMarker: PriceMarker = {
+            id: `or-low-${startIndex}`,
+            price: openingRangeLow,
+            label: 'Low',
+            isDeletable: true,
+        };
+        
         pushToHistory(drawingState);
         setPriceMarkers(prev => [...otherMarkers, highMarker, lowMarker]);
+
         const viewEndIndex = Math.min(startIndex + 15, priceData.length - 1);
         setSelectedDate(priceData[viewEndIndex].date);
+        
         return;
     }
-    toast({ variant: "destructive", title: "Session Not Found", description: "Could not find the start of the next session in the available data." });
+    
+    toast({
+      variant: "destructive",
+      title: "Session Not Found",
+      description: "Could not find the start of the next session in the available data.",
+    });
   };
   
   const handlePlaceLong = () => {
@@ -565,13 +698,22 @@ export function JournalReconstruction() {
              <Calendar
                 mode="single"
                 selected={selectedDate}
-                onSelect={(day) => handleDateSelect(day)}
+                onSelect={(day) => {
+                    handleDateSelect(day);
+                    if (day) {
+                      const newDate = new Date(day);
+                      // Keep time from original selectedDate if it exists, otherwise use current time
+                      const oldDate = selectedDate || new Date();
+                      newDate.setHours(oldDate.getHours(), oldDate.getMinutes(), oldDate.getSeconds());
+                      setSelectedDate(newDate);
+                    } else {
+                      setSelectedDate(undefined);
+                    }
+                }}
                 month={selectedDate}
                 onMonthChange={setSelectedDate}
                 modifiers={dayResultModifiers}
-                captionLayout="dropdown-buttons"
-                fromYear={2015}
-                toYear={new Date().getFullYear()}
+                components={{ Caption: CustomCaption }}
                 modifiersClassNames={{
                     win: 'rdp-day_win',
                     loss: 'rdp-day_loss',
@@ -712,5 +854,3 @@ export function JournalReconstruction() {
     </div>
   );
 }
-
-    
