@@ -694,8 +694,6 @@ export function JournalReconstruction() {
                 mode="single"
                 selected={selectedDate}
                 onSelect={handleDateSelect}
-                month={selectedDate}
-                onMonthChange={setSelectedDate}
                 disabled={(date) => !allTradeDates.some(tradeDate => 
                     tradeDate.getUTCFullYear() === date.getUTCFullYear() &&
                     tradeDate.getUTCMonth() === date.getUTCMonth() &&
@@ -715,25 +713,7 @@ export function JournalReconstruction() {
         </div>
 
         <div className="space-y-2">
-            <h3 className="font-semibold text-lg">4. Mark Trade Decision</h3>
-            <p className="text-sm text-muted-foreground">For the selected day, would you have taken a trade?</p>
-            <div className="flex gap-2">
-                <Button 
-                    onClick={() => handleSetTradeDecision('Traded')} 
-                    disabled={!selectedDate || !isJournalImported}
-                    className="flex-1"
-                >
-                    <CheckCircle className="mr-2 h-4 w-4" /> Traded
-                </Button>
-                <Button 
-                    onClick={() => handleSetTradeDecision('Not Traded')}
-                    disabled={!selectedDate || !isJournalImported}
-                    variant="destructive"
-                    className="flex-1"
-                >
-                    <XCircle className="mr-2 h-4 w-4" /> Not Traded
-                </Button>
-            </div>
+            <h3 className="font-semibold text-lg">4. Reset Decisions</h3>
             <Button
                 onClick={handleResetDecisions}
                 variant="outline"
@@ -853,6 +833,38 @@ export function JournalReconstruction() {
                 <TooltipProvider><Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceMarker} disabled={isPlacingAnything || priceData.length === 0}><Target className="w-5 h-5 text-foreground"/></Button></TooltipTrigger><TooltipContent><p>Place Price Marker</p></TooltipContent></Tooltip></TooltipProvider>
                 <TooltipProvider><Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => setIsYAxisLocked(prev => !prev)}>{isYAxisLocked ? <Lock className="h-5 w-5" /> : <Unlock className="h-5 w-5" />}</Button></TooltipTrigger><TooltipContent><p>{isYAxisLocked ? "Unlock Y-Axis" : "Lock Y-Axis"}</p></TooltipContent></Tooltip></TooltipProvider>
                 <TooltipProvider><Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceMeasurement} disabled={isPlacingAnything || priceData.length === 0}><Ruler className="w-5 h-5 text-foreground"/></Button></TooltipTrigger><TooltipContent><p>Measure Distance</p></TooltipContent></Tooltip></TooltipProvider>
+                <div className="h-6 border-l border-border/50"></div>
+                 <TooltipProvider>
+                    <div className="flex justify-center gap-1">
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button 
+                                    variant="ghost" 
+                                    size="icon" 
+                                    onClick={() => handleSetTradeDecision('Traded')} 
+                                    disabled={!selectedDate || !isJournalImported}
+                                >
+                                    <CheckCircle className="w-5 h-5 text-accent"/>
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent><p>Mark day as "Traded"</p></TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button 
+                                    variant="ghost" 
+                                    size="icon" 
+                                    onClick={() => handleSetTradeDecision('Not Traded')} 
+                                    disabled={!selectedDate || !isJournalImported}
+                                >
+                                    <XCircle className="w-5 h-5 text-destructive"/>
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent><p>Mark day as "Not Traded"</p></TooltipContent>
+                        </Tooltip>
+                    </div>
+                </TooltipProvider>
+                <div className="h-6 border-l border-border/50"></div>
                  <AlertDialog>
                     <TooltipProvider>
                       <Tooltip>
