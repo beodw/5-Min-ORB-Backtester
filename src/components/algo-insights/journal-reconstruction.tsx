@@ -223,10 +223,10 @@ export function JournalReconstruction() {
         return;
     }
     
-    const hasTradeOnDay = journalTrades.some(tradeDate => 
-        tradeDate.date.getUTCDate() === date.getUTCDate() &&
-        tradeDate.date.getUTCMonth() === date.getUTCMonth() &&
-        tradeDate.date.getUTCFullYear() === date.getUTCFullYear()
+    const hasTradeOnDay = journalTrades.some(trade => 
+        trade.date.getUTCDate() === date.getUTCDate() &&
+        trade.date.getUTCMonth() === date.getUTCMonth() &&
+        trade.date.getUTCFullYear() === date.getUTCFullYear()
     );
 
     if (!hasTradeOnDay) {
@@ -331,8 +331,8 @@ export function JournalReconstruction() {
                 }}
                 disabled={(date) => !allTradeDates.some(tradeDate => 
                     tradeDate.getUTCDate() === date.getUTCDate() &&
-                    tradeDate.date.getUTCMonth() === date.getUTCMonth() &&
-                    tradeDate.date.getUTCFullYear() === date.getUTCFullYear()
+                    tradeDate.getUTCMonth() === date.getUTCMonth() &&
+                    tradeDate.getUTCFullYear() === date.getUTCFullYear()
                 )}
                 className="rounded-md border"
              />
@@ -371,5 +371,7 @@ export function JournalReconstruction() {
     </div>
   );
 }
+
+    
 
     
