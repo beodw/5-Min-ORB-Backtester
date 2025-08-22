@@ -76,12 +76,15 @@ const fillGapsInData = (data: PriceData[]): PriceData[] => {
 // Local storage keys
 const TOOLBAR_POS_KEY_JOURNAL = 'algo-insights-toolbar-positions-journal';
 const JOURNAL_SESSION_KEY = 'algo-insights-journal-session';
+const JOURNAL_PANEL_STATE_KEY = 'algo-insights-journal-panel-state';
+
 
 const formatDateToISO = (date: Date): string => {
     return date.toISOString().split('T')[0];
 };
 
 export function JournalReconstruction() {
+  const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
   const [priceData, setPriceData] = useState<PriceData[]>(mockPriceData);
   const [journalTrades, setJournalTrades] = useState<JournalTrade[]>([]);
   const [journalHeader, setJournalHeader] = useState<string>('');
@@ -172,6 +175,11 @@ export function JournalReconstruction() {
 
    // Effect for loading toolbar positions and checking for saved session
   useEffect(() => {
+    const savedPanelState = localStorage.getItem(JOURNAL_PANEL_STATE_KEY);
+    if (savedPanelState) {
+        setIsPanelCollapsed(JSON.parse(savedPanelState));
+    }
+
     const savedToolbarPosRaw = localStorage.getItem(TOOLBAR_POS_KEY_JOURNAL);
     if (savedToolbarPosRaw) {
         try {
@@ -246,6 +254,14 @@ export function JournalReconstruction() {
               setIsJournalImported(true);
               const lastDate = savedSession.lastDecisionDate ? new Date(savedSession.lastDecisionDate) : new Date(savedSession.journalTrades[0].date);
               setSelectedDate(lastDate);
+              if (savedSession.lastDecisionDate) {
+                  const lastDateString = new Date(savedSession.lastDecisionDate).toLocaleDateString();
+                  toast({
+                      title: "Last Marked Date",
+                      description: `The last day you marked a decision on was ${lastDateString}.`,
+                      duration: 7000,
+                  });
+              }
             }
             if(savedSession.sessionInfo.priceDataFileName){
               setIsPriceDataImported(false); // It's not *really* imported yet
@@ -254,7 +270,7 @@ export function JournalReconstruction() {
 
             toast({
                 title: "Session Restored",
-                description: `Drawings and decisions loaded. Please re-import your files. ${savedSession.lastDecisionDate ? `Last marked date: ${new Date(savedSession.lastDecisionDate).toLocaleDateString()}` : ''}`,
+                description: `Drawings and decisions loaded. Please re-import your files.`,
                 duration: 9000
             });
         } catch (e) {
@@ -380,7 +396,6 @@ export function JournalReconstruction() {
               continue;
           }
 
-          // Filter for US30
           const pair = columns[pairIndex]?.trim();
           if (pair !== 'US30') {
               continue;
@@ -438,7 +453,6 @@ export function JournalReconstruction() {
 
     const rows = journalTrades.map(trade => {
         const dateKey = new Date(trade.date).toISOString().split('T')[0];
-        // Default to "Traded" if no decision has been explicitly made for that day.
         const decision = tradeDecisions[dateKey] || 'Traded';
         return `${trade.originalRow},"${decision}"`;
     }).join('\n');
@@ -687,7 +701,7 @@ export function JournalReconstruction() {
         };
         
         pushToHistory(drawingState);
-        setPriceMarkers(prev => [...otherMarkers, highMarker, lowMarker]);
+        setPriceMarkers(() => [...otherMarkers, highMarker, lowMarker]);
 
         const viewEndIndex = Math.min(startIndex + 15, priceData.length - 1);
         setSelectedDate(priceData[viewEndIndex].date);
@@ -761,6 +775,14 @@ export function JournalReconstruction() {
     setLastDecisionDate(null);
     toast({ title: "Decisions Reset", description: "All manual trade decisions have been cleared." });
   };
+
+  const handleTogglePanel = () => {
+    setIsPanelCollapsed(prevState => {
+        const newState = !prevState;
+        localStorage.setItem(JOURNAL_PANEL_STATE_KEY, JSON.stringify(newState));
+        return newState;
+    });
+  };
   
   const isPlacingAnything = !!placingToolType || isPlacingPriceMarker || isPlacingMeasurement;
   
@@ -805,96 +827,109 @@ export function JournalReconstruction() {
             </AlertDialogContent>
         </AlertDialog>
         
-      <div className="w-[350px] p-4 border-r border-border flex flex-col gap-4 overflow-y-auto">
-        <h2 className="text-xl font-bold font-headline">Controls</h2>
-        
-        <div className="space-y-2">
-            <h3 className="font-semibold text-lg">1. Import Files</h3>
-            <Button onClick={() => priceDataInputRef.current?.click()} className="w-full">
-              <FileUp className="mr-2 h-4 w-4" /> Import 1-Min Data
-            </Button>
-            <input type="file" ref={priceDataInputRef} onChange={handlePriceDataImport} accept=".csv" className="hidden" />
-             {sessionInfo.priceDataFileName && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground bg-secondary p-2 rounded-md">
-                   <Info className="h-4 w-4 text-primary" />
-                   <p>Loaded: <span className="font-semibold">{sessionInfo.priceDataFileName}</span></p>
-                </div>
-            )}
-             <Button onClick={() => journalInputRef.current?.click()} className="w-full mt-2" disabled={!isPriceDataImported}>
-              <FileUp className="mr-2 h-4 w-4" /> Import Journal CSV
-            </Button>
-            <input type="file" ref={journalInputRef} onChange={handleJournalImport} accept=".csv" className="hidden" />
-             {sessionInfo.journalFileName && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground bg-secondary p-2 rounded-md">
-                   <Info className="h-4 w-4 text-primary" />
-                   <p>Loaded: <span className="font-semibold">{sessionInfo.journalFileName}</span></p>
-                </div>
-            )}
-        </div>
-        
-        <div>
-            <h3 className="font-semibold text-lg mb-2">2. Select a Trade Day</h3>
-             <Calendar
-                mode="single"
-                selected={selectedDate}
-                onSelect={(d) => {
-                  setSelectedDate(d);
-                  handleDateSelect(d);
-                }}
-                disabled={(date) => !allTradeDates.some(tradeDate => 
-                    tradeDate.getUTCFullYear() === date.getUTCFullYear() &&
-                    tradeDate.getUTCMonth() === date.getUTCMonth() &&
-                    tradeDate.getUTCDate() === date.getUTCDate()
+      <div className={cn(
+            "relative border-r border-border transition-all duration-300",
+            isPanelCollapsed ? "w-0" : "w-[350px] p-4"
+        )}>
+        <div className={cn("flex flex-col gap-4 overflow-hidden", isPanelCollapsed && "invisible")}>
+            <h2 className="text-xl font-bold font-headline">Controls</h2>
+            
+            <div className="space-y-2">
+                <h3 className="font-semibold text-lg">1. Import Files</h3>
+                <Button onClick={() => priceDataInputRef.current?.click()} className="w-full">
+                  <FileUp className="mr-2 h-4 w-4" /> Import 1-Min Data
+                </Button>
+                <input type="file" ref={priceDataInputRef} onChange={handlePriceDataImport} accept=".csv" className="hidden" />
+                 {sessionInfo.priceDataFileName && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground bg-secondary p-2 rounded-md">
+                       <Info className="h-4 w-4 text-primary" />
+                       <p>Loaded: <span className="font-semibold">{sessionInfo.priceDataFileName}</span></p>
+                    </div>
                 )}
-                modifiers={dayResultModifiers}
-                modifiersClassNames={{
-                    win: 'rdp-day_win',
-                    loss: 'rdp-day_loss',
-                    modified: 'rdp-day_modified',
-                }}
-                month={selectedDate}
-                onMonthChange={setSelectedDate}
-                captionLayout="dropdown-buttons"
-                fromYear={2014}
-                toYear={new Date().getFullYear()}
-                className="rounded-md border"
-             />
-        </div>
+                 <Button onClick={() => journalInputRef.current?.click()} className="w-full mt-2" disabled={!isPriceDataImported}>
+                  <FileUp className="mr-2 h-4 w-4" /> Import Journal CSV
+                </Button>
+                <input type="file" ref={journalInputRef} onChange={handleJournalImport} accept=".csv" className="hidden" />
+                 {sessionInfo.journalFileName && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground bg-secondary p-2 rounded-md">
+                       <Info className="h-4 w-4 text-primary" />
+                       <p>Loaded: <span className="font-semibold">{sessionInfo.journalFileName}</span></p>
+                    </div>
+                )}
+            </div>
+            
+            <div>
+                <h3 className="font-semibold text-lg mb-2">2. Select a Trade Day</h3>
+                 <Calendar
+                    mode="single"
+                    selected={selectedDate}
+                    onSelect={(d) => {
+                      setSelectedDate(d);
+                      handleDateSelect(d);
+                    }}
+                    disabled={(date) => !allTradeDates.some(tradeDate => 
+                        tradeDate.getUTCFullYear() === date.getUTCFullYear() &&
+                        tradeDate.getUTCMonth() === date.getUTCMonth() &&
+                        tradeDate.getUTCDate() === date.getUTCDate()
+                    )}
+                    modifiers={dayResultModifiers}
+                    modifiersClassNames={{
+                        win: 'rdp-day_win',
+                        loss: 'rdp-day_loss',
+                        modified: 'rdp-day_modified',
+                    }}
+                    month={selectedDate}
+                    onMonthChange={setSelectedDate}
+                    captionLayout="dropdown-buttons"
+                    fromYear={2014}
+                    toYear={new Date().getFullYear()}
+                    className="rounded-md border"
+                 />
+            </div>
 
-        <div className="space-y-2">
-            <h3 className="font-semibold text-lg">3. Session & Export</h3>
-            <Button
-                onClick={handleResetDecisions}
-                variant="outline"
-                className="w-full"
-                disabled={Object.keys(tradeDecisions).length === 0}
-            >
-                <RotateCcw className="mr-2 h-4 w-4"/> Reset All Decisions
-            </Button>
-            <AlertDialog>
-                <AlertDialogTrigger asChild>
-                     <Button
-                        variant="destructive"
-                        className="w-full"
-                        disabled={!isPriceDataImported && !isJournalImported}
-                    >
-                        <FileX2 className="mr-2 h-4 w-4"/> Start New Session
-                    </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            This will clear all imported data, drawings, and decisions from this tab. This action cannot be undone.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={startNewSession}>Continue</AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            <div className="space-y-2">
+                <h3 className="font-semibold text-lg">3. Session & Export</h3>
+                <Button
+                    onClick={handleResetDecisions}
+                    variant="outline"
+                    className="w-full"
+                    disabled={Object.keys(tradeDecisions).length === 0}
+                >
+                    <RotateCcw className="mr-2 h-4 w-4"/> Reset All Decisions
+                </Button>
+                <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                         <Button
+                            variant="destructive"
+                            className="w-full"
+                            disabled={!isPriceDataImported && !isJournalImported}
+                        >
+                            <FileX2 className="mr-2 h-4 w-4"/> Start New Session
+                        </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                This will clear all imported data, drawings, and decisions from this tab. This action cannot be undone.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={startNewSession}>Continue</AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            </div>
         </div>
+        <Button
+            variant="outline"
+            size="icon"
+            className="absolute top-1/2 -right-5 -translate-y-1/2 rounded-full h-8 w-8 bg-background hover:bg-muted"
+            onClick={handleTogglePanel}
+        >
+            {isPanelCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+        </Button>
       </div>
 
       <div className="flex-1 relative">
@@ -1071,5 +1106,3 @@ export function JournalReconstruction() {
     </div>
   );
 }
-
-    
