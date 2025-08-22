@@ -129,8 +129,6 @@ export function JournalReconstruction() {
   const [liveMeasurementTool, setLiveMeasurementTool] = useState<MeasurementToolType | null>(null);
 
   const [timeframe, setTimeframe] = useState('1m');
-  const [timeZone, setTimeZone] = useState<string>('');
-  const [timezones, setTimezones] = useState<{ value: string; label: string }[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [sessionStartTime, setSessionStartTime] = useState('09:30');
   const [isYAxisLocked, setIsYAxisLocked] = useState(true);
@@ -244,7 +242,6 @@ export function JournalReconstruction() {
           const columns = line.split(',');
 
           if (columns.length <= Math.max(dateIndex, rIndex)) {
-              // This can happen with malformed rows or empty lines with commas
               console.warn(`Skipping malformed row ${rowNum}. Incorrect number of columns.`);
               continue;
           }
@@ -608,7 +605,7 @@ export function JournalReconstruction() {
           liveMeasurementTool={liveMeasurementTool}
           pipValue={pipValue}
           timeframe={timeframe}
-          timeZone={timeZone}
+          timeZone="UTC"
           endDate={selectedDate}
           isYAxisLocked={isYAxisLocked}
         />
@@ -664,13 +661,6 @@ export function JournalReconstruction() {
                     <PopoverContent className="w-80 mr-4">
                         <div className="grid gap-4">
                             <div className="space-y-2"><h4 className="font-medium leading-none">Settings</h4><p className="text-sm text-muted-foreground">Adjust chart display options.</p></div>
-                            <div className="grid gap-2">
-                                <Label htmlFor="timezone">Timezone</Label>
-                                <Select value={timeZone} onValueChange={setTimeZone} disabled={!timezones.length}>
-                                    <SelectTrigger id="timezone" className="w-full"><SelectValue placeholder="Select timezone" /></SelectTrigger>
-                                    <SelectContent><ScrollArea className="h-72">{timezones.map(tz => (<SelectItem key={tz.value} value={tz.value}>{tz.label}</SelectItem>))}</ScrollArea></SelectContent>
-                                </Select>
-                            </div>
                             <div className="grid gap-2">
                                 <Label htmlFor="session-start">Session Start Time (UTC)</Label>
                                 <Input id="session-start" type="time" value={sessionStartTime} onChange={(e) => setSessionStartTime(e.target.value)} />
