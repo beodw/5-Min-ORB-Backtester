@@ -64,5 +64,3 @@ export type DrawingState = {
 };
 
     
-
-    

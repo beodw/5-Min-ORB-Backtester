@@ -26,6 +26,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
+import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 
 type JournalTrade = {
   date: string; // Stored as ISO string for serialization
@@ -38,6 +39,12 @@ type TradeDecision = 'Traded' | 'Not Traded';
 type SessionInfo = {
     priceDataFileName: string | null;
     journalFileName: string | null;
+};
+
+type JournalToolbarPositions = {
+    main: { x: number; y: number };
+    secondary: { x: number; y: number };
+    controls: { x: number; y: number };
 };
 
 type SessionState = {
@@ -78,7 +85,6 @@ const fillGapsInData = (data: Omit<PriceData, 'index'>[]): PriceData[] => {
 // Local storage keys
 const TOOLBAR_POS_KEY_JOURNAL = 'algo-insights-toolbar-positions-journal';
 const JOURNAL_SESSION_KEY = 'algo-insights-journal-session';
-const JOURNAL_PANEL_STATE_KEY = 'algo-insights-journal-panel-state';
 
 
 const formatDateToISO = (date: Date): string => {
@@ -86,7 +92,6 @@ const formatDateToISO = (date: Date): string => {
 };
 
 export function JournalReconstruction() {
-  const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
   const [priceData, setPriceData] = useState<PriceData[]>(() => mockPriceData.map((d, i) => ({...d, index: i})));
   const [journalTrades, setJournalTrades] = useState<JournalTrade[]>([]);
   const [journalHeader, setJournalHeader] = useState<string>('');
@@ -103,12 +108,13 @@ export function JournalReconstruction() {
   const [history, setHistory] = useState<DrawingState[]>([]);
   const [redoStack, setRedoStack] = useState<DrawingState[]>([]);
 
-  const [toolbarPositions, setToolbarPositions] = useState<ToolbarPositions>({
-    main: { x: 400, y: 16 },
-    secondary: { x: 400, y: 88 }
+  const [toolbarPositions, setToolbarPositions] = useState<JournalToolbarPositions>({
+    main: { x: 16, y: 88 },
+    secondary: { x: 16, y: 16 },
+    controls: { x: 16, y: 160 }
   });
   const dragInfo = useRef<{
-    target: 'main' | 'secondary' | null;
+    target: 'main' | 'secondary' | 'controls' | null;
     offsetX: number;
     offsetY: number;
   }>({ target: null, offsetX: 0, offsetY: 0 });
@@ -177,15 +183,10 @@ export function JournalReconstruction() {
 
    // Effect for loading toolbar positions and checking for saved session
   useEffect(() => {
-    const savedPanelState = localStorage.getItem(JOURNAL_PANEL_STATE_KEY);
-    if (savedPanelState) {
-        setIsPanelCollapsed(JSON.parse(savedPanelState));
-    }
-
     const savedToolbarPosRaw = localStorage.getItem(TOOLBAR_POS_KEY_JOURNAL);
     if (savedToolbarPosRaw) {
         try {
-            const savedPos: ToolbarPositions = JSON.parse(savedToolbarPosRaw);
+            const savedPos: JournalToolbarPositions = JSON.parse(savedToolbarPosRaw);
             setToolbarPositions(savedPos);
         } catch (e) {
             console.error("Failed to parse journal toolbar positions from localStorage", e);
@@ -742,7 +743,7 @@ export function JournalReconstruction() {
     setIsPlacingMeasurement(true);
   };
 
-  const handleMouseDownOnToolbar = (e: React.MouseEvent, target: 'main' | 'secondary') => {
+  const handleMouseDownOnToolbar = (e: React.MouseEvent, target: 'main' | 'secondary' | 'controls') => {
     if (e.button !== 0) return;
     const targetElement = e.currentTarget as HTMLDivElement;
     const rect = targetElement.getBoundingClientRect();
@@ -777,14 +778,6 @@ export function JournalReconstruction() {
     setLastDecisionDate(null);
     toast({ title: "Decisions Reset", description: "All manual trade decisions have been cleared." });
   };
-
-  const handleTogglePanel = () => {
-    setIsPanelCollapsed(prevState => {
-        const newState = !prevState;
-        localStorage.setItem(JOURNAL_PANEL_STATE_KEY, JSON.stringify(newState));
-        return newState;
-    });
-  };
   
   const isPlacingAnything = !!placingToolType || isPlacingPriceMarker || isPlacingMeasurement;
   
@@ -813,7 +806,7 @@ export function JournalReconstruction() {
     : 'An unknown previous session was found. Restore?';
 
   return (
-    <div className="flex h-full">
+    <div className="w-full h-full relative">
        <AlertDialog open={showRestoreDialog} onOpenChange={setShowRestoreDialog}>
             <AlertDialogContent>
                 <AlertDialogHeader>
@@ -828,146 +821,44 @@ export function JournalReconstruction() {
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>
-        
-      <div className={cn(
-            "relative border-r border-border transition-all duration-300",
-            isPanelCollapsed ? "w-0" : "w-[350px] p-4"
-        )}>
-        <div className={cn("flex flex-col gap-4 overflow-hidden", isPanelCollapsed && "invisible")}>
-            <h2 className="text-xl font-bold font-headline">Controls</h2>
-            
-            <div className="space-y-2">
-                <h3 className="font-semibold text-lg">1. Import Files</h3>
-                <Button onClick={() => priceDataInputRef.current?.click()} className="w-full">
-                  <FileUp className="mr-2 h-4 w-4" /> Import 1-Min Data
-                </Button>
-                <input type="file" ref={priceDataInputRef} onChange={handlePriceDataImport} accept=".csv" className="hidden" />
-                 {sessionInfo.priceDataFileName && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground bg-secondary p-2 rounded-md">
-                       <Info className="h-4 w-4 text-primary" />
-                       <p>Loaded: <span className="font-semibold">{sessionInfo.priceDataFileName}</span></p>
-                    </div>
-                )}
-                 <Button onClick={() => journalInputRef.current?.click()} className="w-full mt-2" disabled={!isPriceDataImported}>
-                  <FileUp className="mr-2 h-4 w-4" /> Import Journal CSV
-                </Button>
-                <input type="file" ref={journalInputRef} onChange={handleJournalImport} accept=".csv" className="hidden" />
-                 {sessionInfo.journalFileName && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground bg-secondary p-2 rounded-md">
-                       <Info className="h-4 w-4 text-primary" />
-                       <p>Loaded: <span className="font-semibold">{sessionInfo.journalFileName}</span></p>
-                    </div>
-                )}
-            </div>
-            
-            <div>
-                <h3 className="font-semibold text-lg mb-2">2. Select a Trade Day</h3>
-                 <Calendar
-                    mode="single"
-                    selected={selectedDate}
-                    onSelect={(d) => {
-                      setSelectedDate(d);
-                      handleDateSelect(d);
-                    }}
-                    disabled={(date) => !allTradeDates.some(tradeDate => 
-                        tradeDate.getUTCFullYear() === date.getUTCFullYear() &&
-                        tradeDate.getUTCMonth() === date.getUTCMonth() &&
-                        tradeDate.getUTCDate() === date.getUTCDate()
-                    )}
-                    modifiers={dayResultModifiers}
-                    modifiersClassNames={{
-                        win: 'rdp-day_win',
-                        loss: 'rdp-day_loss',
-                        modified: 'rdp-day_modified',
-                    }}
-                    month={selectedDate}
-                    onMonthChange={setSelectedDate}
-                    captionLayout="dropdown-buttons"
-                    fromYear={2014}
-                    toYear={new Date().getFullYear()}
-                    className="rounded-md border"
-                 />
-            </div>
 
-            <div className="space-y-2">
-                <h3 className="font-semibold text-lg">3. Session & Export</h3>
-                <Button
-                    onClick={handleResetDecisions}
-                    variant="outline"
-                    className="w-full"
-                    disabled={Object.keys(tradeDecisions).length === 0}
-                >
-                    <RotateCcw className="mr-2 h-4 w-4"/> Reset All Decisions
-                </Button>
-                <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                         <Button
-                            variant="destructive"
-                            className="w-full"
-                            disabled={!isPriceDataImported && !isJournalImported}
-                        >
-                            <FileX2 className="mr-2 h-4 w-4"/> Start New Session
-                        </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                        <AlertDialogHeader>
-                            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                                This will clear all imported data, drawings, and decisions from this tab. This action cannot be undone.
-                            </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={startNewSession}>Continue</AlertDialogAction>
-                        </AlertDialogFooter>
-                    </AlertDialogContent>
-                </AlertDialog>
-            </div>
+        <div className="absolute inset-0">
+            <InteractiveChart
+            data={priceData}
+            trades={[]}
+            onChartClick={handleChartClick}
+            onChartMouseMove={handleChartMouseMove}
+            rrTools={rrTools}
+            onUpdateTool={(tool) => { pushToHistory(drawingState); setRrTools(prev => prev.map(t => t.id === tool.id ? tool : t)); }}
+            onRemoveTool={(id) => { pushToHistory(drawingState); setRrTools(prev => prev.filter(t => t.id !== id)); }}
+            isPlacingRR={!!placingToolType}
+            isPlacingPriceMarker={isPlacingPriceMarker}
+            priceMarkers={priceMarkers}
+            onRemovePriceMarker={(id) => { pushToHistory(drawingState); setPriceMarkers(prev => prev.filter(m => m.id !== id)); }}
+            onUpdatePriceMarker={(id, price) => { pushToHistory(drawingState); setPriceMarkers(prev => prev.map(m => m.id === id ? {...m, price} : m)); }}
+            measurementTools={measurementTools}
+            onRemoveMeasurementTool={(id) => { pushToHistory(drawingState); setMeasurementTools(prev => prev.filter(t => t.id !== id)); }}
+            liveMeasurementTool={liveMeasurementTool}
+            pipValue={pipValue}
+            timeframe={timeframe}
+            timeZone="UTC"
+            endDate={selectedDate}
+            isYAxisLocked={isYAxisLocked}
+            />
+            {!isPriceDataImported && !sessionInfo.priceDataFileName && (
+                <div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center">
+                    <p className="text-muted-foreground text-lg">Please import price data to begin.</p>
+                </div>
+            )}
         </div>
-        <Button
-            variant="outline"
-            size="icon"
-            className="absolute top-1/2 -right-5 -translate-y-1/2 rounded-full h-8 w-8 bg-background hover:bg-muted z-20"
-            onClick={handleTogglePanel}
-        >
-            {isPanelCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-        </Button>
-      </div>
-
-      <div className="flex-1 relative flex flex-col min-h-0">
-        <InteractiveChart
-          data={priceData}
-          trades={[]}
-          onChartClick={handleChartClick}
-          onChartMouseMove={handleChartMouseMove}
-          rrTools={rrTools}
-          onUpdateTool={(tool) => { pushToHistory(drawingState); setRrTools(prev => prev.map(t => t.id === tool.id ? tool : t)); }}
-          onRemoveTool={(id) => { pushToHistory(drawingState); setRrTools(prev => prev.filter(t => t.id !== id)); }}
-          isPlacingRR={!!placingToolType}
-          isPlacingPriceMarker={isPlacingPriceMarker}
-          priceMarkers={priceMarkers}
-          onRemovePriceMarker={(id) => { pushToHistory(drawingState); setPriceMarkers(prev => prev.filter(m => m.id !== id)); }}
-          onUpdatePriceMarker={(id, price) => { pushToHistory(drawingState); setPriceMarkers(prev => prev.map(m => m.id === id ? {...m, price} : m)); }}
-          measurementTools={measurementTools}
-          onRemoveMeasurementTool={(id) => { pushToHistory(drawingState); setMeasurementTools(prev => prev.filter(t => t.id !== id)); }}
-          liveMeasurementTool={liveMeasurementTool}
-          pipValue={pipValue}
-          timeframe={timeframe}
-          timeZone="UTC"
-          endDate={selectedDate}
-          isYAxisLocked={isYAxisLocked}
-        />
-        {!isPriceDataImported && !sessionInfo.priceDataFileName && (
-             <div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center">
-                <p className="text-muted-foreground text-lg">Please import price data to begin.</p>
-            </div>
-        )}
         
         <div 
           className="absolute z-10 flex flex-col items-start gap-2"
           style={{ top: `${toolbarPositions.main.y}px`, left: `${toolbarPositions.main.x}px` }}
         >
-            <div className="flex items-center gap-2 bg-card/80 backdrop-blur-sm p-2 rounded-lg shadow-lg">
+            <div 
+                className="flex items-center gap-2 bg-card/80 backdrop-blur-sm p-2 rounded-lg shadow-lg"
+            >
               <div onMouseDown={(e) => handleMouseDownOnToolbar(e, 'main')} className="cursor-grab active:cursor-grabbing p-1 -ml-1">
                   <GripVertical className="h-5 w-5 text-muted-foreground/50" />
               </div>
@@ -1022,7 +913,11 @@ export function JournalReconstruction() {
                 </Popover>
             </div>
         </div>
-        <div className="absolute z-10" style={{ top: `${toolbarPositions.secondary.y}px`, left: `${toolbarPositions.secondary.x}px` }}>
+
+        <div
+            className="absolute z-10"
+            style={{ top: `${toolbarPositions.secondary.y}px`, left: `${toolbarPositions.secondary.x}px` }}
+        >
             <div className="flex items-center gap-2 bg-card/80 backdrop-blur-sm p-2 rounded-lg shadow-lg">
                 <div onMouseDown={(e) => handleMouseDownOnToolbar(e, 'secondary')} className="cursor-grab active:cursor-grabbing p-1 -ml-1">
                     <GripVertical className="h-5 w-5 text-muted-foreground/50" />
@@ -1104,7 +999,114 @@ export function JournalReconstruction() {
             </div>
         </div>
 
-      </div>
+        <div
+            className="absolute z-10"
+            style={{ top: `${toolbarPositions.controls.y}px`, left: `${toolbarPositions.controls.x}px` }}
+        >
+            <Card className="w-[350px] bg-card/80 backdrop-blur-sm">
+                 <CardHeader className="p-4 flex flex-row items-center">
+                    <div
+                        onMouseDown={(e) => handleMouseDownOnToolbar(e, 'controls')}
+                        className="cursor-grab active:cursor-grabbing p-1 -ml-2"
+                    >
+                        <GripVertical className="h-5 w-5 text-muted-foreground/50" />
+                    </div>
+                    <CardTitle className="text-xl">Controls</CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 pt-0 space-y-4">
+                     <div className="space-y-2">
+                        <h3 className="font-semibold text-md">1. Import Files</h3>
+                        <Button onClick={() => priceDataInputRef.current?.click()} className="w-full">
+                        <FileUp className="mr-2 h-4 w-4" /> Import 1-Min Data
+                        </Button>
+                        <input type="file" ref={priceDataInputRef} onChange={handlePriceDataImport} accept=".csv" className="hidden" />
+                        {sessionInfo.priceDataFileName && (
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground bg-secondary p-2 rounded-md">
+                            <Info className="h-4 w-4 text-primary" />
+                            <p>Loaded: <span className="font-semibold">{sessionInfo.priceDataFileName}</span></p>
+                            </div>
+                        )}
+                        <Button onClick={() => journalInputRef.current?.click()} className="w-full mt-2" disabled={!isPriceDataImported}>
+                        <FileUp className="mr-2 h-4 w-4" /> Import Journal CSV
+                        </Button>
+                        <input type="file" ref={journalInputRef} onChange={handleJournalImport} accept=".csv" className="hidden" />
+                        {sessionInfo.journalFileName && (
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground bg-secondary p-2 rounded-md">
+                            <Info className="h-4 w-4 text-primary" />
+                            <p>Loaded: <span className="font-semibold">{sessionInfo.journalFileName}</span></p>
+                            </div>
+                        )}
+                    </div>
+                    
+                    <div>
+                        <h3 className="font-semibold text-md mb-2">2. Select a Trade Day</h3>
+                        <Calendar
+                            mode="single"
+                            selected={selectedDate}
+                            onSelect={(d) => {
+                            setSelectedDate(d);
+                            handleDateSelect(d);
+                            }}
+                            disabled={(date) => !allTradeDates.some(tradeDate => 
+                                tradeDate.getUTCFullYear() === date.getUTCFullYear() &&
+                                tradeDate.getUTCMonth() === date.getUTCMonth() &&
+                                tradeDate.getUTCDate() === date.getUTCDate()
+                            )}
+                            modifiers={dayResultModifiers}
+                            modifiersClassNames={{
+                                win: 'rdp-day_win',
+                                loss: 'rdp-day_loss',
+                                modified: 'rdp-day_modified',
+                            }}
+                            month={selectedDate}
+                            onMonthChange={setSelectedDate}
+                            captionLayout="dropdown-buttons"
+                            fromYear={2014}
+                            toYear={new Date().getFullYear()}
+                            className="rounded-md border"
+                        />
+                    </div>
+
+                    <div className="space-y-2">
+                        <h3 className="font-semibold text-md">3. Session</h3>
+                        <Button
+                            onClick={handleResetDecisions}
+                            variant="outline"
+                            className="w-full"
+                            disabled={Object.keys(tradeDecisions).length === 0}
+                        >
+                            <RotateCcw className="mr-2 h-4 w-4"/> Reset All Decisions
+                        </Button>
+                        <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                                <Button
+                                    variant="destructive"
+                                    className="w-full"
+                                    disabled={!isPriceDataImported && !isJournalImported}
+                                >
+                                    <FileX2 className="mr-2 h-4 w-4"/> Start New Session
+                                </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        This will clear all imported data, drawings, and decisions from this tab. This action cannot be undone.
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction onClick={startNewSession}>Continue</AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
+                    </div>
+                </CardContent>
+            </Card>
+        </div>
+
     </div>
   );
 }
+
+    
