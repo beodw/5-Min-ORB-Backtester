@@ -934,7 +934,7 @@ export function JournalReconstruction() {
         </Button>
       </div>
 
-      <div className="flex-1 relative">
+      <div className="flex-1 relative flex flex-col min-h-0">
         <InteractiveChart
           data={priceData}
           trades={[]}
