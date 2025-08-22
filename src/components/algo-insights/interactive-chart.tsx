@@ -173,7 +173,7 @@ export function InteractiveChart({
     const startIndex = Math.max(0, Math.floor(start) - buffer);
     const endIndex = Math.min(aggregatedData.length, Math.ceil(end) + buffer);
     
-    return aggregatedData.slice(startIndex, endIndex);
+    return aggregatedData.slice(startIndex, endIndex).map((d, i) => ({ ...d, index: startIndex + i }));
   }, [xDomain, aggregatedData]);
 
   useEffect(() => {
@@ -241,32 +241,6 @@ export function InteractiveChart({
     }
   }, [windowedData, priceMarkers, yDomain, isYAxisLocked]);
 
-  const xDataDomain = useMemo(() => {
-    if (!aggregatedData.length) return [0, 0];
-    return [
-      aggregatedData[0].date.getTime(),
-      aggregatedData[aggregatedData.length - 1].date.getTime()
-    ];
-  }, [aggregatedData]);
-
-  const xTimeDomain = useMemo(() => {
-    if (!aggregatedData || aggregatedData.length === 0) return [0, 0];
-    
-    const [start, end] = xDomain;
-    
-    const firstPointTime = aggregatedData[0].date.getTime();
-    
-    const interval = aggregatedData.length > 1 
-      ? aggregatedData[1].date.getTime() - firstPointTime
-      : 60000; 
-
-    const startTime = firstPointTime + start * interval;
-    const endTime = firstPointTime + end * interval;
-
-    return [startTime, endTime];
-
-  }, [aggregatedData, xDomain]);
-
     const getChartCoordinates = (e: any): ChartClickData | null => {
         if (!e || !chartScalesRef.current) return null;
         
@@ -280,12 +254,14 @@ export function InteractiveChart({
         }
 
         const price = yScale.invert(mouseYInPlot);
-        const timestamp = xScale.invert(mouseXInPlot);
-        const dataIndex = findClosestIndex(aggregatedData, timestamp);
-        const candle = aggregatedData[dataIndex];
+        const dataIndexFloat = xScale.invert(mouseXInPlot);
+        const dataIndex = Math.round(dataIndexFloat);
         
-        if (price !== undefined && candle) {
-            return { price, date: candle.date, dataIndex, closePrice: candle.close, yDomain, xDomain, candle };
+        if (price !== undefined && dataIndex >= 0 && dataIndex < aggregatedData.length) {
+            const candle = aggregatedData[dataIndex];
+            if (candle) {
+                return { price, date: candle.date, dataIndex, closePrice: candle.close, yDomain, xDomain, candle };
+            }
         }
         return null;
     }
@@ -467,21 +443,20 @@ export function InteractiveChart({
   };
 
   const formatXAxis = useCallback((tickItem: any) => {
-    const date = new Date(tickItem);
+    const index = Math.round(tickItem);
+    const point = aggregatedData[index];
+    if (!point) return '';
+
+    const date = point.date;
     if (isNaN(date.getTime())) return '';
     
     const [start, end] = xDomain;
-    const timePerIndex = aggregatedData.length > 1 
-      ? aggregatedData[1].date.getTime() - aggregatedData[0].date.getTime() 
-      : 60000;
+    const domainWidth = end - start;
     
-    const visibleRangeInMs = (end - start) * timePerIndex;
-    const visibleRangeInMinutes = visibleRangeInMs / 60000;
-
-    if (visibleRangeInMinutes > 3 * 24 * 60) {
+    if (domainWidth > 3 * 24 * 60) { // More than 3 days visible
       return date.toLocaleDateString([], { month: 'short', day: 'numeric', timeZone });
     }
-    if (visibleRangeInMinutes > 24 * 60) {
+    if (domainWidth > 24 * 60) { // More than 1 day visible
       return date.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone });
     }
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone });
@@ -513,7 +488,7 @@ export function InteractiveChart({
         >
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border) / 0.5)" />
           <XAxis
-            dataKey="date"
+            dataKey="index"
             tickFormatter={formatXAxis}
             stroke="hsl(var(--muted-foreground))"
             fontSize={12}
@@ -522,7 +497,7 @@ export function InteractiveChart({
             interval="preserveStartEnd"
             minTickGap={80}
             xAxisId="main"
-            domain={xTimeDomain}
+            domain={xDomain}
             type="number"
             allowDataOverflow={true}
           />

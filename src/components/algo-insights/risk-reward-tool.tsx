@@ -10,7 +10,7 @@ interface RiskRewardToolProps {
   onUpdateTool: (tool: RRToolType) => void;
   onRemove: (id: string) => void;
   data: PriceData[];
-  xScale: ((date: number) => number) & { invert?: (x: number) => number };
+  xScale: ((index: number) => number) & { invert?: (x: number) => number };
   yScale: ((price: number) => number) & { invert?: (y: number) => number };
   plot: { width: number; height: number; top: number; left: number };
   svgBounds: DOMRect;
@@ -37,6 +37,7 @@ export function RiskRewardTool({ tool, onUpdateTool, onRemove, data, xScale, ySc
     setIsDragging(part);
 
     const startToolState = { ...tool };
+    const entryIndex = findClosestIndex(data, startToolState.entryDate.getTime());
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       moveEvent.preventDefault();
@@ -50,19 +51,20 @@ export function RiskRewardTool({ tool, onUpdateTool, onRemove, data, xScale, ySc
       if (part === 'entry') {
         const mouseXInPlot = mouseXInSvg - plot.left;
         const newEntryPrice = yScale.invert(mouseYInSvg);
-        const newTimestamp = xScale.invert(mouseXInPlot);
-        
-        if (newEntryPrice === undefined || newTimestamp === undefined) return;
+        const newIndexFloat = xScale.invert(mouseXInPlot);
 
-        const stopOffset = startToolState.entryPrice - startToolState.stopLoss;
-        const profitOffset = startToolState.takeProfit - startToolState.entryPrice;
+        if (newEntryPrice === undefined || newIndexFloat === undefined) return;
         
-        newTool.entryPrice = newEntryPrice;
-        newTool.stopLoss = newEntryPrice - stopOffset;
-        newTool.takeProfit = newEntryPrice + profitOffset;
-        
-        const newCandle = data.find(d => d.date.getTime() >= newTimestamp);
+        const newIndex = Math.round(newIndexFloat);
+        const newCandle = data[newIndex];
+
         if (newCandle) {
+          const stopOffset = startToolState.entryPrice - startToolState.stopLoss;
+          const profitOffset = startToolState.takeProfit - startToolState.entryPrice;
+          
+          newTool.entryPrice = newEntryPrice;
+          newTool.stopLoss = newEntryPrice - stopOffset;
+          newTool.takeProfit = newEntryPrice + profitOffset;
           newTool.entryDate = newCandle.date;
         }
 
@@ -76,18 +78,15 @@ export function RiskRewardTool({ tool, onUpdateTool, onRemove, data, xScale, ySc
       
       } else if (part === 'width') {
         const mouseXInPlot = mouseXInSvg - plot.left;
-        const newTimestamp = xScale.invert(mouseXInPlot);
+        const newIndexFloat = xScale.invert(mouseXInPlot);
         
-        if (newTimestamp !== undefined) {
-          const entryTimestamp = tool.entryDate.getTime();
-          if (entryTimestamp) {
-              const candleInterval = data.length > 1 ? data[1].date.getTime() - data[0].date.getTime() : 60000;
-              const newWidthInPoints = Math.round((newTimestamp - entryTimestamp) / candleInterval);
+        if (newIndexFloat !== undefined) {
+            const newIndex = Math.round(newIndexFloat);
+            const newWidthInPoints = newIndex - entryIndex;
 
-              if (newWidthInPoints >= 5) {
-                newTool.widthInPoints = newWidthInPoints;
-              }
-          }
+            if (newWidthInPoints >= 5) {
+              newTool.widthInPoints = newWidthInPoints;
+            }
         }
       }
       
@@ -105,17 +104,17 @@ export function RiskRewardTool({ tool, onUpdateTool, onRemove, data, xScale, ySc
   };
 
   const entryTimestamp = tool.entryDate.getTime();
+  const entryIndex = findClosestIndex(data, entryTimestamp);
 
-  if (!entryTimestamp || !data || data.length === 0) {
+  if (entryIndex < 0 || !data || data.length === 0) {
     return null;
   }
   
-  const interval = data.length > 1 ? data[1].date.getTime() - data[0].date.getTime() : 60000;
-  const endDate = entryTimestamp + tool.widthInPoints * interval;
+  const endIndex = entryIndex + tool.widthInPoints;
 
 
-  const leftX = xScale(entryTimestamp);
-  const rightX = xScale(endDate);
+  const leftX = xScale(entryIndex);
+  const rightX = xScale(endIndex);
   const width = rightX - leftX;
 
   const entryY = yScale(tool.entryPrice);
