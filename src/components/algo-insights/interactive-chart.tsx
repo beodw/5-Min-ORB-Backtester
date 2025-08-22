@@ -248,12 +248,9 @@ export function InteractiveChart({
     const padding = (max - min) * 0.1 || 10;
     const newYDomain: [number, number] = [min - padding, max + padding];
     
-    setYDomain(currentYDomain => {
-        if (newYDomain[0] !== currentYDomain[0] || newYDomain[1] !== currentYDomain[1]) {
-            return newYDomain;
-        }
-        return currentYDomain;
-    });
+    if (newYDomain[0] !== yDomain[0] || newYDomain[1] !== yDomain[1]) {
+        setYDomain(newYDomain);
+    }
 
   }, [windowedData, priceMarkers, isYAxisLocked]);
 
