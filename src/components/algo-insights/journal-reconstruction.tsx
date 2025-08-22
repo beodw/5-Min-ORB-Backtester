@@ -927,7 +927,7 @@ export function JournalReconstruction() {
         <Button
             variant="outline"
             size="icon"
-            className="absolute top-1/2 -right-5 -translate-y-1/2 rounded-full h-8 w-8 bg-background hover:bg-muted"
+            className="absolute top-1/2 -right-5 -translate-y-1/2 rounded-full h-8 w-8 bg-background hover:bg-muted z-20"
             onClick={handleTogglePanel}
         >
             {isPanelCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
@@ -1108,5 +1108,3 @@ export function JournalReconstruction() {
     </div>
   );
 }
-
-    
