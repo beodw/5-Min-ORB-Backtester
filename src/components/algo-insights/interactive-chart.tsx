@@ -465,6 +465,11 @@ export function InteractiveChart({
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone });
   }, [xDomain, aggregatedData, timeZone]);
 
+  const xTimeDomain = useMemo(() => {
+    if (!windowedData.length) return [0, 0];
+    return [windowedData[0].date.getTime(), windowedData[windowedData.length - 1].date.getTime()];
+  }, [windowedData]);
+  
   return (
     <div 
       ref={chartContainerRef} 
@@ -483,7 +488,7 @@ export function InteractiveChart({
       ) : (
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart 
-            data={aggregatedData} 
+            data={windowedData} 
             onClick={handleClick}
             onMouseMove={handleMouseMoveRecharts} 
             onMouseLeave={handleMouseLeaveChart}
@@ -522,7 +527,7 @@ export function InteractiveChart({
                 isAnimationActive={false}
             />
 
-          <Bar dataKey="wick" data={windowedData} shape={<Candlestick />} isAnimationActive={false} xAxisId="main" yAxisId="main"/>
+          <Bar dataKey="wick" shape={<Candlestick />} isAnimationActive={false} xAxisId="main" yAxisId="main"/>
 
           {trades.map((trade) => (
             <ReferenceDot
@@ -615,5 +620,3 @@ export function InteractiveChart({
     </div>
   );
 }
-
-    
