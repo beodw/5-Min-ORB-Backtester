@@ -26,8 +26,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
-import { type CaptionProps } from "react-day-picker";
-import { format } from "date-fns";
 
 
 type JournalTrade = {
@@ -86,79 +84,6 @@ export function JournalReconstruction() {
   }>({ target: null, offsetX: 0, offsetY: 0 });
 
   const { rrTools, priceMarkers, measurementTools } = drawingState;
-
-  function CustomCaption(props: CaptionProps) {
-    const handleYearChange = (value: string) => {
-      const newDate = new Date(props.displayMonth);
-      newDate.setFullYear(parseInt(value, 10));
-      props.goToMonth(newDate);
-    };
-    
-    const handleMonthChange = (value: string) => {
-      const newDate = new Date(props.displayMonth);
-      newDate.setMonth(parseInt(value, 10));
-      props.goToMonth(newDate);
-    };
-  
-    const years = Array.from({ length: 20 }, (_, i) => new Date().getFullYear() - 10 + i);
-    const months = Array.from({ length: 12 }, (_, i) => i);
-  
-    return (
-      <div className="flex justify-between items-center mb-2 px-1">
-        <div className="flex items-center gap-1">
-          <Select
-            value={props.displayMonth.getFullYear().toString()}
-            onValueChange={handleYearChange}
-          >
-            <SelectTrigger className="w-[80px] h-8 text-xs">
-              <SelectValue>{props.displayMonth.getFullYear()}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {years.map((year) => (
-                <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
-            value={props.displayMonth.getMonth().toString()}
-            onValueChange={handleMonthChange}
-          >
-            <SelectTrigger className="w-[100px] h-8 text-xs">
-              <SelectValue>{format(props.displayMonth, 'MMMM')}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {months.map((month) => (
-                <SelectItem key={month} value={month.toString()}>
-                  {format(new Date(0, month), 'MMMM')}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-  
-        <div className="flex items-center gap-1">
-          <Button
-            disabled={!props.previousMonth}
-            onClick={() => props.previousMonth && props.goToMonth(props.previousMonth)}
-            variant="outline"
-            size="icon"
-            className="h-8 w-8"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <Button
-            disabled={!props.nextMonth}
-            onClick={() => props.nextMonth && props.goToMonth(props.nextMonth)}
-            variant="outline"
-            size="icon"
-            className="h-8 w-8"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-    );
-  }
 
   const pushToHistory = (currentState: DrawingState) => {
     setHistory(prev => [...prev, currentState]);
@@ -663,6 +588,7 @@ export function JournalReconstruction() {
   }, [journalTrades]);
 
   const allTradeDates = journalTrades.map(t => t.date);
+  const currentYear = new Date().getFullYear();
 
   return (
     <div className="flex h-full">
@@ -711,7 +637,6 @@ export function JournalReconstruction() {
                 month={selectedDate}
                 onMonthChange={setSelectedDate}
                 modifiers={dayResultModifiers}
-                components={{ Caption: CustomCaption }}
                 modifiersClassNames={{
                     win: 'rdp-day_win',
                     loss: 'rdp-day_loss',
@@ -722,6 +647,9 @@ export function JournalReconstruction() {
                     tradeDate.getUTCFullYear() === date.getUTCFullYear()
                 )}
                 className="rounded-md border"
+                captionLayout="dropdown-buttons"
+                fromYear={currentYear - 10}
+                toYear={currentYear + 10}
              />
         </div>
       </div>
@@ -857,3 +785,5 @@ export function JournalReconstruction() {
     </div>
   );
 }
+
+    
