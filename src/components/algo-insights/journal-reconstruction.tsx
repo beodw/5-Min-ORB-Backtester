@@ -1002,7 +1002,7 @@ export function JournalReconstruction() {
             </div>
         </div>
 
-        <div
+        {toolbarPositions.controls && <div
             className="absolute z-10"
             style={{ top: `${toolbarPositions.controls.y}px`, left: `${toolbarPositions.controls.x}px` }}
         >
@@ -1106,7 +1106,7 @@ export function JournalReconstruction() {
                     </div>
                 </CardContent>
             </Card>
-        </div>
+        </div>}
 
     </div>
   );
