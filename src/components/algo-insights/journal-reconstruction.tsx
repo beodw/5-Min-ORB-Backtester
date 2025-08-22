@@ -8,7 +8,7 @@ import { InteractiveChart, type ChartClickData } from "@/components/algo-insight
 import { mockPriceData } from "@/lib/mock-data";
 import { useToast } from "@/hooks/use-toast";
 import type { PriceData, PriceMarker, RiskRewardTool as RRToolType, MeasurementTool as MeasurementToolType, DrawingState, ToolbarPositions, MeasurementPoint } from "@/types";
-import { FileUp, Info, ArrowUp, ArrowDown, Settings, ChevronsRight, Target, Trash2, Lock, Unlock, Ruler, Undo, Redo, GripVertical, ChevronLeft, ChevronRight, RotateCcw, CheckCircle, XCircle, FileX2 } from "lucide-react";
+import { FileUp, Info, ArrowUp, ArrowDown, Settings, ChevronsRight, Target, Trash2, Lock, Unlock, Ruler, Undo, Redo, GripVertical, ChevronLeft, ChevronRight, RotateCcw, CheckCircle, XCircle, FileX2, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   AlertDialog,
@@ -521,7 +521,7 @@ export function JournalReconstruction() {
             duration: 7000
         });
         pushToHistory(drawingState);
-        setPriceMarkers(prev => []);
+        setPriceMarkers(() => []);
     }
   };
 
@@ -846,9 +846,6 @@ export function JournalReconstruction() {
 
         <div className="space-y-2">
             <h3 className="font-semibold text-lg">3. Session & Export</h3>
-            <Button onClick={handleExportDecisions} className="w-full" variant="secondary" disabled={!isJournalImported}>
-                <FileUp className="mr-2 h-4 w-4" /> Export Decisions Report
-            </Button>
             <Button
                 onClick={handleResetDecisions}
                 variant="outline"
@@ -991,6 +988,17 @@ export function JournalReconstruction() {
                 <TooltipProvider><Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceMarker} disabled={isPlacingAnything || priceData.length === 0}><Target className="w-5 h-5 text-foreground"/></Button></TooltipTrigger><TooltipContent><p>Place Price Marker</p></TooltipContent></Tooltip></TooltipProvider>
                 <TooltipProvider><Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => setIsYAxisLocked(prev => !prev)}>{isYAxisLocked ? <Lock className="h-5 w-5" /> : <Unlock className="h-5 w-5" />}</Button></TooltipTrigger><TooltipContent><p>{isYAxisLocked ? "Unlock Y-Axis" : "Lock Y-Axis"}</p></TooltipContent></Tooltip></TooltipProvider>
                 <TooltipProvider><Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceMeasurement} disabled={isPlacingAnything || priceData.length === 0}><Ruler className="w-5 h-5 text-foreground"/></Button></TooltipTrigger><TooltipContent><p>Measure Distance</p></TooltipContent></Tooltip></TooltipProvider>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button variant="ghost" size="icon" onClick={handleExportDecisions} disabled={!isJournalImported}>
+                          <Download className="w-5 h-5 text-foreground"/>
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent><p>Export Decisions Report</p></TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+
                 <div className="h-6 border-l border-border/50"></div>
                  <TooltipProvider>
                     <div className="flex justify-center gap-1">
@@ -1046,5 +1054,3 @@ export function JournalReconstruction() {
     </div>
   );
 }
-
-    
