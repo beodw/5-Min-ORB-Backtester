@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useRef, useMemo, useEffect } from "react";
+import { useState, useRef, useMemo, useEffect, ComponentType } from "react";
 import { Button } from "@/components/ui/button";
 import { Calendar, type CalendarProps } from "@/components/ui/calendar";
 import { InteractiveChart, type ChartClickData } from "@/components/algo-insights/interactive-chart";
@@ -26,6 +26,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
+import { useDayPicker, type CaptionProps } from "react-day-picker";
 
 
 type JournalTrade = {
@@ -373,7 +374,7 @@ export function JournalReconstruction() {
 
     if (!hasTradeOnDay) {
         toast({ variant: "destructive", title: "No Trade Data", description: "No trade found for this day in the journal." });
-        setPriceMarkers([]);
+        setPriceMarkers(prev => []);
         return;
     }
 
@@ -413,7 +414,7 @@ export function JournalReconstruction() {
             duration: 7000
         });
         pushToHistory(drawingState);
-        setPriceMarkers([]);
+        setPriceMarkers(prev => []);
     }
   };
 

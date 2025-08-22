@@ -506,11 +506,6 @@ export function Backtester() {
     setPriceMarkers(prevMarkers => prevMarkers.filter(m => m.id !== id));
   };
 
-  const handleRemoveMeasurementTool = (id: string) => {
-    pushToHistory(drawingState);
-    setMeasurementTools(prev => prev.filter(t => t.id !== id));
-  };
-
   const handleUpdatePriceMarker = (id: string, price: number) => {
     pushToHistory(drawingState);
     setPriceMarkers(prevMarkers => 
@@ -518,6 +513,11 @@ export function Backtester() {
         m.id === id ? { ...m, price } : m
       )
     );
+  };
+
+  const handleRemoveMeasurementTool = (id: string) => {
+    pushToHistory(drawingState);
+    setMeasurementTools(prev => prev.filter(t => t.id !== id));
   };
 
   const handleClearAllDrawings = () => {
@@ -1223,3 +1223,5 @@ export function Backtester() {
     </div>
   );
 }
+
+    
