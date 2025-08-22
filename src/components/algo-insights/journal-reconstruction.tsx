@@ -139,7 +139,7 @@ export function JournalReconstruction() {
   const [liveMeasurementTool, setLiveMeasurementTool] = useState<MeasurementToolType | null>(null);
 
   const [timeframe, setTimeframe] = useState('1m');
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [sessionStartTime, setSessionStartTime] = useState('09:30');
   const [isYAxisLocked, setIsYAxisLocked] = useState(true);
   const [pipValue, setPipValue] = useState(0.0001);
@@ -691,6 +691,7 @@ export function JournalReconstruction() {
                     handleDateSelect(day);
                     if (day) {
                       const newDate = new Date(day);
+                      // Keep time from previous date to not reset chart view
                       const oldDate = selectedDate || new Date();
                       newDate.setHours(oldDate.getHours(), oldDate.getMinutes(), oldDate.getSeconds());
                       setSelectedDate(newDate);
@@ -709,10 +710,10 @@ export function JournalReconstruction() {
                     loss: 'rdp-day_loss',
                     modified: 'rdp-day_modified',
                 }}
-                className="rounded-md border"
                 captionLayout="dropdown-buttons"
                 fromYear={new Date().getFullYear() - 10}
                 toYear={new Date().getFullYear() + 10}
+                className="rounded-md border"
              />
         </div>
 
@@ -722,14 +723,14 @@ export function JournalReconstruction() {
             <div className="flex gap-2">
                 <Button 
                     onClick={() => handleSetTradeDecision('Traded')} 
-                    disabled={!selectedDate}
+                    disabled={!selectedDate || !isJournalImported}
                     className="flex-1"
                 >
                     <CheckCircle className="mr-2 h-4 w-4" /> Traded
                 </Button>
                 <Button 
                     onClick={() => handleSetTradeDecision('Not Traded')}
-                    disabled={!selectedDate}
+                    disabled={!selectedDate || !isJournalImported}
                     variant="destructive"
                     className="flex-1"
                 >
@@ -878,3 +879,5 @@ export function JournalReconstruction() {
     </div>
   );
 }
+
+    
