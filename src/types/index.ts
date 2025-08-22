@@ -54,3 +54,9 @@ export interface ToolbarPositions {
   main: { x: number; y: number };
   secondary: { x: number; y: number };
 }
+
+export type DrawingState = {
+    rrTools: RiskRewardTool[];
+    priceMarkers: PriceMarker[];
+    measurementTools: MeasurementTool[];
+};

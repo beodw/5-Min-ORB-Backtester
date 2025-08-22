@@ -4,13 +4,29 @@
 import { useState, useRef, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
-import { InteractiveChart } from "@/components/algo-insights/interactive-chart";
+import { InteractiveChart, type ChartClickData } from "@/components/algo-insights/interactive-chart";
 import { mockPriceData } from "@/lib/mock-data";
 import { useToast } from "@/hooks/use-toast";
-import type { PriceData, PriceMarker } from "@/types";
-import { FileUp, Info } from "lucide-react";
+import type { PriceData, PriceMarker, RiskRewardTool as RRToolType, MeasurementTool as MeasurementToolType, DrawingState, ToolbarPositions, MeasurementPoint } from "@/types";
+import { FileUp, Info, Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, ChevronRight, ChevronsRight, Target, Trash2, Lock, Unlock, Ruler, Undo, Redo, GripVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
+
 
 type JournalTrade = {
   date: Date;
@@ -41,11 +57,83 @@ const fillGapsInData = (data: PriceData[]): PriceData[] => {
     return processedData;
 };
 
+// Local storage keys
+const TOOLBAR_POS_KEY_JOURNAL = 'algo-insights-toolbar-positions-journal';
+
 export function JournalReconstruction() {
   const [priceData, setPriceData] = useState<PriceData[]>(mockPriceData);
   const [journalTrades, setJournalTrades] = useState<JournalTrade[]>([]);
-  const [priceMarkers, setPriceMarkers] = useState<PriceMarker[]>([]);
+  
+  const [drawingState, setDrawingState] = useState<DrawingState>({
+    rrTools: [],
+    priceMarkers: [],
+    measurementTools: []
+  });
+
+  const [history, setHistory] = useState<DrawingState[]>([]);
+  const [redoStack, setRedoStack] = useState<DrawingState[]>([]);
+
+  const [toolbarPositions, setToolbarPositions] = useState<ToolbarPositions>({
+    main: { x: 400, y: 16 },
+    secondary: { x: 400, y: 88 }
+  });
+  const dragInfo = useRef<{
+    target: 'main' | 'secondary' | null;
+    offsetX: number;
+    offsetY: number;
+  }>({ target: null, offsetX: 0, offsetY: 0 });
+
+  const { rrTools, priceMarkers, measurementTools } = drawingState;
+
+  const pushToHistory = (currentState: DrawingState) => {
+    setHistory(prev => [...prev, currentState]);
+    setRedoStack([]); // Clear redo stack on new action
+  };
+
+  const setRrTools = (updater: (prev: RRToolType[]) => RRToolType[]) => {
+    pushToHistory(drawingState);
+    setDrawingState(prev => ({ ...prev, rrTools: updater(prev.rrTools) }));
+  };
+
+  const setPriceMarkers = (updater: (prev: PriceMarker[]) => PriceMarker[]) => {
+    pushToHistory(drawingState);
+    setDrawingState(prev => ({ ...prev, priceMarkers: updater(prev.priceMarkers) }));
+  };
+  
+  const setMeasurementTools = (updater: (prev: MeasurementToolType[]) => MeasurementToolType[]) => {
+    pushToHistory(drawingState);
+    setDrawingState(prev => ({ ...prev, measurementTools: updater(prev.measurementTools) }));
+  };
+  
+  const handleUndo = () => {
+    if (history.length === 0) return;
+    const lastState = history[history.length - 1];
+    setRedoStack(prev => [drawingState, ...prev]);
+    setHistory(prev => prev.slice(0, prev.length - 1));
+    setDrawingState(lastState);
+  };
+  
+  const handleRedo = () => {
+    if (redoStack.length === 0) return;
+    const nextState = redoStack[0];
+    setHistory(prev => [...prev, drawingState]);
+    setRedoStack(prev => prev.slice(1));
+    setDrawingState(nextState);
+  };
+
+  const [placingToolType, setPlacingToolType] = useState<'long' | 'short' | null>(null);
+  const [isPlacingPriceMarker, setIsPlacingPriceMarker] = useState(false);
+  const [isPlacingMeasurement, setIsPlacingMeasurement] = useState(false);
+  const [measurementStartPoint, setMeasurementStartPoint] = useState<MeasurementPoint | null>(null);
+  const [liveMeasurementTool, setLiveMeasurementTool] = useState<MeasurementToolType | null>(null);
+
+  const [timeframe, setTimeframe] = useState('1m');
+  const [timeZone, setTimeZone] = useState<string>('');
+  const [timezones, setTimezones] = useState<{ value: string; label: string }[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  const [sessionStartTime, setSessionStartTime] = useState('09:30');
+  const [isYAxisLocked, setIsYAxisLocked] = useState(true);
+  const [pipValue, setPipValue] = useState(0.0001);
 
   const [isPriceDataImported, setIsPriceDataImported] = useState(false);
   const [isJournalImported, setIsJournalImported] = useState(false);
@@ -55,6 +143,19 @@ export function JournalReconstruction() {
   const journalInputRef = useRef<HTMLInputElement>(null);
 
   const { toast } = useToast();
+
+   // Effect for loading toolbar positions
+  useEffect(() => {
+    const savedToolbarPosRaw = localStorage.getItem(TOOLBAR_POS_KEY_JOURNAL);
+    if (savedToolbarPosRaw) {
+        try {
+            const savedPos: ToolbarPositions = JSON.parse(savedToolbarPosRaw);
+            setToolbarPositions(savedPos);
+        } catch (e) {
+            console.error("Failed to parse journal toolbar positions from localStorage", e);
+        }
+    }
+  }, []);
 
   const handlePriceDataImport = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -119,15 +220,11 @@ export function JournalReconstruction() {
       try {
         const text = e.target?.result as string;
         
-        // Step 1: Detect newline delimiter
         const delimiter = text.includes('\r\n') ? '\r\n' : '\n';
-        const delimiterName = delimiter === '\r\n' ? 'CRLF' : 'LF';
-        toast({ title: "Step 1: File Reading", description: `File read successfully. Detected newline delimiter: ${delimiterName}.`, duration: Infinity });
         
         const lines = text.split(delimiter).filter(line => line.trim() !== '');
         if (lines.length <= 1) throw new Error("Journal file is empty or has no data.");
 
-        // Step 2: Find column indices
         const header = lines[0].trim().split(',').map(h => h.trim());
         const dateIndex = header.findIndex(h => h === "Date Taken (Timestamp)");
         const rIndex = header.findIndex(h => h === "Maximum Favourable Excursion (R)");
@@ -135,15 +232,12 @@ export function JournalReconstruction() {
         if (dateIndex === -1) throw new Error("CSV header is missing the required column: 'Date Taken (Timestamp)'.");
         if (rIndex === -1) throw new Error("CSV header is missing the required column: 'Maximum Favourable Excursion (R)'.");
         
-        toast({ title: "Step 2: Header Parsed", description: `Date Index: ${dateIndex}, R-Value Index: ${rIndex}`, duration: Infinity });
-
         const dataRows = lines.slice(1);
         const newTrades: JournalTrade[] = [];
-        let lastSuccessfullyParsedRow = '';
 
         for (let i = 0; i < dataRows.length; i++) {
           const line = dataRows[i];
-          if (!line || line.trim() === '') continue; // Skip empty lines
+          if (!line || line.trim() === '') continue;
           
           const rowNum = i + 2;
           const columns = line.split(',');
@@ -155,7 +249,7 @@ export function JournalReconstruction() {
           if (!rValueStr) throw new Error(`Row ${rowNum}: 'Maximum Favourable Excursion (R)' value is missing or empty.`);
 
           const rValue = parseFloat(rValueStr);
-          if (isNaN(rValue)) throw new Error(`Row ${rowNum}: Invalid R-value. Expected a number, but got "${rValueStr}".`);
+if (isNaN(rValue)) throw new Error(`Row ${rowNum}: Invalid R-value. Expected a number, but got "${rValueStr}".`);
 
           const dateParts = dateStr.split('/');
           if (dateParts.length !== 3) throw new Error(`Row ${rowNum}: Invalid date format for "${dateStr}". Expected MM/DD/YYYY.`);
@@ -169,23 +263,18 @@ export function JournalReconstruction() {
           if (isNaN(date.getTime())) throw new Error(`Row ${rowNum}: Could not create a valid date from "${dateStr}".`);
 
           newTrades.push({ date, result: rValue >= 2 ? 'win' : 'loss' });
-          lastSuccessfullyParsedRow = line;
         }
 
 
         if (newTrades.length === 0) throw new Error("No valid trades could be parsed from the journal file.");
 
-        // Step 3 & 4: Report success
-        toast({ title: "Step 3: Rows Parsed", description: `Successfully parsed ${newTrades.length} rows.`, duration: Infinity });
-        toast({ title: "Step 4: Last Parsed Row", description: `Content: ${lastSuccessfullyParsedRow}`, duration: Infinity });
-
-
         setJournalTrades(newTrades);
         setIsJournalImported(true);
         if (newTrades.length > 0) setSelectedDate(newTrades[0].date);
+        toast({ title: "Journal Loaded", description: `${newTrades.length} trades were successfully imported.`, duration: 30000 });
         
       } catch (error: any) {
-        toast({ variant: "destructive", title: "Journal Import Failed", description: `${error.message}`, duration: 9000 });
+        toast({ variant: "destructive", title: "Journal Import Failed", description: `${error.message}`, duration: 30000 });
         setIsJournalImported(false);
       } finally {
          if (journalInputRef.current) journalInputRef.current.value = "";
@@ -195,8 +284,7 @@ export function JournalReconstruction() {
   };
 
   const findSessionStartIndex = (targetDate: Date): number => {
-    const sessionHour = 9;
-    const sessionMinute = 30;
+    const [sessionHour, sessionMinute] = sessionStartTime.split(':').map(Number);
 
     const targetDayStart = new Date(targetDate);
     targetDayStart.setUTCHours(0,0,0,0);
@@ -259,7 +347,8 @@ export function JournalReconstruction() {
         const highMarker: PriceMarker = { id: `or-high-${startIndex}`, price: openingRangeHigh, label: 'High', isDeletable: true };
         const lowMarker: PriceMarker = { id: `or-low-${startIndex}`, price: openingRangeLow, label: 'Low', isDeletable: true };
         
-        setPriceMarkers([highMarker, lowMarker]);
+        pushToHistory(drawingState);
+        setPriceMarkers(prev => [highMarker, lowMarker]);
         
         const viewEndIndex = Math.min(startIndex + 60, priceData.length - 1);
         setSelectedDate(priceData[viewEndIndex].date);
@@ -267,19 +356,170 @@ export function JournalReconstruction() {
         toast({
             variant: "destructive",
             title: "Session Not Found",
-            description: "Could not find the 9:30 AM UTC session start in the loaded price data for the selected day.",
+            description: `Could not find the ${sessionStartTime} UTC session start in the loaded price data for the selected day.`,
             duration: 7000
         });
         setSelectedDate(date);
+        pushToHistory(drawingState);
         setPriceMarkers([]);
     }
   };
 
-  const dayResultModifiers = useMemo(() => {
-    const modifiers: Record<string, Date[]> = {
-      win: [],
-      loss: [],
+  const handleChartClick = (chartData: ChartClickData) => {
+    if (placingToolType) {
+      const entryPrice = chartData.closePrice;
+      const visiblePriceRange = chartData.yDomain[1] - chartData.yDomain[0];
+      const stopLossOffset = visiblePriceRange * 0.05;
+      const takeProfitOffset = visiblePriceRange * 0.10;
+      const stopLoss = placingToolType === 'long' ? entryPrice - stopLossOffset : entryPrice + stopLossOffset;
+      const takeProfit = placingToolType === 'long' ? entryPrice + takeProfitOffset : entryPrice - takeProfitOffset;
+      const visibleIndexRange = chartData.xDomain[1] - chartData.xDomain[0];
+      const widthInPoints = Math.round(visibleIndexRange * 0.25);
+      const pairName = loadedPriceDataInfo?.split('_')[0] || 'N/A';
+      const newTool: RRToolType = {
+        id: `rr-${Date.now()}`, entryPrice, stopLoss, takeProfit,
+        entryDate: chartData.date, widthInPoints, position: placingToolType, pair: pairName,
+      };
+      setRrTools(prevTools => [...prevTools, newTool]);
+      setPlacingToolType(null);
+    } else if (isPlacingPriceMarker) {
+      const newMarker: PriceMarker = { id: `pm-${Date.now()}`, price: chartData.price, isDeletable: true };
+      setPriceMarkers(prev => [...prev, newMarker]);
+      setIsPlacingPriceMarker(false);
+    } else if (isPlacingMeasurement) {
+        const { price, dataIndex, candle } = chartData;
+        const bodyTop = Math.max(candle.open, candle.close);
+        const bodyBottom = Math.min(candle.open, candle.close);
+        const snappedPrice = (price >= bodyBottom && price <= bodyTop) ? candle.open : price;
+        const currentPoint = { index: dataIndex, price: snappedPrice };
+        if (!measurementStartPoint) {
+            setMeasurementStartPoint(currentPoint);
+            setLiveMeasurementTool({ id: 'live-measure', startPoint: currentPoint, endPoint: currentPoint });
+        } else {
+            const newTool: MeasurementToolType = { id: `measure-${Date.now()}`, startPoint: measurementStartPoint, endPoint: currentPoint };
+            setMeasurementTools(prev => [...prev, newTool]);
+            setMeasurementStartPoint(null);
+            setIsPlacingMeasurement(false);
+            setLiveMeasurementTool(null);
+        }
+    }
+  };
+
+  const handleChartMouseMove = (chartData: ChartClickData) => {
+    if (isPlacingMeasurement && measurementStartPoint) {
+        const { price, dataIndex, candle } = chartData;
+        const bodyTop = Math.max(candle.open, candle.close);
+        const bodyBottom = Math.min(candle.open, candle.close);
+        const snappedPrice = (price >= bodyBottom && price <= bodyTop) ? candle.open : price;
+        const currentPoint = { index: dataIndex, price: snappedPrice };
+        setLiveMeasurementTool({ id: 'live-measure', startPoint: measurementStartPoint, endPoint: currentPoint });
+    }
+  };
+
+  const handleClearAllDrawings = () => {
+    pushToHistory(drawingState);
+    setDrawingState({ rrTools: [], priceMarkers: [], measurementTools: [] });
+  };
+
+  const handleNextCandle = () => {
+    const getDuration = (tf: string): number => {
+      switch (tf) {
+        case '1m': return 60 * 1000;
+        case '30m': return 30 * 60 * 1000;
+        case '1H': return 60 * 60 * 1000;
+        case '4H': return 4 * 60 * 60 * 1000;
+        case '1D': return 24 * 60 * 60 * 1000;
+        default: return 24 * 60 * 60 * 1000;
+      }
     };
+    setSelectedDate(currentDate => {
+      if (!currentDate) return new Date();
+      const newDate = new Date(currentDate.getTime() + getDuration(timeframe));
+      const lastAvailableDate = priceData[priceData.length - 1]?.date;
+      if (lastAvailableDate && newDate > lastAvailableDate) return lastAvailableDate;
+      return newDate;
+    });
+  };
+
+  const handleNextSession = () => {
+    if (!sessionStartTime || !priceData.length || !selectedDate) return;
+    const startIndex = findSessionStartIndex(selectedDate);
+    if (startIndex !== -1) {
+        const endIndex = startIndex + 5;
+        if (endIndex > priceData.length) {
+            toast({ variant: "destructive", title: "Not Enough Data", description: "Not enough data to draw the opening range." });
+            setSelectedDate(priceData[startIndex].date);
+            return;
+        }
+        const openingRangeCandles = priceData.slice(startIndex, endIndex);
+        let openingRangeHigh = openingRangeCandles[0].high;
+        let openingRangeLow = openingRangeCandles[0].low;
+        for (const candle of openingRangeCandles) {
+            openingRangeHigh = Math.max(openingRangeHigh, candle.high);
+            openingRangeLow = Math.min(openingRangeLow, candle.low);
+        }
+        const otherMarkers = priceMarkers.filter(m => m.label !== "High" && m.label !== "Low");
+        const highMarker: PriceMarker = { id: `or-high-${startIndex}`, price: openingRangeHigh, label: 'High', isDeletable: true };
+        const lowMarker: PriceMarker = { id: `or-low-${startIndex}`, price: openingRangeLow, label: 'Low', isDeletable: true };
+        pushToHistory(drawingState);
+        setPriceMarkers(prev => [...otherMarkers, highMarker, lowMarker]);
+        const viewEndIndex = Math.min(startIndex + 15, priceData.length - 1);
+        setSelectedDate(priceData[viewEndIndex].date);
+        return;
+    }
+    toast({ variant: "destructive", title: "Session Not Found", description: "Could not find the start of the next session in the available data." });
+  };
+  
+  const handlePlaceLong = () => {
+    setIsPlacingPriceMarker(false); setIsPlacingMeasurement(false);
+    setMeasurementStartPoint(null); setLiveMeasurementTool(null);
+    setPlacingToolType('long');
+  };
+
+  const handlePlaceShort = () => {
+    setIsPlacingPriceMarker(false); setIsPlacingMeasurement(false);
+    setMeasurementStartPoint(null); setLiveMeasurementTool(null);
+    setPlacingToolType('short');
+  };
+
+  const handlePlaceMarker = () => {
+    setPlacingToolType(null); setIsPlacingMeasurement(false);
+    setMeasurementStartPoint(null); setLiveMeasurementTool(null);
+    setIsPlacingPriceMarker(true);
+  };
+
+  const handlePlaceMeasurement = () => {
+    setPlacingToolType(null); setIsPlacingPriceMarker(false);
+    setMeasurementStartPoint(null); setLiveMeasurementTool(null);
+    setIsPlacingMeasurement(true);
+  };
+
+  const handleMouseDownOnToolbar = (e: React.MouseEvent, target: 'main' | 'secondary') => {
+    if (e.button !== 0) return;
+    const targetElement = e.currentTarget as HTMLDivElement;
+    const rect = targetElement.getBoundingClientRect();
+    dragInfo.current = { target, offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top };
+    window.addEventListener('mousemove', handleToolbarMouseMove);
+    window.addEventListener('mouseup', handleToolbarMouseUp);
+  };
+
+  const handleToolbarMouseMove = (e: MouseEvent) => {
+    if (!dragInfo.current.target) return;
+    const { target, offsetX, offsetY } = dragInfo.current;
+    setToolbarPositions(prev => ({ ...prev, [target]: { x: e.clientX - offsetX, y: e.clientY - offsetY } }));
+  };
+
+  const handleToolbarMouseUp = () => {
+    if (dragInfo.current.target) localStorage.setItem(TOOLBAR_POS_KEY_JOURNAL, JSON.stringify(toolbarPositions));
+    dragInfo.current.target = null;
+    window.removeEventListener('mousemove', handleToolbarMouseMove);
+    window.removeEventListener('mouseup', handleToolbarMouseUp);
+  };
+  
+  const isPlacingAnything = !!placingToolType || isPlacingPriceMarker || isPlacingMeasurement;
+  
+  const dayResultModifiers = useMemo(() => {
+    const modifiers: Record<string, Date[]> = { win: [], loss: [] };
     journalTrades.forEach(trade => {
         const key = trade.result === 'win' ? 'win' : 'loss';
         modifiers[key].push(trade.date);
@@ -325,6 +565,9 @@ export function JournalReconstruction() {
                 month={selectedDate}
                 onMonthChange={setSelectedDate}
                 modifiers={dayResultModifiers}
+                captionLayout="dropdown-buttons"
+                fromYear={2015}
+                toYear={new Date().getFullYear()}
                 modifiersClassNames={{
                     win: 'rdp-day_win',
                     loss: 'rdp-day_loss',
@@ -337,41 +580,138 @@ export function JournalReconstruction() {
                 className="rounded-md border"
              />
         </div>
-        
       </div>
+
       <div className="flex-1 relative">
         <InteractiveChart
           data={priceData}
           trades={[]}
-          onChartClick={() => {}}
-          onChartMouseMove={() => {}}
-          rrTools={[]}
-          onUpdateTool={() => {}}
-          onRemoveTool={() => {}}
-          isPlacingRR={false}
-          isPlacingPriceMarker={false}
+          onChartClick={handleChartClick}
+          onChartMouseMove={handleChartMouseMove}
+          rrTools={rrTools}
+          onUpdateTool={(tool) => { pushToHistory(drawingState); setRrTools(prev => prev.map(t => t.id === tool.id ? tool : t)); }}
+          onRemoveTool={(id) => { pushToHistory(drawingState); setRrTools(prev => prev.filter(t => t.id !== id)); }}
+          isPlacingRR={!!placingToolType}
+          isPlacingPriceMarker={isPlacingPriceMarker}
           priceMarkers={priceMarkers}
-          onRemovePriceMarker={(id) => setPriceMarkers(prev => prev.filter(m => m.id !== id))}
-          onUpdatePriceMarker={(id, price) => setPriceMarkers(prev => prev.map(m => m.id === id ? {...m, price} : m))}
-          measurementTools={[]}
-          onRemoveMeasurementTool={() => {}}
-          liveMeasurementTool={null}
-          pipValue={0.0001}
-          timeframe="1m"
-          timeZone="UTC"
+          onRemovePriceMarker={(id) => { pushToHistory(drawingState); setPriceMarkers(prev => prev.filter(m => m.id !== id)); }}
+          onUpdatePriceMarker={(id, price) => { pushToHistory(drawingState); setPriceMarkers(prev => prev.map(m => m.id === id ? {...m, price} : m)); }}
+          measurementTools={measurementTools}
+          onRemoveMeasurementTool={(id) => { pushToHistory(drawingState); setMeasurementTools(prev => prev.filter(t => t.id !== id)); }}
+          liveMeasurementTool={liveMeasurementTool}
+          pipValue={pipValue}
+          timeframe={timeframe}
+          timeZone={timeZone}
           endDate={selectedDate}
-          isYAxisLocked={false}
+          isYAxisLocked={isYAxisLocked}
         />
         {!isPriceDataImported && (
              <div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center">
                 <p className="text-muted-foreground text-lg">Please import price data to begin.</p>
             </div>
         )}
+        
+        <div 
+          className="absolute z-10 flex flex-col items-start gap-2"
+          style={{ top: `${toolbarPositions.main.y}px`, left: `${toolbarPositions.main.x}px` }}
+        >
+            <div className="flex items-center gap-2 bg-card/80 backdrop-blur-sm p-2 rounded-lg shadow-lg">
+              <div onMouseDown={(e) => handleMouseDownOnToolbar(e, 'main')} className="cursor-grab active:cursor-grabbing p-1 -ml-1">
+                  <GripVertical className="h-5 w-5 text-muted-foreground/50" />
+              </div>
+                <Select value={timeframe} onValueChange={setTimeframe}>
+                    <SelectTrigger className="w-[120px]"><SelectValue placeholder="Timeframe" /></SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="1m">1 Minute</SelectItem>
+                        <SelectItem value="30m">30 Minutes</SelectItem>
+                        <SelectItem value="1H">1 Hour</SelectItem>
+                        <SelectItem value="4H">4 Hours</SelectItem>
+                        <SelectItem value="1D">1 Day</SelectItem>
+                    </SelectContent>
+                </Select>
+                <div className="flex items-center gap-1">
+                    <TooltipProvider>
+                      <Tooltip>
+                          <TooltipTrigger asChild>
+                              <Button variant="ghost" size="icon" onClick={handleNextCandle} className="text-muted-foreground" disabled={priceData.length === 0}>
+                                  <ChevronRight className="h-5 w-5" />
+                              </Button>
+                          </TooltipTrigger>
+                          <TooltipContent><p>Next Candle</p></TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    <TooltipProvider>
+                      <Tooltip>
+                          <TooltipTrigger asChild>
+                              <Button variant="ghost" size="icon" onClick={handleNextSession} className="text-muted-foreground" disabled={priceData.length === 0}>
+                                  <ChevronsRight className="h-5 w-5" />
+                              </Button>
+                          </TooltipTrigger>
+                          <TooltipContent><p>Next Session Open</p></TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                </div>
+                <div className="h-6 border-l border-border/50 mx-2"></div>
+                <Popover>
+                    <PopoverTrigger asChild><Button variant="ghost" size="icon"><Settings className="h-5 w-5" /></Button></PopoverTrigger>
+                    <PopoverContent className="w-80 mr-4">
+                        <div className="grid gap-4">
+                            <div className="space-y-2"><h4 className="font-medium leading-none">Settings</h4><p className="text-sm text-muted-foreground">Adjust chart display options.</p></div>
+                            <div className="grid gap-2">
+                                <Label htmlFor="timezone">Timezone</Label>
+                                <Select value={timeZone} onValueChange={setTimeZone} disabled={!timezones.length}>
+                                    <SelectTrigger id="timezone" className="w-full"><SelectValue placeholder="Select timezone" /></SelectTrigger>
+                                    <SelectContent><ScrollArea className="h-72">{timezones.map(tz => (<SelectItem key={tz.value} value={tz.value}>{tz.label}</SelectItem>))}</ScrollArea></SelectContent>
+                                </Select>
+                            </div>
+                            <div className="grid gap-2">
+                                <Label htmlFor="session-start">Session Start Time (UTC)</Label>
+                                <Input id="session-start" type="time" value={sessionStartTime} onChange={(e) => setSessionStartTime(e.target.value)} />
+                            </div>
+                            <div className="grid gap-2">
+                                <Label htmlFor="pip-value">Pip / Point Value</Label>
+                                <Input id="pip-value" type="number" step="0.0001" value={pipValue} onChange={(e) => setPipValue(parseFloat(e.target.value) || 0)} />
+                            </div>
+                        </div>
+                    </PopoverContent>
+                </Popover>
+            </div>
+        </div>
+        <div className="absolute z-10" style={{ top: `${toolbarPositions.secondary.y}px`, left: `${toolbarPositions.secondary.x}px` }}>
+            <div className="flex items-center gap-2 bg-card/80 backdrop-blur-sm p-2 rounded-lg shadow-lg">
+                <div onMouseDown={(e) => handleMouseDownOnToolbar(e, 'secondary')} className="cursor-grab active:cursor-grabbing p-1 -ml-1">
+                    <GripVertical className="h-5 w-5 text-muted-foreground/50" />
+                </div>
+                <div className="flex items-center gap-1">
+                    <Button variant="ghost" size="icon" onClick={handleUndo} disabled={history.length === 0}><Undo className="h-5 w-5" /></Button>
+                    <Button variant="ghost" size="icon" onClick={handleRedo} disabled={redoStack.length === 0}><Redo className="h-5 w-5" /></Button>
+                </div>
+                <div className="h-6 border-l border-border/50"></div>
+                <TooltipProvider>
+                    <div className="flex justify-center gap-1">
+                        <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceLong} disabled={isPlacingAnything || priceData.length === 0}><ArrowUp className="w-5 h-5 text-accent"/></Button></TooltipTrigger><TooltipContent><p>Place Long Position</p></TooltipContent></Tooltip>
+                        <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceShort} disabled={isPlacingAnything || priceData.length === 0}><ArrowDown className="w-5 h-5 text-destructive"/></Button></TooltipTrigger><TooltipContent><p>Place Short Position</p></TooltipContent></Tooltip>
+                    </div>
+                </TooltipProvider>
+                <div className="h-6 border-l border-border/50"></div>
+                <TooltipProvider><Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceMarker} disabled={isPlacingAnything || priceData.length === 0}><Target className="w-5 h-5 text-foreground"/></Button></TooltipTrigger><TooltipContent><p>Place Price Marker</p></TooltipContent></Tooltip></TooltipProvider>
+                <TooltipProvider><Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => setIsYAxisLocked(prev => !prev)}>{isYAxisLocked ? <Lock className="h-5 w-5" /> : <Unlock className="h-5 w-5" />}</Button></TooltipTrigger><TooltipContent><p>{isYAxisLocked ? "Unlock Y-Axis" : "Lock Y-Axis"}</p></TooltipContent></Tooltip></TooltipProvider>
+                <TooltipProvider><Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceMeasurement} disabled={isPlacingAnything || priceData.length === 0}><Ruler className="w-5 h-5 text-foreground"/></Button></TooltipTrigger><TooltipContent><p>Measure Distance</p></TooltipContent></Tooltip></TooltipProvider>
+                 <AlertDialog>
+                    <TooltipProvider><Tooltip><TooltipTrigger asChild>
+                        <div className={cn((rrTools.length === 0 && priceMarkers.length === 0 && measurementTools.length === 0) && "pointer-events-none")}>
+                            <AlertDialogTrigger asChild><Button variant="destructive" size="icon" disabled={rrTools.length === 0 && priceMarkers.length === 0 && measurementTools.length === 0}><Trash2 className="h-5 w-5" /></Button></AlertDialogTrigger>
+                        </div>
+                    </TooltipTrigger><TooltipContent><p>Clear all drawings</p></TooltipContent></Tooltip></TooltipProvider>
+                    <AlertDialogContent>
+                        <AlertDialogHeader><AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle><AlertDialogDescription>This action cannot be undone. This will permanently delete all placed tools and markers from the chart.</AlertDialogDescription></AlertDialogHeader>
+                        <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleClearAllDrawings}>Continue</AlertDialogAction></AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            </div>
+        </div>
+
       </div>
     </div>
   );
 }
-
-    
-
-    
