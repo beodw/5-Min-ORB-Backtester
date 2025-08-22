@@ -489,7 +489,7 @@ export function JournalReconstruction() {
     const hasTradeOnDay = journalTrades.some(trade => {
         const tradeDate = new Date(trade.date);
         return tradeDate.getUTCFullYear() === date.getUTCFullYear() &&
-               tradeDate.getUTCMonth() === date.getUTCFullYear() &&
+               tradeDate.getUTCMonth() === date.getUTCMonth() &&
                tradeDate.getUTCDate() === date.getUTCDate()
     });
 
@@ -524,7 +524,7 @@ export function JournalReconstruction() {
         const lowMarker: PriceMarker = { id: `or-low-${startIndex}`, price: openingRangeLow, label: 'Low', isDeletable: true };
         
         pushToHistory(drawingState);
-        setPriceMarkers(prev => [highMarker, lowMarker]);
+        setPriceMarkers(() => [highMarker, lowMarker]);
         
         const viewEndIndex = Math.min(startIndex + 60, priceData.length - 1);
         setSelectedDate(priceData[viewEndIndex].date);
@@ -855,7 +855,7 @@ export function JournalReconstruction() {
                 month={selectedDate}
                 onMonthChange={setSelectedDate}
                 captionLayout="dropdown-buttons"
-                fromYear={new Date().getFullYear() - 10}
+                fromYear={2014}
                 toYear={new Date().getFullYear()}
                 className="rounded-md border"
              />
@@ -871,15 +871,7 @@ export function JournalReconstruction() {
             >
                 <RotateCcw className="mr-2 h-4 w-4"/> Reset All Decisions
             </Button>
-            <Button
-                onClick={handleExportDecisions}
-                variant="default"
-                className="w-full"
-                disabled={!isJournalImported}
-            >
-                <Download className="mr-2 h-4 w-4"/> Export Decisions Report
-            </Button>
-             <AlertDialog>
+            <AlertDialog>
                 <AlertDialogTrigger asChild>
                      <Button
                         variant="destructive"
@@ -1013,6 +1005,16 @@ export function JournalReconstruction() {
                 <TooltipProvider><Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceMarker} disabled={isPlacingAnything || priceData.length === 0}><Target className="w-5 h-5 text-foreground"/></Button></TooltipTrigger><TooltipContent><p>Place Price Marker</p></TooltipContent></Tooltip></TooltipProvider>
                 <TooltipProvider><Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => setIsYAxisLocked(prev => !prev)}>{isYAxisLocked ? <Lock className="h-5 w-5" /> : <Unlock className="h-5 w-5" />}</Button></TooltipTrigger><TooltipContent><p>{isYAxisLocked ? "Unlock Y-Axis" : "Lock Y-Axis"}</p></TooltipContent></Tooltip></TooltipProvider>
                 <TooltipProvider><Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceMeasurement} disabled={isPlacingAnything || priceData.length === 0}><Ruler className="w-5 h-5 text-foreground"/></Button></TooltipTrigger><TooltipContent><p>Measure Distance</p></TooltipContent></Tooltip></TooltipProvider>
+                 <TooltipProvider>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                             <Button variant="ghost" size="icon" onClick={handleExportDecisions} disabled={!isJournalImported}>
+                                <Download className="w-5 h-5 text-foreground"/>
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent><p>Export Decisions Report</p></TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
                 
                 <div className="h-6 border-l border-border/50"></div>
                  <TooltipProvider>
