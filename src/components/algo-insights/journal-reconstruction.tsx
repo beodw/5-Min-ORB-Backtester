@@ -118,71 +118,72 @@ export function JournalReconstruction() {
     reader.onload = (e) => {
       try {
         const text = e.target?.result as string;
-        const lines = text.split('\n').filter(line => line.trim() !== '');
+        
+        // Step 1: Detect newline delimiter
+        const delimiter = text.includes('\r\n') ? '\r\n' : '\n';
+        const delimiterName = delimiter === '\r\n' ? 'CRLF' : 'LF';
+        toast({ title: "Step 1: File Reading", description: `File read successfully. Detected newline delimiter: ${delimiterName}.`, duration: Infinity });
+        
+        const lines = text.split(delimiter).filter(line => line.trim() !== '');
         if (lines.length <= 1) throw new Error("Journal file is empty or has no data.");
 
+        // Step 2: Find column indices
         const header = lines[0].trim().split(',').map(h => h.trim());
         const dateIndex = header.findIndex(h => h === "Date Taken (Timestamp)");
         const rIndex = header.findIndex(h => h === "Maximum Favourable Excursion (R)");
 
-        if (dateIndex === -1) {
-          throw new Error("CSV header is missing the required column: 'Date Taken (Timestamp)'.");
-        }
-        if (rIndex === -1) {
-            throw new Error("CSV header is missing the required column: 'Maximum Favourable Excursion (R)'.");
-        }
+        if (dateIndex === -1) throw new Error("CSV header is missing the required column: 'Date Taken (Timestamp)'.");
+        if (rIndex === -1) throw new Error("CSV header is missing the required column: 'Maximum Favourable Excursion (R)'.");
         
+        toast({ title: "Step 2: Header Parsed", description: `Date Index: ${dateIndex}, R-Value Index: ${rIndex}`, duration: Infinity });
+
         const dataRows = lines.slice(1);
         const newTrades: JournalTrade[] = [];
+        let lastSuccessfullyParsedRow = '';
 
         for (let i = 0; i < dataRows.length; i++) {
           const line = dataRows[i];
+          if (!line || line.trim() === '') continue; // Skip empty lines
+          
           const rowNum = i + 2;
           const columns = line.split(',');
 
           const dateStr = columns[dateIndex]?.trim();
           const rValueStr = columns[rIndex]?.trim();
           
-          if (!dateStr) {
-             throw new Error(`Row ${rowNum}: 'Date Taken (Timestamp)' value is missing or empty.`);
-          }
-          if (!rValueStr) {
-             throw new Error(`Row ${rowNum}: 'Maximum Favourable Excursion (R)' value is missing or empty.`);
-          }
+          if (!dateStr) throw new Error(`Row ${rowNum}: 'Date Taken (Timestamp)' value is missing or empty.`);
+          if (!rValueStr) throw new Error(`Row ${rowNum}: 'Maximum Favourable Excursion (R)' value is missing or empty.`);
 
           const rValue = parseFloat(rValueStr);
-          if (isNaN(rValue)) {
-            throw new Error(`Row ${rowNum}: Invalid R-value. Expected a number, but got "${rValueStr}".`);
-          }
+          if (isNaN(rValue)) throw new Error(`Row ${rowNum}: Invalid R-value. Expected a number, but got "${rValueStr}".`);
 
           const dateParts = dateStr.split('/');
-          if (dateParts.length !== 3) {
-            throw new Error(`Row ${rowNum}: Invalid date format for "${dateStr}". Expected MM/DD/YYYY.`);
-          }
+          if (dateParts.length !== 3) throw new Error(`Row ${rowNum}: Invalid date format for "${dateStr}". Expected MM/DD/YYYY.`);
+          
           const [month, day, year] = dateParts.map(Number);
           if (isNaN(month) || isNaN(day) || isNaN(year) || month < 1 || month > 12 || day < 1 || day > 31) {
             throw new Error(`Row ${rowNum}: Invalid date values in "${dateStr}".`);
           }
-          // Note: month is 0-indexed in JavaScript's Date object
+          
           const date = new Date(Date.UTC(year, month - 1, day));
-          if (isNaN(date.getTime())) {
-            throw new Error(`Row ${rowNum}: Could not create a valid date from "${dateStr}".`);
-          }
+          if (isNaN(date.getTime())) throw new Error(`Row ${rowNum}: Could not create a valid date from "${dateStr}".`);
 
           newTrades.push({ date, result: rValue >= 2 ? 'win' : 'loss' });
+          lastSuccessfullyParsedRow = line;
         }
 
 
-        if (newTrades.length === 0) {
-            throw new Error("No valid trades could be parsed from the journal file.");
-        }
+        if (newTrades.length === 0) throw new Error("No valid trades could be parsed from the journal file.");
+
+        // Step 3 & 4: Report success
+        toast({ title: "Step 3: Rows Parsed", description: `Successfully parsed ${newTrades.length} rows.`, duration: Infinity });
+        toast({ title: "Step 4: Last Parsed Row", description: `Content: ${lastSuccessfullyParsedRow}`, duration: Infinity });
+
 
         setJournalTrades(newTrades);
         setIsJournalImported(true);
-        if (newTrades.length > 0) {
-            setSelectedDate(newTrades[0].date);
-        }
-        toast({ title: "Journal Import Successful", description: `Loaded ${newTrades.length} trades.` });
+        if (newTrades.length > 0) setSelectedDate(newTrades[0].date);
+        
       } catch (error: any) {
         toast({ variant: "destructive", title: "Journal Import Failed", description: `${error.message}`, duration: 9000 });
         setIsJournalImported(false);
@@ -330,8 +331,8 @@ export function JournalReconstruction() {
                 }}
                 disabled={(date) => !allTradeDates.some(tradeDate => 
                     tradeDate.getUTCDate() === date.getUTCDate() &&
-                    tradeDate.getUTCMonth() === date.getUTCMonth() &&
-                    tradeDate.getUTCFullYear() === date.getUTCFullYear()
+                    tradeDate.date.getUTCMonth() === date.getUTCMonth() &&
+                    tradeDate.date.getUTCFullYear() === date.getUTCFullYear()
                 )}
                 className="rounded-md border"
              />
@@ -370,3 +371,5 @@ export function JournalReconstruction() {
     </div>
   );
 }
+
+    
