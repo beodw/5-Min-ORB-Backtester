@@ -7,7 +7,7 @@ import { Calendar, type CalendarProps } from "@/components/ui/calendar";
 import { InteractiveChart, type ChartClickData } from "@/components/algo-insights/interactive-chart";
 import { mockPriceData } from "@/lib/mock-data";
 import { useToast } from "@/hooks/use-toast";
-import type { PriceData, PriceMarker, RiskRewardTool as RRToolType, MeasurementTool as MeasurementToolType, DrawingState, ToolbarPositions, MeasurementPoint } from "@/types";
+import type { PriceData, PriceMarker, RiskRewardTool as RRToolType, MeasurementTool as MeasurementToolType, DrawingState, MeasurementPoint } from "@/types";
 import { FileUp, Info, ArrowUp, ArrowDown, Settings, ChevronsRight, Target, Trash2, Lock, Unlock, Ruler, Undo, Redo, GripVertical, ChevronLeft, ChevronRight, RotateCcw, CheckCircle, XCircle, FileX2, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -108,11 +108,13 @@ export function JournalReconstruction() {
   const [history, setHistory] = useState<DrawingState[]>([]);
   const [redoStack, setRedoStack] = useState<DrawingState[]>([]);
 
-  const [toolbarPositions, setToolbarPositions] = useState<JournalToolbarPositions>({
+  const defaultToolbarPositions: JournalToolbarPositions = {
     main: { x: 16, y: 88 },
     secondary: { x: 16, y: 16 },
-    controls: { x: 16, y: 160 }
-  });
+    controls: { x: window.innerWidth - 380, y: 16 }
+  };
+
+  const [toolbarPositions, setToolbarPositions] = useState<JournalToolbarPositions>(defaultToolbarPositions);
   const dragInfo = useRef<{
     target: 'main' | 'secondary' | 'controls' | null;
     offsetX: number;
@@ -186,8 +188,9 @@ export function JournalReconstruction() {
     const savedToolbarPosRaw = localStorage.getItem(TOOLBAR_POS_KEY_JOURNAL);
     if (savedToolbarPosRaw) {
         try {
-            const savedPos: JournalToolbarPositions = JSON.parse(savedToolbarPosRaw);
-            setToolbarPositions(savedPos);
+            const savedPos = JSON.parse(savedToolbarPosRaw);
+            // Merge with defaults to avoid errors if a new toolbar was added
+            setToolbarPositions(prev => ({ ...prev, ...savedPos }));
         } catch (e) {
             console.error("Failed to parse journal toolbar positions from localStorage", e);
         }
