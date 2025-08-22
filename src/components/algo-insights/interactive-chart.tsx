@@ -52,6 +52,11 @@ interface InteractiveChartProps {
   timeZone: string;
   endDate?: Date;
   isYAxisLocked: boolean;
+  onWheel?: (e: React.WheelEvent<HTMLDivElement>) => void;
+  onMouseDown?: (e: React.MouseEvent<HTMLDivElement>) => void;
+  onMouseMove?: (e: React.MouseEvent<HTMLDivElement>) => void;
+  onMouseUp?: (e: React.MouseEvent<HTMLDivElement>) => void;
+  onMouseLeave?: (e: React.MouseEvent<HTMLDivElement>) => void;
 }
 
 const Candlestick = (props: any) => {
@@ -98,6 +103,11 @@ export function InteractiveChart({
     timeZone, 
     endDate,
     isYAxisLocked,
+    onWheel,
+    onMouseDown,
+    onMouseMove,
+    onMouseUp,
+    onMouseLeave,
 }: InteractiveChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartScalesRef = useRef<{x: any, y: any, plot: any} | null>(null);
@@ -203,7 +213,7 @@ export function InteractiveChart({
         
         return prev;
     });
-  }, [endDate, aggregatedData]);
+  }, [endDate, aggregatedData.length]);
 
 
   useEffect(() => {
@@ -293,7 +303,7 @@ export function InteractiveChart({
         // Placeholder for any future leave logic
     }
 
-  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+  const internalHandleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     if (!chartContainerRef.current) return;
   
@@ -329,7 +339,7 @@ export function InteractiveChart({
     });
   };
 
-  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+  const internalHandleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (isPlacingRR || isPlacingPriceMarker || !chartContainerRef.current) return;
     e.preventDefault();
     
@@ -353,7 +363,7 @@ export function InteractiveChart({
     }
   };
   
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+  const internalHandleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!chartContainerRef.current) return;
 
     if (dragStart) {
@@ -424,7 +434,7 @@ export function InteractiveChart({
     }
   };
   
-  const handleMouseUp = (e: React.MouseEvent<HTMLDivElement>) => {
+  const internalHandleMouseUp = (e: React.MouseEvent<HTMLDivElement>) => {
     setIsDragging(false);
     setIsYAxisDragging(false);
     setDragStart(null);
@@ -435,9 +445,9 @@ export function InteractiveChart({
     }
   };
   
-  const handleMouseLeave = (e: React.MouseEvent<HTMLDivElement>) => {
+  const internalHandleMouseLeave = (e: React.MouseEvent<HTMLDivElement>) => {
     if (isDragging || isYAxisDragging) {
-        handleMouseUp(e);
+        internalHandleMouseUp(e);
     }
     if (chartContainerRef.current) {
       chartContainerRef.current.style.cursor = 'default';
@@ -464,21 +474,16 @@ export function InteractiveChart({
     }
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone });
   }, [xDomain, aggregatedData, timeZone]);
-
-  const xTimeDomain = useMemo(() => {
-    if (!windowedData.length) return [0, 0];
-    return [windowedData[0].date.getTime(), windowedData[windowedData.length - 1].date.getTime()];
-  }, [windowedData]);
   
   return (
     <div 
       ref={chartContainerRef} 
       className="w-full h-full relative"
-      onWheel={handleWheel}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseLeave}
+      onWheel={onWheel || internalHandleWheel}
+      onMouseDown={onMouseDown || internalHandleMouseDown}
+      onMouseMove={onMouseMove || internalHandleMouseMove}
+      onMouseUp={onMouseUp || internalHandleMouseUp}
+      onMouseLeave={onMouseLeave || internalHandleMouseLeave}
       style={{ cursor: isPlacingRR || isPlacingPriceMarker ? 'crosshair' : (isDragging ? 'grabbing' : 'crosshair')}}
     >
       {!aggregatedData || aggregatedData.length === 0 ? (
@@ -488,7 +493,7 @@ export function InteractiveChart({
       ) : (
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart 
-            data={windowedData} 
+            data={aggregatedData} 
             onClick={handleClick}
             onMouseMove={handleMouseMoveRecharts} 
             onMouseLeave={handleMouseLeaveChart}
@@ -527,7 +532,7 @@ export function InteractiveChart({
                 isAnimationActive={false}
             />
 
-          <Bar dataKey="wick" shape={<Candlestick />} isAnimationActive={false} xAxisId="main" yAxisId="main"/>
+          <Bar dataKey="wick" shape={<Candlestick />} isAnimationActive={false} xAxisId="main" yAxisId="main" data={windowedData} />
 
           {trades.map((trade) => (
             <ReferenceDot
