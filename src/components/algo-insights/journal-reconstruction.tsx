@@ -8,7 +8,7 @@ import { InteractiveChart, type ChartClickData } from "@/components/algo-insight
 import { mockPriceData } from "@/lib/mock-data";
 import { useToast } from "@/hooks/use-toast";
 import type { PriceData, PriceMarker, RiskRewardTool as RRToolType, MeasurementTool as MeasurementToolType, DrawingState, ToolbarPositions, MeasurementPoint } from "@/types";
-import { FileUp, Info, ArrowUp, ArrowDown, Settings, ChevronsRight, Target, Trash2, Lock, Unlock, Ruler, Undo, Redo, GripVertical, ChevronLeft, ChevronRight, RotateCcw, CheckCircle, XCircle } from "lucide-react";
+import { FileUp, Info, ArrowUp, ArrowDown, Settings, ChevronsRight, Target, Trash2, Lock, Unlock, Ruler, Undo, Redo, GripVertical, ChevronLeft, ChevronRight, RotateCcw, CheckCircle, XCircle, FileX2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   AlertDialog,
@@ -26,17 +26,27 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
-import { useDayPicker, type CaptionProps } from "react-day-picker";
-
 
 type JournalTrade = {
-  date: Date;
+  date: string; // Stored as ISO string for serialization
   result: 'win' | 'loss';
-  // Keep original row data for export
   originalRow: string;
 };
 
 type TradeDecision = 'Traded' | 'Not Traded';
+
+type SessionInfo = {
+    priceDataFileName: string | null;
+    journalFileName: string | null;
+};
+
+type SessionState = {
+    drawingState: DrawingState;
+    tradeDecisions: Record<string, TradeDecision>;
+    journalTrades: JournalTrade[];
+    sessionInfo: SessionInfo;
+};
+
 
 const fillGapsInData = (data: PriceData[]): PriceData[] => {
     if (data.length < 2) return data;
@@ -64,6 +74,7 @@ const fillGapsInData = (data: PriceData[]): PriceData[] => {
 
 // Local storage keys
 const TOOLBAR_POS_KEY_JOURNAL = 'algo-insights-toolbar-positions-journal';
+const JOURNAL_SESSION_KEY = 'algo-insights-journal-session';
 
 const formatDateToISO = (date: Date): string => {
     return date.toISOString().split('T')[0];
@@ -145,16 +156,19 @@ export function JournalReconstruction() {
   const [isYAxisLocked, setIsYAxisLocked] = useState(true);
   const [pipValue, setPipValue] = useState(0.0001);
 
+  const [sessionInfo, setSessionInfo] = useState<SessionInfo>({ priceDataFileName: null, journalFileName: null });
   const [isPriceDataImported, setIsPriceDataImported] = useState(false);
   const [isJournalImported, setIsJournalImported] = useState(false);
-  const [loadedPriceDataInfo, setLoadedPriceDataInfo] = useState<string | null>(null);
+
+  const [showRestoreDialog, setShowRestoreDialog] = useState(false);
+  const [sessionToRestore, setSessionToRestore] = useState<SessionInfo | null>(null);
 
   const priceDataInputRef = useRef<HTMLInputElement>(null);
   const journalInputRef = useRef<HTMLInputElement>(null);
 
   const { toast } = useToast();
 
-   // Effect for loading toolbar positions
+   // Effect for loading toolbar positions and checking for saved session
   useEffect(() => {
     const savedToolbarPosRaw = localStorage.getItem(TOOLBAR_POS_KEY_JOURNAL);
     if (savedToolbarPosRaw) {
@@ -165,7 +179,106 @@ export function JournalReconstruction() {
             console.error("Failed to parse journal toolbar positions from localStorage", e);
         }
     }
+
+    const savedSessionRaw = localStorage.getItem(JOURNAL_SESSION_KEY);
+    if (savedSessionRaw) {
+        try {
+            const savedSession: SessionState = JSON.parse(savedSessionRaw);
+            if (savedSession.sessionInfo.priceDataFileName || savedSession.sessionInfo.journalFileName) {
+                setSessionToRestore(savedSession.sessionInfo);
+                setShowRestoreDialog(true);
+            }
+        } catch (e) {
+            console.error("Failed to parse journal session from localStorage", e);
+            localStorage.removeItem(JOURNAL_SESSION_KEY);
+        }
+    }
   }, []);
+
+  // Effect for saving session state
+  useEffect(() => {
+    // Don't save if nothing is loaded
+    if (!isPriceDataImported && !isJournalImported) {
+        return;
+    }
+
+    const serializableDrawingState = {
+        ...drawingState,
+        rrTools: drawingState.rrTools.map(tool => ({
+            ...tool,
+            entryDate: tool.entryDate.toISOString()
+        })),
+    };
+
+    const sessionState: SessionState = {
+        drawingState: serializableDrawingState as any,
+        tradeDecisions,
+        journalTrades,
+        sessionInfo,
+    };
+    localStorage.setItem(JOURNAL_SESSION_KEY, JSON.stringify(sessionState));
+
+  }, [drawingState, tradeDecisions, journalTrades, sessionInfo, isPriceDataImported, isJournalImported]);
+
+
+  const handleRestoreSession = () => {
+    setShowRestoreDialog(false);
+    const savedSessionRaw = localStorage.getItem(JOURNAL_SESSION_KEY);
+    if (savedSessionRaw) {
+        try {
+            const savedSession: SessionState = JSON.parse(savedSessionRaw);
+
+            const restoredRrTools = savedSession.drawingState.rrTools.map(tool => ({
+                ...tool,
+                entryDate: new Date(tool.entryDate),
+            }));
+
+            setDrawingState({ ...savedSession.drawingState, rrTools: restoredRrTools });
+            setTradeDecisions(savedSession.tradeDecisions || {});
+            setJournalTrades(savedSession.journalTrades || []);
+            setSessionInfo(savedSession.sessionInfo);
+
+            if (savedSession.journalTrades?.length > 0) {
+              setIsJournalImported(true);
+              setSelectedDate(new Date(savedSession.journalTrades[0].date));
+            }
+            if(savedSession.sessionInfo.priceDataFileName){
+              setIsPriceDataImported(false); // It's not *really* imported yet
+              setPriceData([]); // Clear mock/old data
+            }
+
+            toast({
+                title: "Session Restored",
+                description: `Drawings and decisions loaded. Please re-import your files.`,
+                duration: 9000
+            });
+        } catch (e) {
+            console.error("Failed to restore session", e);
+            toast({ variant: "destructive", title: "Restore Failed", description: "Could not restore session from storage." });
+            handleDeclineRestore();
+        }
+    }
+  };
+
+  const startNewSession = () => {
+      localStorage.removeItem(JOURNAL_SESSION_KEY);
+      setDrawingState({ rrTools: [], priceMarkers: [], measurementTools: [] });
+      setHistory([]);
+      setRedoStack([]);
+      setSessionInfo({ priceDataFileName: null, journalFileName: null });
+      setIsPriceDataImported(false);
+      setIsJournalImported(false);
+      setJournalTrades([]);
+      setTradeDecisions({});
+      setPriceData(mockPriceData);
+      setSelectedDate(undefined);
+      toast({ title: "New Session Started", description: "All previous journal data has been cleared." });
+  };
+
+  const handleDeclineRestore = () => {
+      setShowRestoreDialog(false);
+      startNewSession();
+  };
 
   const handlePriceDataImport = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -209,7 +322,7 @@ export function JournalReconstruction() {
             
             setPriceData(processedData);
             setIsPriceDataImported(true);
-            setLoadedPriceDataInfo(file.name);
+            setSessionInfo(prev => ({ ...prev, priceDataFileName: file.name }));
             toast({ title: "Import Successful", description: `Loaded ${file.name}` });
         } catch (error: any) {
             toast({ variant: "destructive", title: "Price Data Import Failed", description: `Error: ${error.message}`, duration: 9000 });
@@ -279,7 +392,7 @@ export function JournalReconstruction() {
           const date = new Date(Date.UTC(year, month - 1, day));
           if (isNaN(date.getTime())) throw new Error(`Row ${rowNum}: Could not create a valid date from "${dateStr}".`);
 
-          newTrades.push({ date, result: rValue >= 2 ? 'win' : 'loss', originalRow: line });
+          newTrades.push({ date: date.toISOString(), result: rValue >= 2 ? 'win' : 'loss', originalRow: line });
         }
 
 
@@ -287,7 +400,8 @@ export function JournalReconstruction() {
 
         setJournalTrades(newTrades);
         setIsJournalImported(true);
-        if (newTrades.length > 0) setSelectedDate(newTrades[0].date);
+        setSessionInfo(prev => ({ ...prev, journalFileName: file.name }));
+        if (newTrades.length > 0) setSelectedDate(new Date(newTrades[0].date));
         toast({ title: "Journal Loaded", description: `${newTrades.length} trades were successfully imported.`, duration: 5000 });
         
       } catch (error: any) {
@@ -309,7 +423,7 @@ export function JournalReconstruction() {
     const header = `${journalHeader},"Trade Decision"`;
 
     const rows = journalTrades.map(trade => {
-        const dateKey = formatDateToISO(trade.date);
+        const dateKey = new Date(trade.date).toISOString().split('T')[0];
         // Default to "Traded" if no decision has been explicitly made for that day.
         const decision = tradeDecisions[dateKey] || 'Traded';
         return `${trade.originalRow},"${decision}"`;
@@ -366,11 +480,12 @@ export function JournalReconstruction() {
         return;
     }
     
-    const hasTradeOnDay = journalTrades.some(trade => 
-        trade.date.getUTCFullYear() === date.getUTCFullYear() &&
-        trade.date.getUTCMonth() === date.getUTCMonth() &&
-        trade.date.getUTCDate() === date.getUTCDate()
-    );
+    const hasTradeOnDay = journalTrades.some(trade => {
+        const tradeDate = new Date(trade.date);
+        return tradeDate.getUTCFullYear() === date.getUTCFullYear() &&
+               tradeDate.getUTCMonth() === date.getUTCMonth() &&
+               tradeDate.getUTCDate() === date.getUTCDate()
+    });
 
     if (!hasTradeOnDay) {
         toast({ variant: "destructive", title: "No Trade Data", description: "No trade found for this day in the journal." });
@@ -428,7 +543,7 @@ export function JournalReconstruction() {
       const takeProfit = placingToolType === 'long' ? entryPrice + takeProfitOffset : entryPrice - takeProfitOffset;
       const visibleIndexRange = chartData.xDomain[1] - chartData.xDomain[0];
       const widthInPoints = Math.round(visibleIndexRange * 0.25);
-      const pairName = loadedPriceDataInfo?.split('_')[0] || 'N/A';
+      const pairName = sessionInfo.priceDataFileName?.split('_')[0] || 'N/A';
       const newTool: RRToolType = {
         id: `rr-${Date.now()}`, entryPrice, stopLoss, takeProfit,
         entryDate: chartData.date, widthInPoints, position: placingToolType, pair: pairName,
@@ -645,52 +760,71 @@ export function JournalReconstruction() {
     const modifiedDates = Object.keys(tradeDecisions);
 
     journalTrades.forEach(trade => {
-        const dateKey = formatDateToISO(trade.date);
+        const tradeDate = new Date(trade.date);
+        const dateKey = formatDateToISO(tradeDate);
         if (modifiedDates.includes(dateKey)) {
-            modifiers.modified.push(trade.date);
+            modifiers.modified.push(tradeDate);
         } else {
             const key = trade.result === 'win' ? 'win' : 'loss';
-            modifiers[key].push(trade.date);
+            modifiers[key].push(tradeDate);
         }
     });
 
     return modifiers;
   }, [journalTrades, tradeDecisions]);
 
-  const allTradeDates = journalTrades.map(t => t.date);
+  const allTradeDates = useMemo(() => journalTrades.map(t => new Date(t.date)), [journalTrades]);
+
+  const restoreMessage = sessionToRestore 
+    ? `Restore session with ${sessionToRestore.priceDataFileName || 'N/A'} and ${sessionToRestore.journalFileName || 'N/A'}?`
+    : 'An unknown previous session was found. Restore?';
 
   return (
     <div className="flex h-full">
+       <AlertDialog open={showRestoreDialog} onOpenChange={setShowRestoreDialog}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Restore Previous Session?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        {restoreMessage} You will need to re-import the files.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel onClick={handleDeclineRestore}>Start New Session</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleRestoreSession}>Restore</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+        
       <div className="w-[350px] p-4 border-r border-border flex flex-col gap-4 overflow-y-auto">
         <h2 className="text-xl font-bold font-headline">Controls</h2>
         
         <div className="space-y-2">
-            <h3 className="font-semibold text-lg">1. Import Price Data</h3>
+            <h3 className="font-semibold text-lg">1. Import Files</h3>
             <Button onClick={() => priceDataInputRef.current?.click()} className="w-full">
               <FileUp className="mr-2 h-4 w-4" /> Import 1-Min Data
             </Button>
             <input type="file" ref={priceDataInputRef} onChange={handlePriceDataImport} accept=".csv" className="hidden" />
-             {loadedPriceDataInfo && (
+             {sessionInfo.priceDataFileName && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground bg-secondary p-2 rounded-md">
                    <Info className="h-4 w-4 text-primary" />
-                   <p>Loaded: <span className="font-semibold">{loadedPriceDataInfo}</span></p>
+                   <p>Loaded: <span className="font-semibold">{sessionInfo.priceDataFileName}</span></p>
                 </div>
             )}
-        </div>
-
-        <div className="space-y-2">
-            <h3 className="font-semibold text-lg">2. Import Journal</h3>
-             <Button onClick={() => journalInputRef.current?.click()} className="w-full" disabled={!isPriceDataImported}>
+             <Button onClick={() => journalInputRef.current?.click()} className="w-full mt-2" disabled={!isPriceDataImported}>
               <FileUp className="mr-2 h-4 w-4" /> Import Journal CSV
             </Button>
             <input type="file" ref={journalInputRef} onChange={handleJournalImport} accept=".csv" className="hidden" />
-            <Button onClick={handleExportDecisions} className="w-full" variant="secondary" disabled={!isJournalImported}>
-                <FileUp className="mr-2 h-4 w-4" /> Export Decisions Report
-            </Button>
+             {sessionInfo.journalFileName && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground bg-secondary p-2 rounded-md">
+                   <Info className="h-4 w-4 text-primary" />
+                   <p>Loaded: <span className="font-semibold">{sessionInfo.journalFileName}</span></p>
+                </div>
+            )}
         </div>
         
         <div>
-            <h3 className="font-semibold text-lg mb-2">3. Select a Trade Day</h3>
+            <h3 className="font-semibold text-lg mb-2">2. Select a Trade Day</h3>
              <Calendar
                 mode="single"
                 selected={selectedDate}
@@ -706,6 +840,8 @@ export function JournalReconstruction() {
                     loss: 'rdp-day_loss',
                     modified: 'rdp-day_modified',
                 }}
+                month={selectedDate}
+                onMonthChange={setSelectedDate}
                 captionLayout="dropdown-buttons"
                 fromYear={new Date().getFullYear() - 10}
                 toYear={new Date().getFullYear() + 10}
@@ -714,7 +850,10 @@ export function JournalReconstruction() {
         </div>
 
         <div className="space-y-2">
-            <h3 className="font-semibold text-lg">4. Reset Decisions</h3>
+            <h3 className="font-semibold text-lg">3. Session & Export</h3>
+            <Button onClick={handleExportDecisions} className="w-full" variant="secondary" disabled={!isJournalImported}>
+                <FileUp className="mr-2 h-4 w-4" /> Export Decisions Report
+            </Button>
             <Button
                 onClick={handleResetDecisions}
                 variant="outline"
@@ -723,6 +862,29 @@ export function JournalReconstruction() {
             >
                 <RotateCcw className="mr-2 h-4 w-4"/> Reset All Decisions
             </Button>
+             <AlertDialog>
+                <AlertDialogTrigger asChild>
+                     <Button
+                        variant="destructive"
+                        className="w-full"
+                        disabled={!isPriceDataImported && !isJournalImported}
+                    >
+                        <FileX2 className="mr-2 h-4 w-4"/> Start New Session
+                    </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This will clear all imported data, drawings, and decisions from this tab. This action cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={startNewSession}>Continue</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
       </div>
 
@@ -749,7 +911,7 @@ export function JournalReconstruction() {
           endDate={selectedDate}
           isYAxisLocked={isYAxisLocked}
         />
-        {!isPriceDataImported && (
+        {!isPriceDataImported && !sessionInfo.priceDataFileName && (
              <div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center">
                 <p className="text-muted-foreground text-lg">Please import price data to begin.</p>
             </div>
@@ -889,5 +1051,7 @@ export function JournalReconstruction() {
     </div>
   );
 }
+
+    
 
     

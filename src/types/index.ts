@@ -1,4 +1,5 @@
 
+
 export interface PriceData {
   date: Date;
   open: number;
@@ -60,3 +61,5 @@ export type DrawingState = {
     priceMarkers: PriceMarker[];
     measurementTools: MeasurementTool[];
 };
+
+    
