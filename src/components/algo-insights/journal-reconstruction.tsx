@@ -3,12 +3,12 @@
 
 import { useState, useRef, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
+import { Calendar, type CalendarProps } from "@/components/ui/calendar";
 import { InteractiveChart, type ChartClickData } from "@/components/algo-insights/interactive-chart";
 import { mockPriceData } from "@/lib/mock-data";
 import { useToast } from "@/hooks/use-toast";
 import type { PriceData, PriceMarker, RiskRewardTool as RRToolType, MeasurementTool as MeasurementToolType, DrawingState, ToolbarPositions, MeasurementPoint } from "@/types";
-import { FileUp, Info, ArrowUp, ArrowDown, Settings, ChevronsRight, Target, Trash2, Lock, Unlock, Ruler, Undo, Redo, GripVertical, ChevronLeft, ChevronRight } from "lucide-react";
+import { FileUp, Info, ArrowUp, ArrowDown, Settings, ChevronsRight, Target, Trash2, Lock, Unlock, Ruler, Undo, Redo, GripVertical, ChevronLeft, ChevronRight, RotateCcw, CheckCircle, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   AlertDialog,
@@ -31,7 +31,11 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/
 type JournalTrade = {
   date: Date;
   result: 'win' | 'loss';
+  // Keep original row data for export
+  originalRow: string;
 };
+
+type TradeDecision = 'Traded' | 'Not Traded';
 
 const fillGapsInData = (data: PriceData[]): PriceData[] => {
     if (data.length < 2) return data;
@@ -60,15 +64,22 @@ const fillGapsInData = (data: PriceData[]): PriceData[] => {
 // Local storage keys
 const TOOLBAR_POS_KEY_JOURNAL = 'algo-insights-toolbar-positions-journal';
 
+const formatDateToISO = (date: Date): string => {
+    return date.toISOString().split('T')[0];
+};
+
 export function JournalReconstruction() {
   const [priceData, setPriceData] = useState<PriceData[]>(mockPriceData);
   const [journalTrades, setJournalTrades] = useState<JournalTrade[]>([]);
+  const [journalHeader, setJournalHeader] = useState<string>('');
   
   const [drawingState, setDrawingState] = useState<DrawingState>({
     rrTools: [],
     priceMarkers: [],
     measurementTools: []
   });
+
+  const [tradeDecisions, setTradeDecisions] = useState<Record<string, TradeDecision>>({});
 
   const [history, setHistory] = useState<DrawingState[]>([]);
   const [redoStack, setRedoStack] = useState<DrawingState[]>([]);
@@ -223,13 +234,15 @@ export function JournalReconstruction() {
         const lines = text.split(delimiter).filter(line => line.trim() !== '');
         if (lines.length <= 1) throw new Error("Journal file is empty or has no data.");
 
-        const header = lines[0].trim().split(',').map(h => h.trim());
+        const headerLine = lines[0].trim();
+        const header = headerLine.split(',').map(h => h.trim());
         const dateIndex = header.findIndex(h => h === "Date Taken (Timestamp)");
         const rIndex = header.findIndex(h => h === "Maximum Favourable Excursion (R)");
 
         if (dateIndex === -1) throw new Error("CSV header is missing the required column: 'Date Taken (Timestamp)'.");
         if (rIndex === -1) throw new Error("CSV header is missing the required column: 'Maximum Favourable Excursion (R)'.");
         
+        setJournalHeader(headerLine);
         const dataRows = lines.slice(1);
         const newTrades: JournalTrade[] = [];
 
@@ -265,7 +278,7 @@ export function JournalReconstruction() {
           const date = new Date(Date.UTC(year, month - 1, day));
           if (isNaN(date.getTime())) throw new Error(`Row ${rowNum}: Could not create a valid date from "${dateStr}".`);
 
-          newTrades.push({ date, result: rValue >= 2 ? 'win' : 'loss' });
+          newTrades.push({ date, result: rValue >= 2 ? 'win' : 'loss', originalRow: line });
         }
 
 
@@ -274,7 +287,7 @@ export function JournalReconstruction() {
         setJournalTrades(newTrades);
         setIsJournalImported(true);
         if (newTrades.length > 0) setSelectedDate(newTrades[0].date);
-        toast({ title: "Journal Loaded", description: `${newTrades.length} trades were successfully imported.`, duration: 30000 });
+        toast({ title: "Journal Loaded", description: `${newTrades.length} trades were successfully imported.`, duration: 5000 });
         
       } catch (error: any) {
         toast({ variant: "destructive", title: "Journal Import Failed", description: `${error.message}`, duration: 30000 });
@@ -284,6 +297,36 @@ export function JournalReconstruction() {
       }
     };
     reader.readAsText(file);
+  };
+
+  const handleExportDecisions = () => {
+    if (!isJournalImported) {
+        toast({ variant: 'destructive', title: 'Export Failed', description: 'Please import a journal file first.' });
+        return;
+    }
+
+    const header = `${journalHeader},"Trade Decision"`;
+
+    const rows = journalTrades.map(trade => {
+        const dateKey = formatDateToISO(trade.date);
+        // Default to "Traded" if no decision has been explicitly made for that day.
+        const decision = tradeDecisions[dateKey] || 'Traded';
+        return `${trade.originalRow},"${decision}"`;
+    }).join('\n');
+
+    const csvContent = `${header}\n${rows}`;
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    if (link.href) {
+        URL.revokeObjectURL(link.href);
+    }
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'journal_with_decisions.csv');
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const findSessionStartIndex = (targetDate: Date): number => {
@@ -374,7 +417,7 @@ export function JournalReconstruction() {
       const visiblePriceRange = chartData.yDomain[1] - chartData.yDomain[0];
       const stopLossOffset = visiblePriceRange * 0.05;
       const takeProfitOffset = visiblePriceRange * 0.10;
-      const stopLoss = placingToolType === 'long' ? entryPrice - stopLossOffset : entryPrice + stopLossOffset;
+      const stopLoss = placingToolType === 'long' ? entryPrice - stopLossOffset : entryPrice + takeProfitOffset;
       const takeProfit = placingToolType === 'long' ? entryPrice + takeProfitOffset : entryPrice - takeProfitOffset;
       const visibleIndexRange = chartData.xDomain[1] - chartData.xDomain[0];
       const widthInPoints = Math.round(visibleIndexRange * 0.25);
@@ -575,24 +618,43 @@ export function JournalReconstruction() {
     window.removeEventListener('mousemove', handleToolbarMouseMove);
     window.removeEventListener('mouseup', handleToolbarMouseUp);
   };
+
+  const handleSetTradeDecision = (decision: TradeDecision) => {
+    if (selectedDate) {
+        const dateKey = formatDateToISO(selectedDate);
+        setTradeDecisions(prev => ({...prev, [dateKey]: decision}));
+    }
+  };
+
+  const handleResetDecisions = () => {
+    setTradeDecisions({});
+    toast({ title: "Decisions Reset", description: "All manual trade decisions have been cleared." });
+  };
   
   const isPlacingAnything = !!placingToolType || isPlacingPriceMarker || isPlacingMeasurement;
   
   const dayResultModifiers = useMemo(() => {
-    const modifiers: Record<string, Date[]> = { win: [], loss: [] };
+    const modifiers: Record<string, Date[]> = { win: [], loss: [], modified: [] };
+    const modifiedDates = Object.keys(tradeDecisions);
+
     journalTrades.forEach(trade => {
-        const key = trade.result === 'win' ? 'win' : 'loss';
-        modifiers[key].push(trade.date);
+        const dateKey = formatDateToISO(trade.date);
+        if (modifiedDates.includes(dateKey)) {
+            modifiers.modified.push(trade.date);
+        } else {
+            const key = trade.result === 'win' ? 'win' : 'loss';
+            modifiers[key].push(trade.date);
+        }
     });
+
     return modifiers;
-  }, [journalTrades]);
+  }, [journalTrades, tradeDecisions]);
 
   const allTradeDates = journalTrades.map(t => t.date);
-  const currentYear = new Date().getFullYear();
 
   return (
     <div className="flex h-full">
-      <div className="w-[350px] p-4 border-r border-border flex flex-col gap-4">
+      <div className="w-[350px] p-4 border-r border-border flex flex-col gap-4 overflow-y-auto">
         <h2 className="text-xl font-bold font-headline">Controls</h2>
         
         <div className="space-y-2">
@@ -615,6 +677,9 @@ export function JournalReconstruction() {
               <FileUp className="mr-2 h-4 w-4" /> Import Journal CSV
             </Button>
             <input type="file" ref={journalInputRef} onChange={handleJournalImport} accept=".csv" className="hidden" />
+            <Button onClick={handleExportDecisions} className="w-full" variant="secondary" disabled={!isJournalImported}>
+                <FileUp className="mr-2 h-4 w-4" /> Export Decisions Report
+            </Button>
         </div>
         
         <div>
@@ -626,7 +691,6 @@ export function JournalReconstruction() {
                     handleDateSelect(day);
                     if (day) {
                       const newDate = new Date(day);
-                      // Keep time from original selectedDate if it exists, otherwise use current time
                       const oldDate = selectedDate || new Date();
                       newDate.setHours(oldDate.getHours(), oldDate.getMinutes(), oldDate.getSeconds());
                       setSelectedDate(newDate);
@@ -634,23 +698,52 @@ export function JournalReconstruction() {
                       setSelectedDate(undefined);
                     }
                 }}
-                month={selectedDate}
-                onMonthChange={setSelectedDate}
-                modifiers={dayResultModifiers}
-                modifiersClassNames={{
-                    win: 'rdp-day_win',
-                    loss: 'rdp-day_loss',
-                }}
                 disabled={(date) => !allTradeDates.some(tradeDate => 
                     tradeDate.getUTCDate() === date.getUTCDate() &&
                     tradeDate.getUTCMonth() === date.getUTCMonth() &&
                     tradeDate.getUTCFullYear() === date.getUTCFullYear()
                 )}
+                modifiers={dayResultModifiers}
+                modifiersClassNames={{
+                    win: 'rdp-day_win',
+                    loss: 'rdp-day_loss',
+                    modified: 'rdp-day_modified',
+                }}
                 className="rounded-md border"
                 captionLayout="dropdown-buttons"
-                fromYear={currentYear - 10}
-                toYear={currentYear + 10}
+                fromYear={new Date().getFullYear() - 10}
+                toYear={new Date().getFullYear() + 10}
              />
+        </div>
+
+        <div className="space-y-2">
+            <h3 className="font-semibold text-lg">4. Mark Trade Decision</h3>
+            <p className="text-sm text-muted-foreground">For the selected day, would you have taken a trade?</p>
+            <div className="flex gap-2">
+                <Button 
+                    onClick={() => handleSetTradeDecision('Traded')} 
+                    disabled={!selectedDate}
+                    className="flex-1"
+                >
+                    <CheckCircle className="mr-2 h-4 w-4" /> Traded
+                </Button>
+                <Button 
+                    onClick={() => handleSetTradeDecision('Not Traded')}
+                    disabled={!selectedDate}
+                    variant="destructive"
+                    className="flex-1"
+                >
+                    <XCircle className="mr-2 h-4 w-4" /> Not Traded
+                </Button>
+            </div>
+            <Button
+                onClick={handleResetDecisions}
+                variant="outline"
+                className="w-full"
+                disabled={Object.keys(tradeDecisions).length === 0}
+            >
+                <RotateCcw className="mr-2 h-4 w-4"/> Reset All Decisions
+            </Button>
         </div>
       </div>
 
@@ -785,5 +878,3 @@ export function JournalReconstruction() {
     </div>
   );
 }
-
-    

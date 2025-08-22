@@ -105,5 +105,12 @@ body {
   .rdp-day_loss:hover {
      background-color: hsl(var(--destructive) / 0.9);
   }
+  .rdp-day_modified {
+    background-color: hsl(30 80% 55%); /* Orange */
+    color: hsl(var(--card-foreground));
+  }
+  .rdp-day_modified:hover {
+    background-color: hsl(30 80% 55% / 0.9);
+  }
 
 }
