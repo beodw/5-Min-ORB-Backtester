@@ -467,19 +467,11 @@ export function JournalReconstruction() {
   const handleDateSelect = (date: Date | undefined) => {
     if (!date) return;
     
-    // Set the selected date for calendar UI, but keep the time for chart view continuity
-    setSelectedDate(currentDate => {
-        const newDate = new Date(date);
-        const oldTime = currentDate || new Date();
-        newDate.setUTCHours(oldTime.getUTCHours(), oldTime.getUTCMinutes(), oldTime.getUTCSeconds());
-        return newDate;
-    });
-
     if (!isPriceDataImported) {
          toast({ variant: "destructive", title: "Price Data Missing", description: "Please import 1-minute price data first." });
         return;
     }
-    
+
     const hasTradeOnDay = journalTrades.some(trade => {
         const tradeDate = new Date(trade.date);
         return tradeDate.getUTCFullYear() === date.getUTCFullYear() &&
@@ -828,7 +820,10 @@ export function JournalReconstruction() {
              <Calendar
                 mode="single"
                 selected={selectedDate}
-                onSelect={handleDateSelect}
+                onSelect={(d) => {
+                  setSelectedDate(d);
+                  handleDateSelect(d);
+                }}
                 disabled={(date) => !allTradeDates.some(tradeDate => 
                     tradeDate.getUTCFullYear() === date.getUTCFullYear() &&
                     tradeDate.getUTCMonth() === date.getUTCMonth() &&
@@ -1051,7 +1046,5 @@ export function JournalReconstruction() {
     </div>
   );
 }
-
-    
 
     
