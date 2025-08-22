@@ -352,20 +352,27 @@ export function JournalReconstruction() {
   const handleDateSelect = (date: Date | undefined) => {
     if (!date) return;
     
+    // Set the selected date for calendar UI, but keep the time for chart view continuity
+    setSelectedDate(currentDate => {
+        const newDate = new Date(date);
+        const oldTime = currentDate || new Date();
+        newDate.setUTCHours(oldTime.getUTCHours(), oldTime.getUTCMinutes(), oldTime.getUTCSeconds());
+        return newDate;
+    });
+
     if (!isPriceDataImported) {
          toast({ variant: "destructive", title: "Price Data Missing", description: "Please import 1-minute price data first." });
         return;
     }
     
     const hasTradeOnDay = journalTrades.some(trade => 
-        trade.date.getUTCDate() === date.getUTCDate() &&
+        trade.date.getUTCFullYear() === date.getUTCFullYear() &&
         trade.date.getUTCMonth() === date.getUTCMonth() &&
-        trade.date.getUTCFullYear() === date.getUTCFullYear()
+        trade.date.getUTCDate() === date.getUTCDate()
     );
 
     if (!hasTradeOnDay) {
         toast({ variant: "destructive", title: "No Trade Data", description: "No trade found for this day in the journal." });
-        setSelectedDate(date);
         setPriceMarkers([]);
         return;
     }
@@ -405,7 +412,6 @@ export function JournalReconstruction() {
             description: `Could not find the ${sessionStartTime} UTC session start in the loaded price data for the selected day.`,
             duration: 7000
         });
-        setSelectedDate(date);
         pushToHistory(drawingState);
         setPriceMarkers([]);
     }
@@ -687,22 +693,13 @@ export function JournalReconstruction() {
              <Calendar
                 mode="single"
                 selected={selectedDate}
-                onSelect={(day) => {
-                    handleDateSelect(day);
-                    if (day) {
-                      const newDate = new Date(day);
-                      // Keep time from previous date to not reset chart view
-                      const oldDate = selectedDate || new Date();
-                      newDate.setHours(oldDate.getHours(), oldDate.getMinutes(), oldDate.getSeconds());
-                      setSelectedDate(newDate);
-                    } else {
-                      setSelectedDate(undefined);
-                    }
-                }}
+                onSelect={handleDateSelect}
+                month={selectedDate}
+                onMonthChange={setSelectedDate}
                 disabled={(date) => !allTradeDates.some(tradeDate => 
-                    tradeDate.getUTCDate() === date.getUTCDate() &&
+                    tradeDate.getUTCFullYear() === date.getUTCFullYear() &&
                     tradeDate.getUTCMonth() === date.getUTCMonth() &&
-                    tradeDate.getUTCFullYear() === date.getUTCFullYear()
+                    tradeDate.getUTCDate() === date.getUTCDate()
                 )}
                 modifiers={dayResultModifiers}
                 modifiersClassNames={{
