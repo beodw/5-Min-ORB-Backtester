@@ -8,7 +8,7 @@ import { InteractiveChart, type ChartClickData } from "@/components/algo-insight
 import { mockPriceData } from "@/lib/mock-data";
 import { useToast } from "@/hooks/use-toast";
 import type { PriceData, PriceMarker, RiskRewardTool as RRToolType, MeasurementTool as MeasurementToolType, DrawingState, ToolbarPositions, MeasurementPoint } from "@/types";
-import { FileUp, Info, Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, ChevronRight, ChevronsRight, Target, Trash2, Lock, Unlock, Ruler, Undo, Redo, GripVertical, ChevronLeft } from "lucide-react";
+import { FileUp, Info, ArrowUp, ArrowDown, Settings, ChevronsRight, Target, Trash2, Lock, Unlock, Ruler, Undo, Redo, GripVertical, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   AlertDialog,
@@ -26,7 +26,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
-import { useDayPicker, type CaptionProps } from "react-day-picker";
+import { type CaptionProps } from "react-day-picker";
 import { format } from "date-fns";
 
 
@@ -88,18 +88,16 @@ export function JournalReconstruction() {
   const { rrTools, priceMarkers, measurementTools } = drawingState;
 
   function CustomCaption(props: CaptionProps) {
-    const { goToMonth, nextMonth, previousMonth } = useDayPicker();
-    
     const handleYearChange = (value: string) => {
       const newDate = new Date(props.displayMonth);
       newDate.setFullYear(parseInt(value, 10));
-      goToMonth(newDate);
+      props.goToMonth(newDate);
     };
     
     const handleMonthChange = (value: string) => {
       const newDate = new Date(props.displayMonth);
       newDate.setMonth(parseInt(value, 10));
-      goToMonth(newDate);
+      props.goToMonth(newDate);
     };
   
     const years = Array.from({ length: 20 }, (_, i) => new Date().getFullYear() - 10 + i);
@@ -140,8 +138,8 @@ export function JournalReconstruction() {
   
         <div className="flex items-center gap-1">
           <Button
-            disabled={!previousMonth}
-            onClick={() => previousMonth && goToMonth(previousMonth)}
+            disabled={!props.previousMonth}
+            onClick={() => props.previousMonth && props.goToMonth(props.previousMonth)}
             variant="outline"
             size="icon"
             className="h-8 w-8"
@@ -149,8 +147,8 @@ export function JournalReconstruction() {
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <Button
-            disabled={!nextMonth}
-            onClick={() => nextMonth && goToMonth(nextMonth)}
+            disabled={!props.nextMonth}
+            onClick={() => props.nextMonth && props.goToMonth(props.nextMonth)}
             variant="outline"
             size="icon"
             className="h-8 w-8"
@@ -859,5 +857,3 @@ export function JournalReconstruction() {
     </div>
   );
 }
-
-    
