@@ -19,6 +19,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -242,6 +243,12 @@ export function JournalReconstruction() {
           const rowNum = i + 2;
           const columns = line.split(',');
 
+          if (columns.length <= Math.max(dateIndex, rIndex)) {
+              // This can happen with malformed rows or empty lines with commas
+              console.warn(`Skipping malformed row ${rowNum}. Incorrect number of columns.`);
+              continue;
+          }
+
           const dateStr = columns[dateIndex]?.trim();
           const rValueStr = columns[rIndex]?.trim();
           
@@ -249,7 +256,7 @@ export function JournalReconstruction() {
           if (!rValueStr) throw new Error(`Row ${rowNum}: 'Maximum Favourable Excursion (R)' value is missing or empty.`);
 
           const rValue = parseFloat(rValueStr);
-if (isNaN(rValue)) throw new Error(`Row ${rowNum}: Invalid R-value. Expected a number, but got "${rValueStr}".`);
+          if (isNaN(rValue)) throw new Error(`Row ${rowNum}: Invalid R-value. Expected a number, but got "${rValueStr}".`);
 
           const dateParts = dateStr.split('/');
           if (dateParts.length !== 3) throw new Error(`Row ${rowNum}: Invalid date format for "${dateStr}". Expected MM/DD/YYYY.`);
@@ -715,3 +722,5 @@ if (isNaN(rValue)) throw new Error(`Row ${rowNum}: Invalid R-value. Expected a n
     </div>
   );
 }
+
+    
