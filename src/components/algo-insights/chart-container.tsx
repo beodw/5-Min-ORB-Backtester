@@ -784,6 +784,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
       let currentRow: string[] = [];
       let currentField = '';
       let inQuotedField = false;
+      // Normalize line endings to \n
       const normalizedText = text.replace(/(\r\n|\r)/g, '\n');
 
       for (let i = 0; i < normalizedText.length; i++) {
@@ -791,9 +792,10 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
           
           if (inQuotedField) {
               if (char === '"') {
+                  // Check for escaped double quote
                   if (i + 1 < normalizedText.length && normalizedText[i+1] === '"') {
                       currentField += '"';
-                      i++;
+                      i++; // Skip the next quote
                   } else {
                       inQuotedField = false;
                   }
@@ -817,11 +819,13 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
           }
       }
 
+      // Add the last row if file doesn't end with a newline
       if (currentField || currentRow.length > 0) {
         currentRow.push(currentField);
         rows.push(currentRow);
       }
       
+      // Filter out any completely empty rows that might result from trailing newlines
       return rows.filter(row => row.length > 1 || (row.length === 1 && row[0].trim() !== ''));
   };
   
@@ -882,8 +886,8 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                        console.warn(`Row ${rowNum} has incorrect number of columns. Expected ${headerLine.length}, got ${columns.length}. Skipping.`);
                        return null;
                     }
+                    console.log(`Pair value at index ${headerIndices.pair}:`, columns[headerIndices.pair]?.trim());
 
-                    console.log(`Row ${rowNum} Pair Value:`, columns[headerIndices.pair]?.trim());
 
                     if (columns[headerIndices.pair]?.trim() !== "US30") {
                         return null;
@@ -1180,16 +1184,12 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                 <div onMouseDown={(e) => handleMouseDownOnToolbar(e, 'secondary')} className="cursor-grab active:cursor-grabbing p-1 -ml-1">
                     <GripVertical className="h-5 w-5 text-muted-foreground/50" />
                 </div>
-                {tab === 'backtester' ? (
                 <TooltipProvider>
                     <div className="flex justify-center gap-1">
                         <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceLong} disabled={isPlacingAnything || !isDataImported}><ArrowUp className="w-5 h-5 text-accent"/></Button></TooltipTrigger><TooltipContent><p>Place Long Position</p></TooltipContent></Tooltip>
                         <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceShort} disabled={isPlacingAnything || !isDataImported}><ArrowDown className="w-5 h-5 text-destructive"/></Button></TooltipTrigger><TooltipContent><p>Place Short Position</p></TooltipContent></Tooltip>
                     </div>
                 </TooltipProvider>
-                ) : (
-                    <div className="h-8"></div> // Placeholder to keep height consistent
-                )}
                 
                 <div className="h-6 border-l border-border/50"></div>
 
@@ -1265,7 +1265,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                 rrTools={rrTools}
                 onUpdateTool={handleUpdateTool}
                 onRemoveTool={handleRemoveTool}
-                isPlacingRR={tab === 'backtester' && !!placingToolType}
+                isPlacingRR={!!placingToolType}
                 isPlacingPriceMarker={isPlacingPriceMarker}
                 priceMarkers={priceMarkers}
                 onRemovePriceMarker={handleRemovePriceMarker}
@@ -1355,7 +1355,3 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
 }
 
     
-
-    
-
-
