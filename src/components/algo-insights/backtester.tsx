@@ -626,7 +626,6 @@ export function Backtester() {
             }
 
             setPriceData(parsedData.map((d, i) => ({...d, index: i})));
-
             toast({
                 title: "Debug: Step 2 Complete",
                 description: `Successfully stored ${parsedData.length} rows in state.`,
@@ -951,7 +950,6 @@ export function Backtester() {
                 pipValue={pipValue}
                 timeframe={timeframe}
                 timeZone={timeZone}
-                endDate={selectedDate}
                 isYAxisLocked={isYAxisLocked}
             />
         </div>

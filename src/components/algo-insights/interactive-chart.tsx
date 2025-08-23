@@ -51,7 +51,6 @@ interface InteractiveChartProps {
   pipValue: number;
   timeframe: string;
   timeZone: string;
-  endDate?: Date;
   isYAxisLocked: boolean;
 }
 
@@ -97,7 +96,6 @@ export function InteractiveChart({
     pipValue,
     timeframe, 
     timeZone, 
-    endDate,
     isYAxisLocked,
 }: InteractiveChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -111,10 +109,8 @@ export function InteractiveChart({
   
     const baseData = data.map((d, i) => ({ ...d, index: i }));
 
-    const filteredByDate = !endDate ? baseData : baseData.filter(point => point.date <= endDate);
-    
     if (timeframe === '1m') {
-      return filteredByDate;
+      return baseData;
     }
   
     const getIntervalMinutes = (tf: string): number => {
@@ -128,12 +124,12 @@ export function InteractiveChart({
     };
   
     const interval = getIntervalMinutes(timeframe) * 60 * 1000;
-    if (interval <= 60000) return filteredByDate;
+    if (interval <= 60000) return baseData;
   
     const result: (PriceData & { index: number })[] = [];
     let currentCandle: (PriceData & { index: number }) | null = null;
     
-    for (const point of filteredByDate) {
+    for (const point of baseData) {
       const pointTime = point.date.getTime();
       const bucketTimestamp = Math.floor(pointTime / interval) * interval;
       
@@ -162,17 +158,7 @@ export function InteractiveChart({
     }
     
     return result;
-  }, [data, timeframe, endDate]);
-
-  useEffect(() => {
-    if (aggregatedData.length > 0) {
-        toast({
-            title: "Debug: Step 3 Complete",
-            description: `Successfully computed aggregatedData with ${aggregatedData.length} rows.`,
-            duration: 9000,
-        });
-    }
-  }, [aggregatedData, toast]);
+  }, [data, timeframe]);
   
   const [xDomain, setXDomain] = useState<[number, number]>([0, 100]);
   const [yDomain, setYDomain] = useState<[number, number]>([0, 100]);
@@ -192,30 +178,17 @@ export function InteractiveChart({
   }, [xDomain, aggregatedData]);
 
   useEffect(() => {
-    if (aggregatedData.length === 0) return;
-
-    const panToEnd = () => {
-        const domainWidth = 100;
-        const targetIndex = aggregatedData.length - 1;
-        const newEnd = targetIndex + (domainWidth * 0.1); 
-        const newStart = newEnd - domainWidth;
-        return [newStart > 0 ? newStart : 0, newEnd];
-    };
-
-    setXDomain(prev => {
-        const isInitialLoad = (prev[0] === 0 && prev[1] === 100);
-        
-        if (endDate) {
-            return panToEnd();
-        }
-        
-        if (isInitialLoad) {
-            return panToEnd();
-        }
-        
-        return prev;
-    });
-  }, [endDate, aggregatedData.length]);
+    if (aggregatedData.length > 0) {
+        const panToEnd = () => {
+            const domainWidth = 100;
+            const targetIndex = aggregatedData.length - 1;
+            const newEnd = targetIndex + (domainWidth * 0.1); 
+            const newStart = newEnd - domainWidth;
+            return [newStart > 0 ? newStart : 0, newEnd];
+        };
+        setXDomain(panToEnd());
+    }
+  }, [aggregatedData]);
 
 
   useEffect(() => {
@@ -253,11 +226,11 @@ export function InteractiveChart({
     if (newYDomain[0] !== yDomain[0] || newYDomain[1] !== yDomain[1]) {
         if(isFinite(newYDomain[0]) && isFinite(newYDomain[1])) {
             // setYDomain(newYDomain);
-            toast({
-                title: "Debug: setYDomain call skipped",
-                description: "Execution reached the point where setYDomain would be called.",
-                duration: 9000,
-            });
+            // toast({
+            //     title: "Debug: setYDomain call would be here",
+            //     description: "Execution reached the point where setYDomain would be called.",
+            //     duration: 9000,
+            // });
         }
     }
   }, [windowedData, priceMarkers, isYAxisLocked, toast, yDomain]);
@@ -633,5 +606,3 @@ export function InteractiveChart({
     </div>
   );
 }
-
-    
