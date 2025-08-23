@@ -6,7 +6,7 @@ import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, Chevr
 import { Button } from "@/components/ui/button";
 import { InteractiveChart, type ChartClickData } from "@/components/algo-insights/interactive-chart";
 import { mockPriceData } from "@/lib/mock-data";
-import type { RiskRewardTool as RRToolType, PriceMarker, MeasurementTool as MeasurementToolType, MeasurementPoint, PriceData, ToolbarPositions } from "@/types";
+import type { RiskRewardTool as RRToolType, PriceMarker, MeasurementTool as MeasurementToolType, PriceData, ToolbarPositions } from "@/types";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -624,14 +624,15 @@ export function Backtester() {
                  toast({ variant: "destructive", title: "Parsing Error", description: "No valid data rows could be parsed." });
                  return;
             }
-
-            setPriceData(parsedData.map((d, i) => ({...d, index: i})));
+            
+            const processedData = fillGapsInData(parsedData);
+            setPriceData(processedData);
+            setSessionInfo({ fileName: file.name });
+            setIsDataImported(true);
             toast({
-                title: "Debug: Step 2 Complete",
-                description: `Successfully stored ${parsedData.length} rows in state.`,
-                duration: 9000,
+                title: "Import Successful",
+                description: `Loaded and processed ${processedData.length} data points.`,
             });
-            return;
 
         } catch (error: any) {
             toast({

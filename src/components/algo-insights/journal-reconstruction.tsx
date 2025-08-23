@@ -397,15 +397,15 @@ export function JournalReconstruction() {
                  toast({ variant: "destructive", title: "Parsing Error", description: "No valid data rows could be parsed." });
                  return;
             }
-
-            setPriceData(parsedData.map((d, i) => ({...d, index: i})));
             
+            const processedData = fillGapsInData(parsedData);
+            setPriceData(processedData);
+            setSessionInfo(prev => ({ ...prev, priceDataFileName: file.name }));
+            setIsPriceDataImported(true);
             toast({
-                title: "Debug: Step 2 Complete",
-                description: `Successfully stored ${parsedData.length} rows in state.`,
-                duration: 9000,
+                title: "Price Data Loaded",
+                description: `${processedData.length} data points imported successfully.`,
             });
-            return;
 
         } catch (error: any) {
             toast({ variant: "destructive", title: "Price Data Import Failed", description: `Error: ${error.message}`, duration: 9000 });

@@ -225,15 +225,10 @@ export function InteractiveChart({
 
     if (newYDomain[0] !== yDomain[0] || newYDomain[1] !== yDomain[1]) {
         if(isFinite(newYDomain[0]) && isFinite(newYDomain[1])) {
-            // setYDomain(newYDomain);
-            // toast({
-            //     title: "Debug: setYDomain call would be here",
-            //     description: "Execution reached the point where setYDomain would be called.",
-            //     duration: 9000,
-            // });
+            setYDomain(newYDomain);
         }
     }
-  }, [windowedData, priceMarkers, isYAxisLocked, toast, yDomain]);
+  }, [windowedData, priceMarkers, isYAxisLocked, yDomain]);
 
     const getChartCoordinates = (e: any): ChartClickData | null => {
         if (!e || !chartScalesRef.current) return null;
