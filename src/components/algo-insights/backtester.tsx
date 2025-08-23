@@ -6,7 +6,7 @@ import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, Chevr
 import { Button } from "@/components/ui/button";
 import { InteractiveChart, type ChartClickData } from "@/components/algo-insights/interactive-chart";
 import { mockPriceData } from "@/lib/mock-data";
-import type { RiskRewardTool as RRToolType, PriceMarker, MeasurementTool as MeasurementToolType, PriceData, ToolbarPositions } from "@/types";
+import type { RiskRewardTool as RRToolType, PriceMarker, MeasurementTool as MeasurementToolType, PriceData, ToolbarPositions, MeasurementPoint } from "@/types";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -273,7 +273,7 @@ export function Backtester() {
   const [timeframe, setTimeframe] = useState('1m');
   const [timeZone, setTimeZone] = useState<string>('');
   const [timezones, setTimezones] = useState<{ value: string; label: string }[]>([]);
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [sessionStartTime, setSessionStartTime] = useState('09:30');
   const [isYAxisLocked, setIsYAxisLocked] = useState(true);
   const [pipValue, setPipValue] = useState(0.0001);
@@ -378,7 +378,7 @@ export function Backtester() {
 
     const sessionState: SessionState = {
         drawingState: serializableDrawingState as any,
-        selectedDate: selectedDate.toISOString(),
+        selectedDate: selectedDate ? selectedDate.toISOString() : new Date().toISOString(),
         sessionInfo,
     };
     localStorage.setItem(SESSION_KEY, JSON.stringify(sessionState));
@@ -629,6 +629,7 @@ export function Backtester() {
             setPriceData(processedData);
             setSessionInfo({ fileName: file.name });
             setIsDataImported(true);
+            setSelectedDate(undefined); // Clear selected date on new import
             toast({
                 title: "Import Successful",
                 description: `Loaded and processed ${processedData.length} data points.`,
@@ -721,14 +722,16 @@ export function Backtester() {
   const handleDateSelect = (date: Date | undefined) => {
     if (date) {
         const endOfDay = new Date(date);
-        endOfDay.setHours(23, 59, 59, 999);
+        endOfDay.setUTCHours(23, 59, 59, 999);
         setSelectedDate(endOfDay);
     } else {
-        setSelectedDate(new Date());
+        setSelectedDate(undefined);
     }
   };
   
   const handleNextCandle = () => {
+    if (!selectedDate) return;
+
     const getDuration = (tf: string): number => {
       switch (tf) {
         case '1m': return 60 * 1000;
@@ -741,6 +744,7 @@ export function Backtester() {
     };
 
     setSelectedDate(currentDate => {
+      if (!currentDate) return undefined;
       const newDate = new Date(currentDate.getTime() + getDuration(timeframe));
       const lastAvailableDate = priceData[priceData.length - 1]?.date;
 
@@ -781,7 +785,9 @@ export function Backtester() {
   const handleNextSession = () => {
     if (!sessionStartTime || !priceData.length) return;
 
-    const startIndex = findNextSessionStartIndex(selectedDate);
+    const startDate = selectedDate || priceData[0]?.date || new Date();
+    const startIndex = findNextSessionStartIndex(startDate);
+
 
     if (startIndex !== -1) {
         const endIndex = startIndex + 5;
@@ -951,6 +957,7 @@ export function Backtester() {
                 pipValue={pipValue}
                 timeframe={timeframe}
                 timeZone={timeZone}
+                endDate={selectedDate}
                 isYAxisLocked={isYAxisLocked}
             />
         </div>
@@ -1006,7 +1013,7 @@ export function Backtester() {
                         <TooltipProvider>
                           <Tooltip>
                               <TooltipTrigger asChild>
-                                  <Button variant="ghost" size="icon" onClick={handleNextCandle} className="text-muted-foreground" disabled={priceData.length === 0}>
+                                  <Button variant="ghost" size="icon" onClick={handleNextCandle} className="text-muted-foreground" disabled={!selectedDate || priceData.length === 0}>
                                       <ChevronRight className="h-5 w-5" />
                                   </Button>
                               </TooltipTrigger>

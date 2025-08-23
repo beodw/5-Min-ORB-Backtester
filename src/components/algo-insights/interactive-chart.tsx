@@ -11,16 +11,13 @@ import {
   Bar,
   Customized,
   Tooltip,
-  Cross,
 } from "recharts";
 import type { PriceData, Trade, RiskRewardTool as RRToolType, PriceMarker as PriceMarkerType, MeasurementTool as MeasurementToolType } from "@/types";
 import { RiskRewardTool } from "./risk-reward-tool";
 import { PriceMarker } from "./price-marker";
 import { MeasurementTool } from "./measurement-tool";
 import { useMemo, useRef, useState, useCallback, useEffect } from "react";
-import { cn } from "@/lib/utils";
 import { findClosestIndex } from "@/lib/chart-utils";
-import { useToast } from "@/hooks/use-toast";
 
 export type ChartClickData = {
     price: number;
@@ -51,6 +48,7 @@ interface InteractiveChartProps {
   pipValue: number;
   timeframe: string;
   timeZone: string;
+  endDate?: Date;
   isYAxisLocked: boolean;
 }
 
@@ -96,19 +94,20 @@ export function InteractiveChart({
     pipValue,
     timeframe, 
     timeZone, 
-    isYAxisLocked,
+    endDate,
+    isYAxisLocked
 }: InteractiveChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartScalesRef = useRef<{x: any, y: any, plot: any} | null>(null);
-  const { toast } = useToast();
   
   const aggregatedData = useMemo(() => {
     if (!data || data.length === 0) {
       return [];
     }
   
-    const baseData = data.map((d, i) => ({ ...d, index: i }));
-
+    const filteredByDate = endDate ? data.filter(point => point.date <= endDate) : data;
+    const baseData = filteredByDate.map((d, i) => ({ ...d, index: i }));
+    
     if (timeframe === '1m') {
       return baseData;
     }
@@ -138,13 +137,8 @@ export function InteractiveChart({
           result.push(currentCandle);
         }
         currentCandle = {
+          ...point,
           date: new Date(bucketTimestamp),
-          open: point.open,
-          high: point.high,
-          low: point.low,
-          close: point.close,
-          wick: [point.low, point.high],
-          index: point.index, // Carry over the index of the first point in the bucket
         };
       } else {
         currentCandle.high = Math.max(currentCandle.high, point.high);
@@ -158,7 +152,7 @@ export function InteractiveChart({
     }
     
     return result;
-  }, [data, timeframe]);
+  }, [data, timeframe, endDate]);
   
   const [xDomain, setXDomain] = useState<[number, number]>([0, 100]);
   const [yDomain, setYDomain] = useState<[number, number]>([0, 100]);
@@ -188,7 +182,7 @@ export function InteractiveChart({
         };
         setXDomain(panToEnd());
     }
-  }, [aggregatedData]);
+  }, [aggregatedData, endDate]);
 
 
   useEffect(() => {
@@ -570,7 +564,7 @@ export function InteractiveChart({
                       key={tool.id}
                       tool={tool}
                       onUpdateTool={onUpdateTool}
-                      onRemove={onRemove}
+                      onRemove={onRemoveTool}
                       data={aggregatedData}
                       xScale={mainXAxis.scale}
                       yScale={mainYAxis.scale}

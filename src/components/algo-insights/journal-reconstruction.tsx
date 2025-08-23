@@ -672,6 +672,7 @@ export function JournalReconstruction() {
   };
 
   const handleNextCandle = () => {
+    if (!selectedDate) return;
     const getDuration = (tf: string): number => {
       switch (tf) {
         case '1m': return 60 * 1000;
@@ -900,6 +901,7 @@ export function JournalReconstruction() {
                 pipValue={pipValue}
                 timeframe={timeframe}
                 timeZone="UTC"
+                endDate={selectedDate}
                 isYAxisLocked={isYAxisLocked}
             />
             {!isPriceDataImported && !sessionInfo.priceDataFileName && (
@@ -933,7 +935,7 @@ export function JournalReconstruction() {
                     <TooltipProvider>
                       <Tooltip>
                           <TooltipTrigger asChild>
-                              <Button variant="ghost" size="icon" onClick={handleNextCandle} className="text-muted-foreground" disabled={priceData.length === 0}>
+                              <Button variant="ghost" size="icon" onClick={handleNextCandle} className="text-muted-foreground" disabled={!selectedDate || priceData.length === 0}>
                                   <ChevronRightIcon className="h-5 w-5" />
                               </Button>
                           </TooltipTrigger>
@@ -943,7 +945,7 @@ export function JournalReconstruction() {
                     <TooltipProvider>
                       <Tooltip>
                           <TooltipTrigger asChild>
-                              <Button variant="ghost" size="icon" onClick={handleNextSession} className="text-muted-foreground" disabled={priceData.length === 0}>
+                              <Button variant="ghost" size="icon" onClick={handleNextSession} className="text-muted-foreground" disabled={!selectedDate || priceData.length === 0}>
                                   <ChevronsRight className="h-5 w-5" />
                               </Button>
                           </TooltipTrigger>
@@ -1161,7 +1163,6 @@ export function JournalReconstruction() {
                 </CardContent>
             </Card>
         </div>
-
     </div>
   );
 }
