@@ -873,6 +873,8 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
             }
 
             setAllJournalTrades(parsedTrades); 
+            // Set the dropdown to US30 to match the imported data
+            setSelectedPair("US30");
             toast({ title: "Journal Imported", description: `${parsedTrades.length} trades for US30 loaded.` });
         } catch (error: any) {
             toast({ variant: "destructive", title: "Journal Import Failed", description: error.message, duration: 9000 });
@@ -1006,10 +1008,9 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
 
         // Sanitize for CSV: quote fields that contain commas or quotes
         return newColumns.map(field => {
-            const fieldStr = String(field).trim();
-            if (fieldStr.includes(',') || fieldStr.includes('"') || fieldStr.includes('\n')) {
-                // Ensure rows with internal newlines are properly escaped.
-                const sanitizedField = fieldStr.replace(/"/g, '""').replace(/[\r\n]+/g, ' ');
+            const fieldStr = String(field).trim().replace(/[\r\n]+/g, ' '); // Sanitize newlines within fields
+            if (fieldStr.includes(',') || fieldStr.includes('"')) {
+                const sanitizedField = fieldStr.replace(/"/g, '""');
                 return `"${sanitizedField}"`;
             }
             return fieldStr;
