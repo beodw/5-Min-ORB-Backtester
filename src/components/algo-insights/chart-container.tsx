@@ -212,6 +212,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
   const [journalFileName, setJournalFileName] = useState('');
   const [dayResults, setDayResults] = useState<Record<string, DayResult>>({});
   const journalFileInputRef = useRef<HTMLInputElement>(null);
+  const [journalHeader, setJournalHeader] = useState<string[]>([]);
 
 
   const { rrTools, priceMarkers, measurementTools } = drawingState;
@@ -787,24 +788,26 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     reader.onload = (e) => {
         try {
             const text = e.target?.result as string;
-            const lines = text.split('\n').filter(line => line.trim() !== '');
+            const lines = text.split(/[\r\n]+/).filter(line => line.trim() !== '');
             if (lines.length <= 1) throw new Error("Journal CSV is empty or has only a header.");
             
-            setLines(lines);
             const headerLine = lines[0].trim().split(',').map(h => h.trim());
+            setJournalHeader(headerLine);
             
             const requiredHeaders = {
                 pair: "Pair",
                 dateTaken: "Date Taken (Timestamp)",
                 dateClosed: "Date Closed (Timestamp)",
-                maxR: "Maximum Favourable Excursion (R)"
+                maxR: "Maximum Favourable Excursion (R)",
+                tradeOutcome: "Trade Outcome"
             };
 
             const headerIndices = {
                 pair: headerLine.indexOf(requiredHeaders.pair),
                 dateTaken: headerLine.indexOf(requiredHeaders.dateTaken),
                 dateClosed: headerLine.indexOf(requiredHeaders.dateClosed),
-                maxR: headerLine.indexOf(requiredHeaders.maxR)
+                maxR: headerLine.indexOf(requiredHeaders.maxR),
+                tradeOutcome: headerLine.indexOf(requiredHeaders.tradeOutcome)
             };
             
             for (const [key, index] of Object.entries(headerIndices)) {
@@ -814,14 +817,17 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
             const parsedTrades: JournalTrade[] = lines.slice(1)
                 .map((row, i) => {
                     const rowNum = i + 2; // For error reporting
-                    const columns = row.split(',');
+                    
+                    // Use a more robust split method to handle potential commas within quoted fields
+                    const columns = row.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g)?.map(col => col.replace(/"/g, '')) || row.split(',');
                     
                     if (columns[headerIndices.pair]?.trim() !== "US30") {
                         return null;
                     }
                     
                     if (columns.length < headerLine.length) {
-                       throw new Error(`Row ${rowNum} has incorrect number of columns. Expected ${headerLine.length}, got ${columns.length}.`);
+                       console.warn(`Row ${rowNum} has incorrect number of columns. Expected ${headerLine.length}, got ${columns.length}. Skipping.`);
+                       return null;
                     }
 
                     const pair = columns[headerIndices.pair]?.trim();
@@ -833,6 +839,8 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                     if (isNaN(maxR)) {
                         throw new Error(`Invalid 'Maximum Favourable Excursion (R)' value on row ${rowNum}: '${maxRString}'. Must be a number.`);
                     }
+
+                    const originalOutcome = columns[headerIndices.tradeOutcome]?.trim() as 'Win' | 'Loss' | undefined;
                     
                     return {
                         pair: pair,
@@ -841,6 +849,8 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                         maxR,
                         status: 'default',
                         originalRow: row,
+                        originalOutcome,
+                        outcome: originalOutcome, // Initially set outcome to original
                     };
                 })
                 .filter((trade): trade is JournalTrade => trade !== null);
@@ -850,7 +860,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
             }
 
             setAllJournalTrades(parsedTrades); 
-            toast({ title: "Journal Imported", description: `${parsedTrades.length} trades loaded for ${selectedPair}.` });
+            toast({ title: "Journal Imported", description: `${parsedTrades.length} trades for US30 loaded.` });
         } catch (error: any) {
             toast({ variant: "destructive", title: "Journal Import Failed", description: error.message, duration: 9000 });
         }
@@ -864,7 +874,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
       trades.forEach(trade => {
           const dateKey = trade.dateTaken.toISOString().split('T')[0];
           
-          if (trade.status !== 'default' || trade.outcome) {
+          if (trade.outcome && trade.outcome !== trade.originalOutcome) {
               results[dateKey] = 'modified';
               return;
           }
@@ -872,7 +882,9 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
           const currentDayStatus = results[dateKey];
           if (results[dateKey] === 'modified') return;
           
-          if (trade.maxR >= 2) {
+          const finalOutcome = trade.outcome || (trade.maxR >= 2 ? 'Win' : 'Loss');
+          
+          if (finalOutcome === 'Win') {
              results[dateKey] = 'win';
           } else if (currentDayStatus !== 'win') {
              results[dateKey] = 'loss';
@@ -946,22 +958,52 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         return;
     }
 
-    const headerLine = lines[0]?.trim();
-    if (!headerLine) {
-        toast({variant: "destructive", title: "Download Failed", description: "Could not determine original CSV header."});
+    if (journalHeader.length === 0) {
+        toast({variant: "destructive", title: "Download Failed", description: "Could not determine original CSV header. Please re-import the file."});
         return;
     }
 
-    const header = `${headerLine},Status,Trade Outcome\n`;
-    
-    const rows = allJournalTrades.map(trade => {
-        const status = trade.status === 'default' ? 'traded' : trade.status;
-        const outcome = trade.outcome ? trade.outcome : (trade.maxR >= 2 ? 'Win' : 'Loss');
-        const originalRow = trade.originalRow.trim().endsWith(',') ? trade.originalRow.trim().slice(0, -1) : trade.originalRow.trim();
-        return `${originalRow},${status},${outcome}\n`;
-    }).join('');
+    const outcomeIndex = journalHeader.indexOf("Trade Outcome");
+    const statusIndex = journalHeader.indexOf("Status"); // Assume 'Status' might not exist and needs adding
 
-    const csvContent = header + rows;
+    let finalHeader = [...journalHeader];
+    // Add 'Status' column if it doesn't exist
+    if (statusIndex === -1) {
+        finalHeader.push("Status");
+    }
+
+    const rows = allJournalTrades.map(trade => {
+        const originalColumns = trade.originalRow.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g)?.map(col => col.replace(/"/g, '')) || trade.originalRow.split(',');
+        
+        // Ensure the array is mutable and has enough space
+        let newColumns = [...originalColumns];
+
+        const finalStatus = trade.status === 'default' ? 'traded' : trade.status;
+        const finalOutcome = trade.outcome || (trade.maxR >= 2 ? 'Win' : 'Loss');
+        
+        // Overwrite "Trade Outcome"
+        if (outcomeIndex !== -1) {
+            newColumns[outcomeIndex] = finalOutcome;
+        }
+
+        // Overwrite or append "Status"
+        if (statusIndex !== -1) {
+            newColumns[statusIndex] = finalStatus;
+        } else {
+            newColumns.push(finalStatus);
+        }
+
+        // Sanitize for CSV: quote fields that contain commas or quotes
+        return newColumns.map(field => {
+            const fieldStr = String(field);
+            if (fieldStr.includes(',') || fieldStr.includes('"') || fieldStr.includes('\n')) {
+                return `"${fieldStr.replace(/"/g, '""')}"`;
+            }
+            return fieldStr;
+        }).join(',');
+    }).join('\n');
+
+    const csvContent = finalHeader.join(',') + '\n' + rows;
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
@@ -972,8 +1014,6 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   };
-  
-  const [lines, setLines] = useState<string[]>([]);
   
   // --- END JOURNAL FUNCTIONS ---
 
