@@ -973,7 +973,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     }
 
     const rows = allJournalTrades.map(trade => {
-        const originalColumns = trade.originalRow.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g)?.map(col => col.replace(/"/g, '')) || trade.originalRow.split(',');
+        const originalColumns = trade.originalRow.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g)?.map(col => col.replace(/"/g, '')) || [];
         
         // Ensure the array is mutable and has enough space
         let newColumns = [...originalColumns];
@@ -995,7 +995,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
 
         // Sanitize for CSV: quote fields that contain commas or quotes
         return newColumns.map(field => {
-            const fieldStr = String(field);
+            const fieldStr = String(field).trim();
             if (fieldStr.includes(',') || fieldStr.includes('"') || fieldStr.includes('\n')) {
                 return `"${fieldStr.replace(/"/g, '""')}"`;
             }
@@ -1298,7 +1298,3 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     </div>
   );
 }
-
-    
-
-    
