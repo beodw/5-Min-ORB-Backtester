@@ -243,7 +243,7 @@ export function ChartContainer() {
   const [timeframe, setTimeframe] = useState('1m');
   const [timeZone, setTimeZone] = useState<string>('');
   const [timezones, setTimezones] = useState<{ value: string; label: string }[]>([]);
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [sessionStartTime, setSessionStartTime] = useState('09:30');
   const [isYAxisLocked, setIsYAxisLocked] = useState(true);
   const [pipValue, setPipValue] = useState(0.0001);
@@ -350,7 +350,7 @@ export function ChartContainer() {
 
     const sessionState: SessionState = {
         drawingState: serializableDrawingState as any,
-        selectedDate: selectedDate.toISOString(),
+        selectedDate: selectedDate ? selectedDate.toISOString() : new Date().toISOString(),
         fileName,
     };
     localStorage.setItem(sessionKey, JSON.stringify(sessionState));
@@ -807,6 +807,7 @@ export function ChartContainer() {
                 pipValue={pipValue}
                 timeframe={timeframe}
                 timeZone={timeZone}
+                endDate={selectedDate}
                 isYAxisLocked={isYAxisLocked}
             />
         </div>
@@ -822,6 +823,21 @@ export function ChartContainer() {
                     <Redo className="h-5 w-5" />
                 </Button>
             </div>
+            <Popover>
+                <PopoverTrigger asChild>
+                    <Button variant="ghost" size="icon">
+                        <CalendarIcon className="h-5 w-5" />
+                    </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                    <Calendar
+                        mode="single"
+                        selected={selectedDate}
+                        onSelect={setSelectedDate}
+                        initialFocus
+                    />
+                </PopoverContent>
+            </Popover>
             <Popover>
                 <PopoverTrigger asChild>
                     <Button variant="ghost" size="icon">

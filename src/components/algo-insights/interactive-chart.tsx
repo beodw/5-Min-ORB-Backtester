@@ -50,6 +50,7 @@ interface InteractiveChartProps {
   pipValue: number;
   timeframe: string;
   timeZone: string;
+  endDate?: Date;
   isYAxisLocked: boolean;
 }
 
@@ -95,6 +96,7 @@ export function InteractiveChart({
     pipValue,
     timeframe, 
     timeZone, 
+    endDate,
     isYAxisLocked
 }: InteractiveChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -105,7 +107,7 @@ export function InteractiveChart({
       return [];
     }
   
-    const filteredByDate = data;
+    const filteredByDate = endDate ? data.filter(point => point.date <= endDate) : data;
     
     if (timeframe === '1m') {
       return filteredByDate;
@@ -155,7 +157,7 @@ export function InteractiveChart({
     }
     
     return result;
-  }, [data, timeframe]);
+  }, [data, timeframe, endDate]);
   
   const [xDomain, setXDomain] = useState<[number, number]>([0, 100]);
   const [yDomain, setYDomain] = useState<[number, number]>([0, 100]);
@@ -180,6 +182,7 @@ export function InteractiveChart({
     const panToEnd = () => {
         const domainWidth = 100;
         const targetIndex = aggregatedData.length - 1;
+        // Position the end of the data near the right edge of the viewport, but with a small buffer
         const newEnd = targetIndex + (domainWidth * 0.1); 
         const newStart = newEnd - domainWidth;
         return [newStart > 0 ? newStart : 0, newEnd];
@@ -187,12 +190,22 @@ export function InteractiveChart({
 
     setXDomain(prev => {
         const isInitialLoad = (prev[0] === 0 && prev[1] === 100);
+
+        // If a date is selected, the data is filtered. We should always pan to the end of this new dataset.
+        if (endDate) {
+            return panToEnd();
+        }
+        
+        // If no date is selected, only pan to the end on the initial load.
+        // User-initiated pans/zooms shouldn't be overridden.
         if (isInitialLoad) {
             return panToEnd();
         }
+
+        // For all other cases (like user panning/zooming), don't change the domain.
         return prev;
     });
-  }, [aggregatedData]);
+  }, [endDate, aggregatedData]);
 
 
   useEffect(() => {
@@ -220,13 +233,14 @@ export function InteractiveChart({
             max = Math.max(max, marker.price);
          }
        } else {
-         return;
+         return; // No data, do not update domain.
        }
     }
 
     const padding = (max - min) * 0.1 || 10;
     const newYDomain: [number, number] = [min - padding, max + padding];
     
+    // Only update if the domain has meaningfully changed, to prevent loops
     if (newYDomain[0] !== yDomain[0] || newYDomain[1] !== yDomain[1]) {
         setYDomain(newYDomain);
     }
@@ -297,11 +311,12 @@ export function InteractiveChart({
         const coords = getChartCoordinates(e);
 
         if (coords) {
-            onChartMouseMove(coords);
+            onChartMouseMove(coords); // For live measurement tool
         }
     };
 
     const handleMouseLeaveChart = () => {
+        // Placeholder for any future leave logic
     }
 
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
@@ -321,6 +336,7 @@ export function InteractiveChart({
         const mouseIndex = domainStart + (chartX / plotWidth) * domainWidth;
         
         const zoomFactor = 1.1;
+        // scroll up (e.deltaY < 0) zooms in, scroll down zooms out.
         let newDomainWidth = e.deltaY < 0 ? domainWidth / zoomFactor : domainWidth * zoomFactor;
       
         if (newDomainWidth < 10) {
@@ -351,7 +367,7 @@ export function InteractiveChart({
     };
 
     const { right } = chartContainerRef.current.getBoundingClientRect();
-    const yAxisAreaStart = right - 80;
+    const yAxisAreaStart = right - 80; // approximate axis width
 
     if (e.clientX > yAxisAreaStart && !isYAxisLocked) {
         setIsYAxisDragging(true);
@@ -375,9 +391,9 @@ export function InteractiveChart({
             const plotHeight = height - 20;
             if (plotHeight <= 0) return;
             const dy = e.clientY - dragStart.y;
-            const scaleFactor = 1 - (dy / plotHeight) * 2;
+            const scaleFactor = 1 - (dy / plotHeight) * 2; // Sensitivity factor
 
-            if (scaleFactor <= 0.01) return;
+            if (scaleFactor <= 0.01) return; // Prevent inverting or collapsing
 
             const [yStart, yEnd] = dragStart.yDomain;
             const originalWidth = yEnd - yStart;
@@ -423,7 +439,7 @@ export function InteractiveChart({
         }
     } else if (!isPlacingRR && !isPlacingPriceMarker) {
         const { right } = chartContainerRef.current.getBoundingClientRect();
-        const yAxisAreaStart = right - 80;
+        const yAxisAreaStart = right - 80; // approximate axis width
         if (e.clientX > yAxisAreaStart && !isYAxisLocked) {
             chartContainerRef.current.style.cursor = 'ns-resize';
         } else {
@@ -566,6 +582,7 @@ export function InteractiveChart({
                 left: mainXAxis.x
               };
 
+              // Store scales in ref for the main onClick handler
               chartScalesRef.current = {
                 x: mainXAxis.scale,
                 y: mainYAxis.scale,
