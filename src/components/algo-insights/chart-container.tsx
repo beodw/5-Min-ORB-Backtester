@@ -1,12 +1,13 @@
 
+
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, ChevronRight, ChevronsRight, Target, Trash2, FileUp, Lock, Unlock, Ruler, FileBarChart, Undo, Redo, GripVertical } from "lucide-react";
+import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, ChevronRight, ChevronsRight, Target, Trash2, FileUp, Lock, Unlock, Ruler, FileBarChart, Undo, Redo, GripVertical, BookOpen, ThumbsUp, ThumbsDown, FileDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InteractiveChart, type ChartClickData } from "@/components/algo-insights/interactive-chart";
 import { mockPriceData } from "@/lib/mock-data";
-import type { RiskRewardTool as RRToolType, PriceMarker, MeasurementTool as MeasurementToolType, MeasurementPoint, PriceData } from "@/types";
+import type { RiskRewardTool as RRToolType, PriceMarker, MeasurementTool as MeasurementToolType, MeasurementPoint, PriceData, JournalTrade } from "@/types";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -27,6 +28,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
 
 type TradeReportRow = {
     pair: string;
@@ -47,7 +50,11 @@ type SessionState = {
     drawingState: DrawingState;
     selectedDate: string; // Stored as ISO string
     fileName: string;
+    journalFileName: string;
+    journalTrades: JournalTrade[];
 };
+
+type DayResult = 'win' | 'loss' | 'modified';
 
 const formatDateForCsv = (date: Date | null): string => {
     if (!date) return '';
@@ -169,10 +176,10 @@ type ToolbarPositions = {
 
 // Local storage keys
 const APP_SETTINGS_KEY = 'algo-insights-settings';
-const SESSION_KEY_PREFIX = 'algo-insights-session-'; // One for backtester, one for journal
+const SESSION_KEY_PREFIX = 'algo-insights-session-'; 
 const TOOLBAR_POS_KEY = 'algo-insights-toolbar-positions';
 
-export function ChartContainer() {
+export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
   const [priceData, setPriceData] = useState<PriceData[]>(mockPriceData);
   const [isDataImported, setIsDataImported] = useState(false);
   const [fileName, setFileName] = useState('');
@@ -195,6 +202,13 @@ export function ChartContainer() {
     offsetX: number;
     offsetY: number;
   }>({ target: null, offsetX: 0, offsetY: 0 });
+
+  // Journal specific state
+  const [journalTrades, setJournalTrades] = useState<JournalTrade[]>([]);
+  const [journalFileName, setJournalFileName] = useState('');
+  const [dayResults, setDayResults] = useState<Record<string, DayResult>>({});
+  const journalFileInputRef = useRef<HTMLInputElement>(null);
+
 
   const { rrTools, priceMarkers, measurementTools } = drawingState;
 
@@ -253,11 +267,8 @@ export function ChartContainer() {
   const [showRestoreDialog, setShowRestoreDialog] = useState(false);
   const [sessionToRestore, setSessionToRestore] = useState<string | null>(null);
   
-  // This ref helps us distinguish between backtester and journal instances
-  const instanceId = useRef(Math.random().toString(36).substring(7)).current;
-  const sessionKey = `${SESSION_KEY_PREFIX}${instanceId}`;
+  const sessionKey = `${SESSION_KEY_PREFIX}${tab}`;
 
-  // Effect for loading settings and checking for saved session on initial load
   useEffect(() => {
     const getOffsetInMinutes = (timeZone: string): number => {
         try {
@@ -299,7 +310,6 @@ export function ChartContainer() {
         setTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
     }
     
-    // Check for a saved session for this specific instance
     const savedSessionRaw = localStorage.getItem(sessionKey);
     if (savedSessionRaw) {
         try {
@@ -314,7 +324,6 @@ export function ChartContainer() {
         }
     }
     
-    // Load toolbar positions
     const savedToolbarPosRaw = localStorage.getItem(TOOLBAR_POS_KEY);
     if (savedToolbarPosRaw) {
         try {
@@ -327,16 +336,14 @@ export function ChartContainer() {
 
   }, [sessionKey]);
 
-  // Effect for saving app settings
   useEffect(() => {
     const settings = { timeZone, sessionStartTime, pipValue };
     localStorage.setItem(APP_SETTINGS_KEY, JSON.stringify(settings));
   }, [timeZone, sessionStartTime, pipValue]);
 
-  // Effect for saving session state
   useEffect(() => {
-    // Don't save if nothing to save
-    if (!isDataImported && rrTools.length === 0 && priceMarkers.length === 0 && measurementTools.length === 0) {
+    const shouldSave = isDataImported || journalTrades.length > 0 || rrTools.length > 0 || priceMarkers.length > 0 || measurementTools.length > 0;
+    if (!shouldSave) {
         return;
     }
     
@@ -348,14 +355,22 @@ export function ChartContainer() {
         })),
     };
 
+    const serializableJournalTrades = journalTrades.map(trade => ({
+        ...trade,
+        dateTaken: trade.dateTaken.toISOString(),
+        dateClosed: trade.dateClosed.toISOString(),
+    }));
+
     const sessionState: SessionState = {
         drawingState: serializableDrawingState as any,
         selectedDate: selectedDate ? selectedDate.toISOString() : new Date().toISOString(),
         fileName,
+        journalFileName,
+        journalTrades: serializableJournalTrades as any,
     };
     localStorage.setItem(sessionKey, JSON.stringify(sessionState));
 
-  }, [drawingState, selectedDate, fileName, isDataImported, sessionKey]);
+  }, [drawingState, selectedDate, fileName, isDataImported, sessionKey, journalTrades, journalFileName]);
 
   const handleRestoreSession = () => {
     setShowRestoreDialog(false);
@@ -374,15 +389,25 @@ export function ChartContainer() {
                 rrTools: restoredRrTools,
             };
 
+            const restoredJournalTrades = (savedSession.journalTrades || []).map(trade => ({
+                ...trade,
+                dateTaken: new Date(trade.dateTaken),
+                dateClosed: new Date(trade.dateClosed),
+            }));
+
             setDrawingState(restoredDrawingState);
+            setJournalTrades(restoredJournalTrades);
+            if (restoredJournalTrades.length > 0) processJournalTrades(restoredJournalTrades);
+
             setSelectedDate(new Date(savedSession.selectedDate));
             setFileName(savedSession.fileName);
+            setJournalFileName(savedSession.journalFileName || '');
             setPriceData([]);
             setIsDataImported(false);
 
             toast({
                 title: "Session Restored",
-                description: `Drawings and settings loaded. Please re-import "${savedSession.fileName}" to see the chart data.`,
+                description: `Drawings and settings loaded. Please re-import necessary files to see the chart data.`,
                 duration: 9000
             });
         } catch (e) {
@@ -400,6 +425,9 @@ export function ChartContainer() {
       setHistory([]);
       setRedoStack([]);
       setFileName('');
+      setJournalFileName('');
+      setJournalTrades([]);
+      setDayResults({});
       setIsDataImported(false);
       setPriceData(mockPriceData);
   };
@@ -454,7 +482,6 @@ export function ChartContainer() {
 
         if (!measurementStartPoint) {
             setMeasurementStartPoint(currentPoint);
-            // Also set live tool so the starting dot appears immediately
             setLiveMeasurementTool({
                 id: 'live-measure',
                 startPoint: currentPoint,
@@ -478,7 +505,6 @@ export function ChartContainer() {
         if (isPlacingMeasurement && measurementStartPoint) {
             const { price, dataIndex, candle } = chartData;
             
-            // Snapping logic for the live endpoint
             const bodyTop = Math.max(candle.open, candle.close);
             const bodyBottom = Math.min(candle.open, candle.close);
             const snappedPrice = (price >= bodyBottom && price <= bodyTop) ? candle.open : price;
@@ -571,13 +597,12 @@ export function ChartContainer() {
                 }
                 
                 const [day, month, year] = datePart.split('.').map(Number);
-                const [hour, minute] = timePart.split(':').map(Number);
-                const second = timePart.includes(':') && timePart.split(':')[2] ? Number(timePart.split(':')[2]) || 0 : 0;
+                const [hour, minute, second] = timePart.split(':').map(Number);
                 
-                if (isNaN(day) || isNaN(month) || isNaN(year) || isNaN(hour) || isNaN(minute) || isNaN(second)) {
+                if (isNaN(day) || isNaN(month) || isNaN(year) || isNaN(hour) || isNaN(minute) || isNaN(second || 0)) {
                     throw new Error(`Invalid date values on row ${index + 2}. Could not parse: '${localTime}'`);
                 }
-                const date = new Date(Date.UTC(year, month - 1, day, hour, minute, Math.floor(second)));
+                const date = new Date(Date.UTC(year, month - 1, day, hour, minute, Math.floor(second || 0)));
                 if (isNaN(date.getTime())) throw new Error(`Invalid date on row ${index + 2}. Parsed to an invalid Date object from: '${localTime}'`);
 
                 const open = parseFloat(openStr);
@@ -597,7 +622,7 @@ export function ChartContainer() {
                 const processedData = fillGapsInData(parsedData);
                 setPriceData(processedData);
                 setIsDataImported(true);
-                // On first import, pan to end. On re-import for session restore, selectedDate is already set.
+
                 const savedSession = localStorage.getItem(sessionKey);
                 if (!savedSession) {
                     setSelectedDate(processedData[processedData.length - 1].date);
@@ -617,74 +642,33 @@ export function ChartContainer() {
     };
 
     reader.onerror = () => {
-        toast({
-            variant: "destructive",
-            title: "File Read Error",
-            description: "An error occurred while reading the file.",
-        });
+        toast({ variant: "destructive", title: "File Read Error", description: "An error occurred while reading the file." });
         setIsDataImported(false);
     };
 
     reader.readAsText(file);
-    if(fileInputRef.current) {
-        fileInputRef.current.value = "";
-    }
+    if(fileInputRef.current) fileInputRef.current.value = "";
   };
 
 
   const handleExportCsv = () => {
     if (rrTools.length === 0 || !isDataImported) {
-        toast({
-          variant: "destructive",
-          title: "Cannot Export",
-          description: "Please import data and place at least one trade tool to generate a report.",
-        });
+        toast({ variant: "destructive", title: "Cannot Export", description: "Please import data and place at least one trade tool to generate a report." });
         return;
     }
-
-    const headers = [
-        "Pair", 
-        "Date Taken", 
-        "Date Closed", 
-        "Max R", 
-        "Stop Loss In Pips",
-        "Max R Timestamp"
-    ].join(',');
-
+    const headers = ["Pair", "Date Taken", "Date Closed", "Max R", "Stop Loss In Pips", "Max R Timestamp"].join(',');
     const sortedTools = [...rrTools].sort((a, b) => a.entryDate.getTime() - b.entryDate.getTime());
-
     const rows = sortedTools.map(tool => {
         const reportRow = simulateTrade(tool, priceData, pipValue);
         if (!reportRow) return null;
-
         const pair = fileName ? fileName.split('-')[0].trim() : 'N/A';
         reportRow.pair = pair;
-
-        const sanitize = (val: any) => {
-            const str = String(val);
-            if (str.includes(',')) return `"${str}"`;
-            return str;
-        };
-
-        const rowData = [
-            reportRow.pair,
-            reportRow.dateTaken,
-            reportRow.dateClosed,
-            reportRow.maxR,
-            reportRow.stopLossPips,
-            reportRow.maxRTaken
-        ];
-        
-        return rowData.map(sanitize).join(',');
-
+        const sanitize = (val: any) => `"${String(val).replace(/"/g, '""')}"`;
+        return [reportRow.pair, reportRow.dateTaken, reportRow.dateClosed, reportRow.maxR, reportRow.stopLossPips, reportRow.maxRTaken].map(sanitize).join(',');
     }).filter(row => row !== null).join('\n');
-
     const csvContent = `${headers}\n${rows}`;
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
-    if (link.href) {
-      URL.revokeObjectURL(link.href);
-    }
     const url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
     link.setAttribute("download", "strategy_report.csv");
@@ -727,46 +711,323 @@ export function ChartContainer() {
   };
 
   const handleMouseDownOnToolbar = (e: React.MouseEvent, target: 'main' | 'secondary') => {
-    // Only drag with left mouse button
     if (e.button !== 0) return;
-    
     const targetElement = e.currentTarget as HTMLDivElement;
     const rect = targetElement.getBoundingClientRect();
-    
-    dragInfo.current = {
-      target,
-      offsetX: e.clientX - rect.left,
-      offsetY: e.clientY - rect.top,
-    };
-    
+    dragInfo.current = { target, offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top };
     window.addEventListener('mousemove', handleToolbarMouseMove);
     window.addEventListener('mouseup', handleToolbarMouseUp);
   };
 
   const handleToolbarMouseMove = (e: MouseEvent) => {
     if (!dragInfo.current.target) return;
-    
     const { target, offsetX, offsetY } = dragInfo.current;
-    
-    setToolbarPositions(prev => ({
-      ...prev,
-      [target]: {
-        x: e.clientX - offsetX,
-        y: e.clientY - offsetY
-      }
-    }));
+    setToolbarPositions(prev => ({ ...prev, [target]: { x: e.clientX - offsetX, y: e.clientY - offsetY } }));
   };
 
   const handleToolbarMouseUp = () => {
-    if (dragInfo.current.target) {
-        localStorage.setItem(TOOLBAR_POS_KEY, JSON.stringify(toolbarPositions));
-    }
+    if (dragInfo.current.target) localStorage.setItem(TOOLBAR_POS_KEY, JSON.stringify(toolbarPositions));
     dragInfo.current.target = null;
     window.removeEventListener('mousemove', handleToolbarMouseMove);
     window.removeEventListener('mouseup', handleToolbarMouseUp);
   };
 
+  // --- JOURNAL FUNCTIONS ---
+
+  const handleImportJournalClick = () => {
+    journalFileInputRef.current?.click();
+  };
+
+  const parseDateFromJournal = (dateString: string): Date | null => {
+    const cleanString = dateString.trim();
+    const parts = cleanString.match(/(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2}):(\d{2})/);
+    if (!parts) return null;
+    const [, month, day, year, hour, minute, second] = parts.map(Number);
+    const date = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+    return isNaN(date.getTime()) ? null : date;
+  };
+  
+  const handleJournalFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setJournalFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const text = e.target?.result as string;
+            const lines = text.split('\n').filter(line => line.trim() !== '');
+            const headerLine = lines[0].trim().split(',');
+            const requiredHeaders = ['Pair', 'Date Taken', 'Date Closed', 'Maximum Favourable Excursion (R)'];
+            const headerIndices = requiredHeaders.reduce((acc, h) => {
+                const index = headerLine.findIndex(col => col.trim() === h);
+                if (index === -1) throw new Error(`Missing required column: ${h}`);
+                acc[h] = index;
+                return acc;
+            }, {} as Record<string, number>);
+
+            const parsedTrades: JournalTrade[] = lines.slice(1).map(row => {
+                const columns = row.split(',');
+                const dateTaken = parseDateFromJournal(columns[headerIndices['Date Taken']]);
+                const dateClosed = parseDateFromJournal(columns[headerIndices['Date Closed']]);
+                const maxR = parseFloat(columns[headerIndices['Maximum Favourable Excursion (R)']]);
+                
+                if (!dateTaken || !dateClosed || isNaN(maxR)) {
+                    console.warn("Skipping invalid row:", row);
+                    return null;
+                }
+                return {
+                    pair: columns[headerIndices['Pair']].trim(),
+                    dateTaken,
+                    dateClosed,
+                    maxR,
+                    status: 'default',
+                    originalRow: row,
+                };
+            }).filter((t): t is JournalTrade => t !== null);
+
+            setJournalTrades(parsedTrades);
+            processJournalTrades(parsedTrades);
+            toast({ title: "Journal Imported", description: `${parsedTrades.length} trades loaded.` });
+        } catch (error: any) {
+            toast({ variant: "destructive", title: "Journal Import Failed", description: error.message });
+        }
+    };
+    reader.readAsText(file);
+    if(journalFileInputRef.current) journalFileInputRef.current.value = "";
+  };
+
+  const processJournalTrades = (trades: JournalTrade[]) => {
+      const results: Record<string, DayResult> = {};
+      trades.forEach(trade => {
+          const dateKey = trade.dateTaken.toISOString().split('T')[0];
+          if (results[dateKey] === 'win') return; // If day is already a win, it stays a win
+          
+          if (trade.status === 'traded' || trade.status === 'not traded') {
+            results[dateKey] = 'modified';
+          } else {
+            results[dateKey] = trade.maxR >= 2 ? 'win' : 'loss';
+          }
+      });
+      setDayResults(results);
+  };
+  
+  useEffect(() => {
+    // Re-process when trades are updated (e.g. status change)
+    if (journalTrades.length > 0) {
+        processJournalTrades(journalTrades);
+    }
+  }, [journalTrades]);
+
+  const updateTradeStatus = (status: 'traded' | 'not traded') => {
+    if (!selectedDate) {
+        toast({ variant: "destructive", title: "No Date Selected", description: "Please select a date on the calendar first."});
+        return;
+    }
+    const selectedDateKey = selectedDate.toISOString().split('T')[0];
+    
+    let tradeUpdated = false;
+    const updatedTrades = journalTrades.map(trade => {
+        if (trade.dateTaken.toISOString().startsWith(selectedDateKey)) {
+            tradeUpdated = true;
+            return { ...trade, status };
+        }
+        return trade;
+    });
+
+    if (tradeUpdated) {
+        setJournalTrades(updatedTrades);
+        toast({ title: "Trade Status Updated", description: `Trades on ${selectedDateKey} marked as '${status}'.` });
+    } else {
+        toast({ variant: "destructive", title: "No Trade Found", description: `No trade found on ${selectedDateKey}.` });
+    }
+  };
+  
+  const handleDownloadJournal = () => {
+    if (journalTrades.length === 0) {
+        toast({ variant: "destructive", title: "No Journal Data", description: "Please import a journal file first." });
+        return;
+    }
+    const header = `${journalTrades[0].originalRow.trim()},Status\n`;
+    const rows = journalTrades.map(trade => {
+        const status = trade.status === 'default' ? 'traded' : trade.status;
+        return `${trade.originalRow.trim()},${status}\n`;
+    }).join('');
+
+    const csvContent = header + rows;
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.href = url;
+    link.download = `updated_${journalFileName || 'journal'}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const getDayClassName = (date: Date): string => {
+      const dateKey = date.toISOString().split('T')[0];
+      const result = dayResults[dateKey];
+      if (!result) return "";
+      
+      switch (result) {
+          case 'win': return 'bg-green-200 text-green-900 rounded-full font-bold';
+          case 'loss': return 'bg-red-200 text-red-900 rounded-full font-bold';
+          case 'modified': return 'bg-orange-200 text-orange-900 rounded-full font-bold';
+          default: return "";
+      }
+  };
+  
+  // --- END JOURNAL FUNCTIONS ---
+
   const isPlacingAnything = !!placingToolType || isPlacingPriceMarker || isPlacingMeasurement;
+
+  const journalTradesOnChart = tab === 'journal' 
+    ? journalTrades.map((t, i) => ({
+        id: `journal-${i}`,
+        entryDate: t.dateTaken,
+        entryPrice: 0, // Placeholder, will be read from priceData
+        type: t.maxR >= 2 ? 'win' : 'loss' as 'win' | 'loss'
+    })) 
+    : [];
+
+  const renderToolbar = () => (
+    <>
+       <div 
+          className="absolute z-10 flex flex-col items-start gap-2"
+          style={{ top: `${toolbarPositions.main.y}px`, left: `${toolbarPositions.main.x}px` }}
+        >
+            <div
+                className="flex items-center gap-2 bg-card/80 backdrop-blur-sm p-2 rounded-lg shadow-lg"
+            >
+              <div
+                  onMouseDown={(e) => handleMouseDownOnToolbar(e, 'main')}
+                  className="cursor-grab active:cursor-grabbing p-1 -ml-1"
+              >
+                  <GripVertical className="h-5 w-5 text-muted-foreground/50" />
+              </div>
+                <>
+                    <Select value={timeframe} onValueChange={setTimeframe}>
+                        <SelectTrigger className="w-[120px]">
+                            <SelectValue placeholder="Timeframe" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="1m">1 Minute</SelectItem>
+                            <SelectItem value="30m">30 Minutes</SelectItem>
+                            <SelectItem value="1H">1 Hour</SelectItem>
+                            <SelectItem value="4H">4 Hours</SelectItem>
+                            <SelectItem value="1D">1 Day</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    
+                    <div className="h-6 border-l border-border/50"></div>
+                
+                    <TooltipProvider>
+                        <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button variant="ghost" size="icon" onClick={handleImportClick}>
+                            <FileUp className={cn("h-5 w-5", isDataImported ? "text-chart-3" : "text-muted-foreground")} />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent><p>{isDataImported ? "Price Data Loaded" : "Import Dukascopy CSV"}</p></TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".csv" className="hidden" />
+
+                    {tab === 'backtester' ? (
+                         <Button variant="ghost" onClick={handleExportCsv} disabled={rrTools.length === 0 || !isDataImported} className="text-foreground">
+                            <Download className="mr-2 h-4 w-4" />
+                            Download Report
+                        </Button>
+                    ) : (
+                        <>
+                            <TooltipProvider>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button variant="ghost" size="icon" onClick={handleImportJournalClick}>
+                                            <BookOpen className={cn("h-5 w-5", journalTrades.length > 0 ? "text-chart-2" : "text-muted-foreground")} />
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent><p>Import Journal CSV</p></TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
+                            <input type="file" ref={journalFileInputRef} onChange={handleJournalFileChange} accept=".csv" className="hidden" />
+                        </>
+                    )}
+                </>
+            </div>
+            {fileName && (
+                <div className="bg-card/70 backdrop-blur-sm rounded-md px-2 py-1 shadow-md ml-8">
+                    <p className="text-xs text-muted-foreground/80">Price Data: <span className="font-medium text-foreground/90">{fileName}</span></p>
+                </div>
+            )}
+            {tab === 'journal' && journalFileName && (
+                 <div className="bg-card/70 backdrop-blur-sm rounded-md px-2 py-1 shadow-md ml-8">
+                    <p className="text-xs text-muted-foreground/80">Journal: <span className="font-medium text-foreground/90">{journalFileName}</span></p>
+                </div>
+            )}
+        </div>
+        <div
+            className="absolute z-10"
+            style={{ top: `${toolbarPositions.secondary.y}px`, left: `${toolbarPositions.secondary.x}px` }}
+        >
+            <div className="flex items-center gap-2 bg-card/80 backdrop-blur-sm p-2 rounded-lg shadow-lg">
+                <div onMouseDown={(e) => handleMouseDownOnToolbar(e, 'secondary')} className="cursor-grab active:cursor-grabbing p-1 -ml-1">
+                    <GripVertical className="h-5 w-5 text-muted-foreground/50" />
+                </div>
+                {tab === 'backtester' ? (
+                <TooltipProvider>
+                    <div className="flex justify-center gap-1">
+                        <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceLong} disabled={isPlacingAnything || !isDataImported}><ArrowUp className="w-5 h-5 text-accent"/></Button></TooltipTrigger><TooltipContent><p>Place Long Position</p></TooltipContent></Tooltip>
+                        <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceShort} disabled={isPlacingAnything || !isDataImported}><ArrowDown className="w-5 h-5 text-destructive"/></Button></TooltipTrigger><TooltipContent><p>Place Short Position</p></TooltipContent></Tooltip>
+                    </div>
+                </TooltipProvider>
+                ) : (
+                    <div className="h-8"></div> // Placeholder to keep height consistent
+                )}
+                
+                <div className="h-6 border-l border-border/50"></div>
+
+                <TooltipProvider>
+                    <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceMarker} disabled={isPlacingAnything || !isDataImported}><Target className="w-5 h-5 text-foreground"/></Button></TooltipTrigger><TooltipContent><p>Place Price Marker</p></TooltipContent></Tooltip>
+                    <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => setIsYAxisLocked(prev => !prev)}>{isYAxisLocked ? <Lock className="h-5 w-5" /> : <Unlock className="h-5 w-5" />}</Button></TooltipTrigger><TooltipContent><p>{isYAxisLocked ? "Unlock Y-Axis" : "Lock Y-Axis"}</p></TooltipContent></Tooltip>
+                    <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceMeasurement} disabled={isPlacingAnything || !isDataImported}><Ruler className="w-5 h-5 text-foreground"/></Button></TooltipTrigger><TooltipContent><p>Measure Distance</p></TooltipContent></Tooltip>
+                </TooltipProvider>
+
+                {tab === 'journal' && (
+                  <>
+                    <div className="h-6 border-l border-border/50"></div>
+                    <TooltipProvider>
+                       <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => updateTradeStatus('traded')} disabled={!selectedDate || journalTrades.length === 0}><ThumbsUp className="w-5 h-5 text-accent"/></Button></TooltipTrigger><TooltipContent><p>Mark Day as Traded</p></TooltipContent></Tooltip>
+                       <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => updateTradeStatus('not traded')} disabled={!selectedDate || journalTrades.length === 0}><ThumbsDown className="w-5 h-5 text-destructive"/></Button></TooltipTrigger><TooltipContent><p>Mark Day as Not Traded</p></TooltipContent></Tooltip>
+                       <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handleDownloadJournal} disabled={journalTrades.length === 0}><FileDown className="w-5 h-5 text-foreground"/></Button></TooltipTrigger><TooltipContent><p>Download Updated Journal</p></TooltipContent></Tooltip>
+                    </TooltipProvider>
+                  </>
+                )}
+
+                 <AlertDialog>
+                    <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <div className={cn((rrTools.length === 0 && priceMarkers.length === 0 && measurementTools.length === 0) && "pointer-events-none")}>
+                                    <AlertDialogTrigger asChild>
+                                        <Button variant="destructive" size="icon" disabled={rrTools.length === 0 && priceMarkers.length === 0 && measurementTools.length === 0}><Trash2 className="h-5 w-5" /></Button>
+                                    </AlertDialogTrigger>
+                                </div>
+                            </TooltipTrigger>
+                            <TooltipContent><p>Clear all drawings</p></TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                    <AlertDialogContent>
+                        <AlertDialogHeader><AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle><AlertDialogDescription>This action cannot be undone. This will permanently delete all placed tools and markers from the chart.</AlertDialogDescription></AlertDialogHeader>
+                        <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleClearAllDrawings}>Continue</AlertDialogAction></AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            </div>
+        </div>
+    </>
+  );
 
   return (
     <div className="w-full h-full relative">
@@ -775,9 +1036,8 @@ export function ChartContainer() {
                 <AlertDialogHeader>
                     <AlertDialogTitle>Restore Previous Session?</AlertDialogTitle>
                     <AlertDialogDescription>
-                        We found saved drawings and settings for the file: <strong>{sessionToRestore}</strong>.
-                        <br />
-                        Would you like to restore this session? You will be prompted to re-import the file.
+                        We found a saved session for <strong>{tab}</strong>.
+                        Would you like to restore this session? You may need to re-import your data files.
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -790,13 +1050,13 @@ export function ChartContainer() {
         <div className="absolute inset-0">
             <InteractiveChart
                 data={priceData}
-                trades={[]}
+                trades={journalTradesOnChart}
                 onChartClick={handleChartClick}
                 onChartMouseMove={handleChartMouseMove}
                 rrTools={rrTools}
                 onUpdateTool={handleUpdateTool}
                 onRemoveTool={handleRemoveTool}
-                isPlacingRR={!!placingToolType}
+                isPlacingRR={tab === 'backtester' && !!placingToolType}
                 isPlacingPriceMarker={isPlacingPriceMarker}
                 priceMarkers={priceMarkers}
                 onRemovePriceMarker={handleRemovePriceMarker}
@@ -835,6 +1095,16 @@ export function ChartContainer() {
                         selected={selectedDate}
                         onSelect={setSelectedDate}
                         initialFocus
+                        modifiers={{ 
+                            win: (date) => dayResults[date.toISOString().split('T')[0]] === 'win',
+                            loss: (date) => dayResults[date.toISOString().split('T')[0]] === 'loss',
+                            modified: (date) => dayResults[date.toISOString().split('T')[0]] === 'modified',
+                        }}
+                        modifiersClassNames={{
+                            win: 'bg-accent/50 text-accent-foreground rounded-full',
+                            loss: 'bg-destructive/50 text-destructive-foreground rounded-full',
+                            modified: 'bg-orange-400/50 text-orange-900 rounded-full',
+                        }}
                     />
                 </PopoverContent>
             </Popover>
@@ -848,236 +1118,60 @@ export function ChartContainer() {
                     <div className="grid gap-4">
                         <div className="space-y-2">
                             <h4 className="font-medium leading-none">Settings</h4>
-                            <p className="text-sm text-muted-foreground">
-                                Adjust chart display options.
-                            </p>
+                            <p className="text-sm text-muted-foreground">Adjust chart display options.</p>
                         </div>
                         <div className="grid gap-2">
                             <Label htmlFor="timezone">Timezone</Label>
                             <Select value={timeZone} onValueChange={setTimeZone} disabled={!timezones.length}>
-                                <SelectTrigger id="timezone" className="w-full">
-                                    <SelectValue placeholder="Select timezone" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <ScrollArea className="h-72">
-                                    {timezones.map(tz => (
-                                        <SelectItem key={tz.value} value={tz.value}>{tz.label}</SelectItem>
-                                    ))}
-                                  </ScrollArea>
-                                </SelectContent>
+                                <SelectTrigger id="timezone" className="w-full"><SelectValue placeholder="Select timezone" /></SelectTrigger>
+                                <SelectContent><ScrollArea className="h-72">{timezones.map(tz => (<SelectItem key={tz.value} value={tz.value}>{tz.label}</SelectItem>))}</ScrollArea></SelectContent>
                             </Select>
                         </div>
                         <div className="grid gap-2">
                             <Label htmlFor="session-start">Session Start Time (UTC)</Label>
-                            <Input
-                                id="session-start"
-                                type="time"
-                                value={sessionStartTime}
-                                onChange={(e) => setSessionStartTime(e.target.value)}
-                            />
+                            <Input id="session-start" type="time" value={sessionStartTime} onChange={(e) => setSessionStartTime(e.target.value)} />
                         </div>
                         <div className="grid gap-2">
                             <Label htmlFor="pip-value">Pip / Point Value</Label>
-                            <Input
-                                id="pip-value"
-                                type="number"
-                                step="0.0001"
-                                value={pipValue}
-                                onChange={(e) => setPipValue(parseFloat(e.target.value) || 0)}
-                            />
+                            <Input id="pip-value" type="number" step="0.0001" value={pipValue} onChange={(e) => setPipValue(parseFloat(e.target.value) || 0)} />
                         </div>
                     </div>
                 </PopoverContent>
             </Popover>
         </div>
-
-        <div 
-          className="absolute z-10 flex flex-col items-start gap-2"
-          style={{ top: `${toolbarPositions.main.y}px`, left: `${toolbarPositions.main.x}px` }}
-        >
-            <div
-                className="flex items-center gap-2 bg-card/80 backdrop-blur-sm p-2 rounded-lg shadow-lg"
-            >
-              <div
-                  onMouseDown={(e) => handleMouseDownOnToolbar(e, 'main')}
-                  className="cursor-grab active:cursor-grabbing p-1 -ml-1"
-              >
-                  <GripVertical className="h-5 w-5 text-muted-foreground/50" />
-              </div>
-                <>
-                    <Select value={timeframe} onValueChange={setTimeframe}>
-                        <SelectTrigger className="w-[120px]">
-                            <SelectValue placeholder="Timeframe" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="1m">1 Minute</SelectItem>
-                            <SelectItem value="30m">30 Minutes</SelectItem>
-                            <SelectItem value="1H">1 Hour</SelectItem>
-                            <SelectItem value="4H">4 Hours</SelectItem>
-                            <SelectItem value="1D">1 Day</SelectItem>
-                        </SelectContent>
-                    </Select>
-                    
-                    <div className="h-6 border-l border-border/50"></div>
-                
-                    <TooltipProvider>
-                        <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={handleImportClick}
-                          >
-                            <FileUp className={cn(
-                              "h-5 w-5",
-                              isDataImported ? "text-chart-3" : "text-muted-foreground"
-                            )} />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>{isDataImported ? "CSV Data Loaded" : "Import Dukascopy CSV"}</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                    
-                    <input
-                      type="file"
-                      ref={fileInputRef}
-                      onChange={handleFileChange}
-                      accept=".csv"
-                      className="hidden"
-                    />
-
-                    <Button
-                        variant="ghost" 
-                        onClick={handleExportCsv} 
-                        disabled={rrTools.length === 0 || !isDataImported}
-                        className="text-foreground"
-                    >
-                        <Download className="mr-2 h-4 w-4" />
-                        Download Report
-                    </Button>
-                </>
-            </div>
-            
-            {fileName && (
-                <div className="bg-card/70 backdrop-blur-sm rounded-md px-2 py-1 shadow-md ml-8">
-                    <p className="text-xs text-muted-foreground/80">
-                        Loaded: <span className="font-medium text-foreground/90">{fileName}</span>
-                    </p>
-                </div>
-            )}
-        </div>
-        <div
-            className="absolute z-10"
-            style={{ top: `${toolbarPositions.secondary.y}px`, left: `${toolbarPositions.secondary.x}px` }}
-        >
-            <div className="flex items-center gap-2 bg-card/80 backdrop-blur-sm p-2 rounded-lg shadow-lg">
-                <div
-                    onMouseDown={(e) => handleMouseDownOnToolbar(e, 'secondary')}
-                    className="cursor-grab active:cursor-grabbing p-1 -ml-1"
-                >
-                    <GripVertical className="h-5 w-5 text-muted-foreground/50" />
-                </div>
-                <TooltipProvider>
-                    <div className="flex justify-center gap-1">
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" onClick={handlePlaceLong} disabled={isPlacingAnything || priceData.length === 0}>
-                                    <ArrowUp className="w-5 h-5 text-accent"/>
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <p>Place Long Position</p>
-                            </TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" onClick={handlePlaceShort} disabled={isPlacingAnything || priceData.length === 0}>
-                                    <ArrowDown className="w-5 h-5 text-destructive"/>
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <p>Place Short Position</p>
-                            </TooltipContent>
-                        </Tooltip>
-                    </div>
-                </TooltipProvider>
-
-                <div className="h-6 border-l border-border/50"></div>
-
-                <TooltipProvider>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={handlePlaceMarker} disabled={isPlacingAnything || priceData.length === 0}>
-                                <Target className="w-5 h-5 text-foreground"/>
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                            <p>Place Price Marker</p>
-                        </TooltipContent>
-                    </Tooltip>
-                </TooltipProvider>
-                <TooltipProvider>
-                  <Tooltip>
-                      <TooltipTrigger asChild>
-                          <Button variant="ghost" size="icon" onClick={() => setIsYAxisLocked(prev => !prev)}>
-                              {isYAxisLocked ? <Lock className="h-5 w-5" /> : <Unlock className="h-5 w-5" />}
-                          </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                          <p>{isYAxisLocked ? "Unlock Y-Axis" : "Lock Y-Axis"}</p>
-                      </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-                <TooltipProvider>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={handlePlaceMeasurement} disabled={isPlacingAnything || priceData.length === 0}>
-                                <Ruler className="w-5 h-5 text-foreground"/>
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                            <p>Measure Distance</p>
-                        </TooltipContent>
-                    </Tooltip>
-                </TooltipProvider>
-                 <AlertDialog>
-                    <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <div // Wrapping button in div to prevent Tooltip error with AlertDialogTrigger
-                                    className={cn(
-                                        (rrTools.length === 0 && priceMarkers.length === 0 && measurementTools.length === 0) && "pointer-events-none"
-                                    )}
-                                >
-                                    <AlertDialogTrigger asChild>
-                                        <Button variant="destructive" size="icon" disabled={rrTools.length === 0 && priceMarkers.length === 0 && measurementTools.length === 0}>
-                                            <Trash2 className="h-5 w-5" />
-                                        </Button>
-                                    </AlertDialogTrigger>
-                                </div>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <p>Clear all drawings</p>
-                            </TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
-                    <AlertDialogContent>
-                        <AlertDialogHeader>
-                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            This action cannot be undone. This will permanently delete all placed tools and markers from the chart.
-                        </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleClearAllDrawings}>Continue</AlertDialogAction>
-                        </AlertDialogFooter>
-                    </AlertDialogContent>
-                </AlertDialog>
-            </div>
-        </div>
+        
+        {renderToolbar()}
     </div>
   );
+}
+
+export default function AlgoInsightsPage() {
+    return (
+        <div className="flex flex-col h-screen bg-background text-foreground font-body">
+            <header className="flex items-center justify-between p-4 border-b border-border shadow-md">
+                <div className="flex items-center gap-4">
+                    <FileBarChart className="w-8 h-8 text-foreground" />
+                    <h1 className="text-2xl font-bold font-headline text-foreground">
+                        Algo Insights
+                    </h1>
+                </div>
+            </header>
+            <main className="flex-1 relative overflow-hidden">
+                <Tabs defaultValue="backtester" className="w-full h-full">
+                    <div className="flex justify-center pt-2">
+                        <TabsList>
+                            <TabsTrigger value="backtester">Backtester</TabsTrigger>
+                            <TabsTrigger value="journal">Journal Reconstruction</TabsTrigger>
+                        </TabsList>
+                    </div>
+                    <TabsContent value="backtester" className="w-full h-full pt-2">
+                        <ChartContainer tab="backtester" />
+                    </TabsContent>
+                    <TabsContent value="journal" className="w-full h-full pt-2">
+                        <ChartContainer tab="journal" />
+                    </TabsContent>
+                </Tabs>
+            </main>
+        </div>
+    )
 }

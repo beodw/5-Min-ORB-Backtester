@@ -49,3 +49,12 @@ export interface MeasurementTool {
   startPoint: MeasurementPoint;
   endPoint: MeasurementPoint;
 }
+
+export interface JournalTrade {
+  pair: string;
+  dateTaken: Date;
+  dateClosed: Date;
+  maxR: number;
+  status: 'traded' | 'not traded' | 'default';
+  originalRow: string; // To preserve the original CSV row data
+}
