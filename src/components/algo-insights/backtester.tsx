@@ -127,6 +127,40 @@ const simulateTrade = (
 };
 
 
+const parseDate = (dateStr: string, timeStr: string): Date | null => {
+    const timeParts = timeStr.split(':').map(Number);
+    if (timeParts.length !== 3) return null;
+
+    // Try MM/DD/YYYY
+    let dateParts = dateStr.split('/').map(Number);
+    if (dateParts.length === 3) {
+        const [month, day, year] = dateParts;
+        if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
+            return new Date(Date.UTC(year, month - 1, day, timeParts[0], timeParts[1], timeParts[2]));
+        }
+    }
+
+    // Try DD.MM.YYYY
+    dateParts = dateStr.split('.').map(Number);
+    if (dateParts.length === 3) {
+        const [day, month, year] = dateParts;
+        if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
+            return new Date(Date.UTC(year, month - 1, day, timeParts[0], timeParts[1], timeParts[2]));
+        }
+    }
+    
+    // Try YYYY-MM-DD
+    dateParts = dateStr.split('-').map(Number);
+    if (dateParts.length === 3) {
+        const [year, month, day] = dateParts;
+         if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
+            return new Date(Date.UTC(year, month - 1, day, timeParts[0], timeParts[1], timeParts[2]));
+        }
+    }
+    
+    return null;
+}
+
 const fillGapsInData = (data: Omit<PriceData, 'index'>[]): PriceData[] => {
     if (data.length < 2) {
         return data.map((d, i) => ({...d, index: i}));
@@ -543,6 +577,12 @@ export function Backtester() {
             const text = e.target?.result as string;
             const lines = text.split('\n').filter(line => line.trim() !== '');
 
+            toast({
+                title: "Debug: 1/4",
+                description: `File read, ${lines.length} lines found.`,
+                duration: 9000,
+            });
+
             // Check headers
             const header = lines[0].trim().split(',');
             if (header[0].trim() !== 'Time (UTC)' || header[1].trim() !== 'Open') {
@@ -551,9 +591,59 @@ export function Backtester() {
             if (lines.length <= 1) {
                 throw new Error("CSV file contains no data rows.");
             }
-            
+
             toast({
-                title: "Debug: Step 1/X Complete",
+                title: "Debug: 2/4",
+                description: `Header validated.`,
+                duration: 9000,
+            });
+            
+            const dataRows = lines.slice(1);
+
+             toast({
+                title: "Debug: 3/4",
+                description: `Processing ${dataRows.length} rows.`,
+                duration: 9000,
+            });
+
+            const parsedData = dataRows.map((row, index) => {
+                const columns = row.split(',');
+                const [datePart, timePart] = columns[0].split(' ');
+                
+                const date = parseDate(datePart, timePart);
+
+                if (!date) {
+                    throw new Error(`Invalid date format in row ${index + 2}: ${columns[0]}`);
+                }
+
+                const open = parseFloat(columns[1]);
+                const high = parseFloat(columns[2]);
+                const low = parseFloat(columns[3]);
+                const close = parseFloat(columns[4]);
+                
+                return { date, open, high, low, close, wick: [low, high] as [number, number] };
+            }).filter(item => item !== null);
+
+            toast({
+                title: "Debug: 4/4",
+                description: "Row parsing complete. Now filling gaps...",
+                duration: 9000,
+            });
+            
+            const filledData = fillGapsInData(parsedData);
+            setPriceData(filledData);
+            setDrawingState({ rrTools: [], priceMarkers: [], measurementTools: [] });
+            setHistory([]);
+            setRedoStack([]);
+            setIsDataImported(true);
+            setSessionInfo({ fileName: file.name });
+            if (filledData.length > 0) {
+              const lastDate = filledData[filledData.length - 1].date;
+              setSelectedDate(lastDate);
+            }
+
+            toast({
+                title: "Step 1 Complete",
                 description: `Successfully parsed ${file.name} in Backtester.`,
                 duration: 9000,
             });
@@ -1183,3 +1273,5 @@ export function Backtester() {
     </div>
   );
 }
+
+    

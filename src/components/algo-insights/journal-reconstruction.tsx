@@ -7,7 +7,7 @@ import { Calendar, type CalendarProps } from "@/components/ui/calendar";
 import { InteractiveChart, type ChartClickData } from "@/components/algo-insights/interactive-chart";
 import { mockPriceData } from "@/lib/mock-data";
 import { useToast } from "@/hooks/use-toast";
-import type { PriceData, PriceMarker, RiskRewardTool as RRToolType, MeasurementTool as MeasurementToolType, DrawingState, MeasurementPoint } from "@/types";
+import type { PriceData, PriceMarker, RiskRewardTool as RRToolType, MeasurementTool as MeasurementToolType, DrawingState, MeasurementPoint, JournalToolbarPositions as JournalToolbarPositionsType } from "@/types";
 import { FileUp, Info, ArrowUp, ArrowDown, Settings, ChevronsRight, Target, Trash2, Lock, Unlock, Ruler, Undo, Redo, GripVertical, ChevronLeft, ChevronRight, RotateCcw, CheckCircle, XCircle, FileX2, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -41,11 +41,7 @@ type SessionInfo = {
     journalFileName: string | null;
 };
 
-type JournalToolbarPositions = {
-    main: { x: number; y: number };
-    secondary: { x: number; y: number };
-    controls: { x: number; y: number };
-};
+type JournalToolbarPositions = JournalToolbarPositionsType;
 
 type SessionState = {
     drawingState: DrawingState;
@@ -54,6 +50,40 @@ type SessionState = {
     journalTrades: JournalTrade[];
     sessionInfo: SessionInfo;
 };
+
+const parseDate = (dateStr: string, timeStr: string): Date | null => {
+    const timeParts = timeStr.split(':').map(Number);
+    if (timeParts.length !== 3) return null;
+
+    // Try MM/DD/YYYY
+    let dateParts = dateStr.split('/').map(Number);
+    if (dateParts.length === 3) {
+        const [month, day, year] = dateParts;
+        if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
+            return new Date(Date.UTC(year, month - 1, day, timeParts[0], timeParts[1], timeParts[2]));
+        }
+    }
+
+    // Try DD.MM.YYYY
+    dateParts = dateStr.split('.').map(Number);
+    if (dateParts.length === 3) {
+        const [day, month, year] = dateParts;
+        if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
+            return new Date(Date.UTC(year, month - 1, day, timeParts[0], timeParts[1], timeParts[2]));
+        }
+    }
+    
+    // Try YYYY-MM-DD
+    dateParts = dateStr.split('-').map(Number);
+    if (dateParts.length === 3) {
+        const [year, month, day] = dateParts;
+         if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
+            return new Date(Date.UTC(year, month - 1, day, timeParts[0], timeParts[1], timeParts[2]));
+        }
+    }
+    
+    return null;
+}
 
 
 const fillGapsInData = (data: Omit<PriceData, 'index'>[]): PriceData[] => {
@@ -317,14 +347,67 @@ export function JournalReconstruction() {
         try {
             const text = e.target?.result as string;
             const lines = text.split('\n').filter(line => line.trim() !== '');
+
+            toast({
+                title: "Debug: 1/4",
+                description: `File read, ${lines.length} lines found.`,
+                duration: 9000,
+            });
+
             const header = lines[0].trim().split(',');
             if (header[0].trim() !== 'Time (UTC)' || header[1].trim() !== 'Open') {
                 throw new Error("Invalid CSV header. Expected 'Time (UTC),Open,...'");
             }
             if (lines.length <= 1) throw new Error("CSV file contains no data rows.");
             
+            toast({
+                title: "Debug: 2/4",
+                description: `Header validated.`,
+                duration: 9000,
+            });
+
+            const dataRows = lines.slice(1);
+
+            toast({
+                title: "Debug: 3/4",
+                description: `Processing ${dataRows.length} rows.`,
+                duration: 9000,
+            });
+            
+            const parsedData = dataRows.map((row, index) => {
+                const columns = row.split(',');
+                const [datePart, timePart] = columns[0].split(' ');
+                
+                const date = parseDate(datePart, timePart);
+                if (!date) {
+                    throw new Error(`Invalid date format in row ${index + 2}: ${columns[0]}`);
+                }
+
+                const open = parseFloat(columns[1]);
+                const high = parseFloat(columns[2]);
+                const low = parseFloat(columns[3]);
+                const close = parseFloat(columns[4]);
+                
+                return { date, open, high, low, close, wick: [low, high] as [number, number] };
+            }).filter(item => item !== null);
+
+            toast({
+                title: "Debug: 4/4",
+                description: "Row parsing complete. Now filling gaps...",
+                duration: 9000,
+            });
+
+            const filledData = fillGapsInData(parsedData);
+            setPriceData(filledData);
+            setIsPriceDataImported(true);
+            setSessionInfo(prev => ({ ...prev, priceDataFileName: file.name }));
+            if (!selectedDate && filledData.length > 0) {
+              const lastDate = filledData[filledData.length - 1].date;
+              setSelectedDate(lastDate);
+            }
+            
             toast({ 
-                title: "Debug: Step 1/X Complete",
+                title: "Step 1 Complete",
                 description: `Successfully parsed ${file.name} in Journal Reconstruction.`,
                 duration: 9000,
             });
@@ -808,7 +891,6 @@ export function JournalReconstruction() {
 
         <div className="absolute inset-0">
             <InteractiveChart
-                {...chartEventHandlers}
                 data={priceData}
                 trades={[]}
                 rrTools={rrTools}
@@ -827,6 +909,8 @@ export function JournalReconstruction() {
                 timeZone="UTC"
                 endDate={selectedDate}
                 isYAxisLocked={isYAxisLocked}
+                onChartClick={handleChartClick}
+                onChartMouseMove={handleChartMouseMove}
             />
             {!isPriceDataImported && !sessionInfo.priceDataFileName && (
                 <div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center">
@@ -982,7 +1066,7 @@ export function JournalReconstruction() {
             </div>
         </div>
 
-        {toolbarPositions.controls && <div
+        <div
             className="absolute z-10"
             style={{ top: `${toolbarPositions.controls.y}px`, left: `${toolbarPositions.controls.x}px` }}
         >
@@ -1086,8 +1170,10 @@ export function JournalReconstruction() {
                     </div>
                 </CardContent>
             </Card>
-        </div>}
+        </div>
 
     </div>
   );
 }
+
+    
