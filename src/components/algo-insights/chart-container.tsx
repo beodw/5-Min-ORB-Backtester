@@ -864,18 +864,14 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
       trades.forEach(trade => {
           const dateKey = trade.dateTaken.toISOString().split('T')[0];
           
-          // If a day is already marked as modified, it stays modified.
-          if (results[dateKey] === 'modified') {
-              return;
-          }
-
-          if (trade.status !== 'default') {
+          if (trade.status !== 'default' || trade.outcome) {
               results[dateKey] = 'modified';
               return;
           }
 
           const currentDayStatus = results[dateKey];
-          // A single win makes the day a win, unless it's later modified.
+          if (results[dateKey] === 'modified') return;
+          
           if (trade.maxR >= 2) {
              results[dateKey] = 'win';
           } else if (currentDayStatus !== 'win') {
@@ -904,7 +900,6 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     let tradeUpdated = false;
     const updatedAllTrades = allJournalTrades.map(trade => {
         const tradeDateKey = trade.dateTaken.toISOString().split('T')[0];
-        // We update the status on the main list of all trades
         if (tradeDateKey === selectedDateKey && trade.pair === selectedPair) {
             tradeUpdated = true;
             return { ...trade, status };
@@ -915,6 +910,31 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     if (tradeUpdated) {
         setAllJournalTrades(updatedAllTrades);
         toast({ title: "Trade Status Updated", description: `Trades on ${selectedDateKey} for ${selectedPair} marked as '${status}'.` });
+    } else {
+        toast({ variant: "destructive", title: "No Trade Found", description: `No trade found on ${selectedDateKey} for ${selectedPair}.` });
+    }
+  };
+
+  const updateTradeOutcome = (outcome: 'Win' | 'Loss') => {
+    if (!selectedDate) {
+        toast({ variant: "destructive", title: "No Date Selected", description: "Please select a date on the calendar first." });
+        return;
+    }
+    const selectedDateKey = selectedDate.toISOString().split('T')[0];
+
+    let tradeUpdated = false;
+    const updatedAllTrades = allJournalTrades.map(trade => {
+        const tradeDateKey = trade.dateTaken.toISOString().split('T')[0];
+        if (tradeDateKey === selectedDateKey && trade.pair === selectedPair) {
+            tradeUpdated = true;
+            return { ...trade, outcome };
+        }
+        return trade;
+    });
+
+    if (tradeUpdated) {
+        setAllJournalTrades(updatedAllTrades);
+        toast({ title: "Trade Outcome Updated", description: `Trades on ${selectedDateKey} for ${selectedPair} marked as '${outcome}'.` });
     } else {
         toast({ variant: "destructive", title: "No Trade Found", description: `No trade found on ${selectedDateKey} for ${selectedPair}.` });
     }
@@ -932,12 +952,13 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         return;
     }
 
-    const header = `${headerLine},Status\n`;
+    const header = `${headerLine},Status,Trade Outcome\n`;
     
     const rows = allJournalTrades.map(trade => {
         const status = trade.status === 'default' ? 'traded' : trade.status;
-        // Trim to remove potential trailing \r from original row
-        return `${trade.originalRow.trim()},${status}\n`;
+        const outcome = trade.outcome ? trade.outcome : (trade.maxR >= 2 ? 'Win' : 'Loss');
+        const originalRow = trade.originalRow.trim().endsWith(',') ? trade.originalRow.trim().slice(0, -1) : trade.originalRow.trim();
+        return `${originalRow},${status},${outcome}\n`;
     }).join('');
 
     const csvContent = header + rows;
@@ -1085,6 +1106,11 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
 
                 {tab === 'journal' && (
                   <>
+                    <div className="h-6 border-l border-border/50"></div>
+                    <TooltipProvider>
+                        <Tooltip><TooltipTrigger asChild><Button variant="ghost" onClick={() => updateTradeOutcome('Win')} disabled={!selectedDate || journalTrades.length === 0} className="text-accent">Win</Button></TooltipTrigger><TooltipContent><p>Mark Day as Win</p></TooltipContent></Tooltip>
+                        <Tooltip><TooltipTrigger asChild><Button variant="ghost" onClick={() => updateTradeOutcome('Loss')} disabled={!selectedDate || journalTrades.length === 0} className="text-destructive">Loss</Button></TooltipTrigger><TooltipContent><p>Mark Day as Loss</p></TooltipContent></Tooltip>
+                    </TooltipProvider>
                     <div className="h-6 border-l border-border/50"></div>
                     <TooltipProvider>
                        <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => updateTradeStatus('traded')} disabled={!selectedDate || journalTrades.length === 0}><ThumbsUp className="w-5 h-5 text-accent"/></Button></TooltipTrigger><TooltipContent><p>Mark Day as Traded</p></TooltipContent></Tooltip>
