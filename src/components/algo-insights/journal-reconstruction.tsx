@@ -323,34 +323,6 @@ export function JournalReconstruction() {
             }
             if (lines.length <= 1) throw new Error("CSV file contains no data rows.");
             
-            const dataRows = lines.slice(1);
-            const parsedData: Omit<PriceData, 'index'>[] = dataRows.map((row, index) => {
-                const columns = row.split(',');
-                const [timeStr, openStr, highStr, lowStr, closeStr] = columns;
-                if (!timeStr || !openStr || !highStr || !lowStr || !closeStr) throw new Error(`Row ${index + 2}: Missing columns.`);
-                
-                const dateTimeString = timeStr.trim().replace(' GMT', '');
-                const [datePart, timePart] = dateTimeString.split(' ');
-                if (!datePart || !timePart) throw new Error(`Row ${index + 2}: Invalid date format.`);
-                
-                const [day, month, year] = datePart.split('.').map(Number);
-                const [hour, minute, second] = timePart.split(':').map(Number);
-                if (isNaN(day) || isNaN(month) || isNaN(year) || isNaN(hour) || isNaN(minute)) throw new Error(`Row ${index + 2}: Invalid date values.`);
-                
-                const date = new Date(Date.UTC(year, month - 1, day, hour, minute, Math.floor(second || 0)));
-                if (isNaN(date.getTime())) throw new Error(`Row ${index + 2}: Invalid Date object.`);
-                
-                return { date, open: parseFloat(openStr), high: parseFloat(highStr), low: parseFloat(lowStr), close: parseFloat(closeStr), wick: [parseFloat(lowStr), parseFloat(highStr)] };
-            }).filter(d => !isNaN(d.open));
-
-            if (parsedData.length === 0) throw new Error("No valid data rows were parsed.");
-
-            parsedData.sort((a, b) => a.date.getTime() - b.date.getTime());
-            const processedData = fillGapsInData(parsedData);
-            
-            setPriceData(processedData);
-            setIsPriceDataImported(true);
-            setSessionInfo(prev => ({ ...prev, priceDataFileName: file.name }));
             toast({ 
                 title: "Debug: Step 1/X Complete",
                 description: `Successfully parsed ${file.name} in Journal Reconstruction.`,

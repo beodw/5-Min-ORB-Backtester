@@ -551,54 +551,13 @@ export function Backtester() {
             if (lines.length <= 1) {
                 throw new Error("CSV file contains no data rows.");
             }
-            const dataRows = lines.slice(1);
-            const parsedData: Omit<PriceData, 'index'>[] = dataRows.map((row, index) => {
-                const columns = row.split(',');
-                const [timeStr, openStr, highStr, lowStr, closeStr] = columns;
-
-                if (!timeStr || !openStr || !highStr || !lowStr || !closeStr) {
-                   throw new Error(`Row ${index + 2}: Missing columns.`);
-                }
-
-                // Handle format "01.07.2024 00:00:00.000 GMT"
-                const dateTimeString = timeStr.trim().replace(' GMT', '');
-                const [datePart, timePart] = dateTimeString.split(' ');
-                
-                if (!datePart || !timePart) {
-                    throw new Error(`Row ${index + 2}: Invalid date format.`);
-                }
-                
-                const [day, month, year] = datePart.split('.').map(Number);
-                const [hour, minute] = timePart.split(':').map(Number);
-                const second = Number(timePart.split(':')[2] || 0);
-                
-                if (isNaN(day) || isNaN(month) || isNaN(year) || isNaN(hour) || isNaN(minute) || isNaN(second)) {
-                   throw new Error(`Row ${index + 2}: Invalid date values.`);
-                }
-                // Construct date as UTC
-                const date = new Date(Date.UTC(year, month - 1, day, hour, minute, Math.floor(second)));
-                if (isNaN(date.getTime())) throw new Error(`Row ${index + 2}: Invalid Date object.`);
-                
-                return { date, open: parseFloat(openStr), high: parseFloat(highStr), low: parseFloat(lowStr), close: parseFloat(closeStr), wick: [parseFloat(lowStr), parseFloat(highStr)] };
-            }).filter(d => !isNaN(d.open));
-
-            if (parsedData.length === 0) {
-                throw new Error("No valid data rows were parsed from the file.");
-            }
             
-            parsedData.sort((a, b) => a.date.getTime() - b.date.getTime());
-            
-            const processedData = fillGapsInData(parsedData);
-            setPriceData(processedData);
-            setSessionInfo({ fileName: file.name });
-            setIsDataImported(true);
-            setSelectedDate(processedData[processedData.length - 1].date);
             toast({
                 title: "Debug: Step 1/X Complete",
                 description: `Successfully parsed ${file.name} in Backtester.`,
                 duration: 9000,
             });
-            
+
         } catch (error: any) {
             toast({
                 variant: "destructive",
