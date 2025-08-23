@@ -763,12 +763,13 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
             const lines = text.split('\n').filter(line => line.trim() !== '');
             if (lines.length <= 1) throw new Error("Journal CSV is empty or has only a header.");
             
+            setLines(lines);
             const headerLine = lines[0].trim().split(',').map(h => h.trim());
             
             const requiredHeaders = {
                 pair: "Pair",
-                dateTaken: "Date Taken",
-                dateClosed: "Date Closed",
+                dateTaken: "Date Taken (Timestamp)",
+                dateClosed: "Date Closed (Timestamp)",
                 maxR: "Maximum Favourable Excursion (R)"
             };
 
@@ -1175,5 +1176,3 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     </div>
   );
 }
-
-    
