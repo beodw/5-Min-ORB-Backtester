@@ -810,17 +810,30 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                 tradeOutcome: headerLine.indexOf(requiredHeaders.tradeOutcome)
             };
             
+            // Explicitly check if "Pair" column exists for better error reporting
+            if (headerIndices.pair === -1) {
+                toast({
+                    variant: "destructive",
+                    title: "Journal Import Failed",
+                    description: `Could not find the required column: "${requiredHeaders.pair}". Please check your CSV header.`,
+                    duration: 9000
+                });
+                return; // Stop processing
+            }
+            
             for (const [key, index] of Object.entries(headerIndices)) {
-                if (index === -1) throw new Error(`Missing required column: "${(requiredHeaders as any)[key]}"`);
+                 if (index === -1 && key !== 'pair') { // We already checked for pair
+                    throw new Error(`Missing required column: "${(requiredHeaders as any)[key]}"`);
+                }
             }
 
             const parsedTrades: JournalTrade[] = lines.slice(1)
                 .map((row, i) => {
                     const rowNum = i + 2; // For error reporting
                     
-                    // Use a more robust split method to handle potential commas within quoted fields
-                    const columns = row.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g)?.map(col => col.replace(/"/g, '')) || row.split(',');
+                    const columns = row.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g)?.map(col => col.replace(/"/g, '')) || [];
                     
+                    // Always filter for US30, regardless of the dropdown selection.
                     if (columns[headerIndices.pair]?.trim() !== "US30") {
                         return null;
                     }
@@ -856,7 +869,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                 .filter((trade): trade is JournalTrade => trade !== null);
 
             if (parsedTrades.length === 0) {
-              throw new Error(`No valid trade rows could be parsed for the pair '${selectedPair}'. Check data and column headers.`);
+              throw new Error("No valid trade rows could be parsed for the pair 'US30'. Check data and column headers.");
             }
 
             setAllJournalTrades(parsedTrades); 
@@ -964,12 +977,13 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     }
 
     const outcomeIndex = journalHeader.indexOf("Trade Outcome");
-    const statusIndex = journalHeader.indexOf("Status"); // Assume 'Status' might not exist and needs adding
+    let statusIndex = journalHeader.indexOf("Status"); 
 
     let finalHeader = [...journalHeader];
     // Add 'Status' column if it doesn't exist
     if (statusIndex === -1) {
         finalHeader.push("Status");
+        statusIndex = finalHeader.length -1;
     }
 
     const rows = allJournalTrades.map(trade => {
@@ -979,7 +993,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         let newColumns = [...originalColumns];
 
         const finalStatus = trade.status === 'default' ? 'traded' : trade.status;
-        const finalOutcome = trade.outcome || (trade.maxR >= 2 ? 'Win' : 'Loss');
+        const finalOutcome = trade.outcome || trade.originalOutcome || (trade.maxR >= 2 ? 'Win' : 'Loss');
         
         // Overwrite "Trade Outcome"
         if (outcomeIndex !== -1) {
@@ -987,17 +1001,16 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         }
 
         // Overwrite or append "Status"
-        if (statusIndex !== -1) {
-            newColumns[statusIndex] = finalStatus;
-        } else {
-            newColumns.push(finalStatus);
-        }
+        newColumns[statusIndex] = finalStatus;
+
 
         // Sanitize for CSV: quote fields that contain commas or quotes
         return newColumns.map(field => {
             const fieldStr = String(field).trim();
             if (fieldStr.includes(',') || fieldStr.includes('"') || fieldStr.includes('\n')) {
-                return `"${fieldStr.replace(/"/g, '""')}"`;
+                // Ensure rows with internal newlines are properly escaped.
+                const sanitizedField = fieldStr.replace(/"/g, '""').replace(/[\r\n]+/g, ' ');
+                return `"${sanitizedField}"`;
             }
             return fieldStr;
         }).join(',');
@@ -1298,3 +1311,5 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     </div>
   );
 }
+
+    
