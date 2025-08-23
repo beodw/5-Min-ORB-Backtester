@@ -314,8 +314,8 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     if (savedSessionRaw) {
         try {
             const savedSession: SessionState = JSON.parse(savedSessionRaw);
-            if (savedSession.fileName) {
-                setSessionToRestore(savedSession.fileName);
+            if (savedSession.fileName || (savedSession.journalTrades && savedSession.journalTrades.length > 0)) {
+                setSessionToRestore(savedSession.fileName || savedSession.journalFileName);
                 setShowRestoreDialog(true);
             }
         } catch (e) {
@@ -344,6 +344,11 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
   useEffect(() => {
     const shouldSave = isDataImported || journalTrades.length > 0 || rrTools.length > 0 || priceMarkers.length > 0 || measurementTools.length > 0;
     if (!shouldSave) {
+        // Clear previous session if it's a fresh start with no data
+        const savedSessionRaw = localStorage.getItem(sessionKey);
+        if(savedSessionRaw) {
+           // localStorage.removeItem(sessionKey);
+        }
         return;
     }
     
@@ -402,7 +407,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
             setSelectedDate(new Date(savedSession.selectedDate));
             setFileName(savedSession.fileName);
             setJournalFileName(savedSession.journalFileName || '');
-            setPriceData([]);
+            setPriceData(mockPriceData);
             setIsDataImported(false);
 
             toast({
@@ -757,6 +762,8 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         try {
             const text = e.target?.result as string;
             const lines = text.split('\n').filter(line => line.trim() !== '');
+            if (lines.length <= 1) throw new Error("Journal CSV is empty or has only a header.");
+            
             const headerLine = lines[0].trim().split(',');
             const requiredHeaders = ['Pair', 'Date Taken', 'Date Closed', 'Maximum Favourable Excursion (R)'];
             const headerIndices = requiredHeaders.reduce((acc, h) => {
@@ -766,8 +773,12 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                 return acc;
             }, {} as Record<string, number>);
 
-            const parsedTrades: JournalTrade[] = lines.slice(1).map(row => {
+            const parsedTrades: JournalTrade[] = lines.slice(1).map((row, i) => {
                 const columns = row.split(',');
+                if (columns.length < headerLine.length) {
+                  console.warn(`Skipping row ${i+2}: not enough columns.`);
+                  return null;
+                }
                 const dateTaken = parseDateFromJournal(columns[headerIndices['Date Taken']]);
                 const dateClosed = parseDateFromJournal(columns[headerIndices['Date Closed']]);
                 const maxR = parseFloat(columns[headerIndices['Maximum Favourable Excursion (R)']]);
@@ -790,7 +801,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
             processJournalTrades(parsedTrades);
             toast({ title: "Journal Imported", description: `${parsedTrades.length} trades loaded.` });
         } catch (error: any) {
-            toast({ variant: "destructive", title: "Journal Import Failed", description: error.message });
+            toast({ variant: "destructive", title: "Journal Import Failed", description: error.message, duration: 9000 });
         }
     };
     reader.readAsText(file);
@@ -801,7 +812,11 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
       const results: Record<string, DayResult> = {};
       trades.forEach(trade => {
           const dateKey = trade.dateTaken.toISOString().split('T')[0];
-          if (results[dateKey] === 'win') return; // If day is already a win, it stays a win
+          // Don't overwrite an existing win or modified status with a loss.
+          if (results[dateKey] === 'win' || results[dateKey] === 'modified') {
+             // If it's already a win, and we see a loss, it's still a win day overall.
+             return;
+          }
           
           if (trade.status === 'traded' || trade.status === 'not traded') {
             results[dateKey] = 'modified';
@@ -848,7 +863,15 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         toast({ variant: "destructive", title: "No Journal Data", description: "Please import a journal file first." });
         return;
     }
-    const header = `${journalTrades[0].originalRow.trim()},Status\n`;
+    
+    const originalHeader = journalTrades[0]?.originalRow.split('\n')[0].trim();
+    if (!originalHeader) {
+        toast({variant: "destructive", title: "Download Failed", description: "Could not determine original CSV header."});
+        return;
+    }
+
+    const header = `${originalHeader},Status\n`;
+    
     const rows = journalTrades.map(trade => {
         const status = trade.status === 'default' ? 'traded' : trade.status;
         return `${trade.originalRow.trim()},${status}\n`;
@@ -1037,7 +1060,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                     <AlertDialogTitle>Restore Previous Session?</AlertDialogTitle>
                     <AlertDialogDescription>
                         We found a saved session for <strong>{tab}</strong>.
-                        Would you like to restore this session? You may need to re-import your data files.
+                        Would you like to restore your drawings and settings? You will need to re-import your data files.
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -1101,9 +1124,9 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                             modified: (date) => dayResults[date.toISOString().split('T')[0]] === 'modified',
                         }}
                         modifiersClassNames={{
-                            win: 'bg-accent/50 text-accent-foreground rounded-full',
-                            loss: 'bg-destructive/50 text-destructive-foreground rounded-full',
-                            modified: 'bg-orange-400/50 text-orange-900 rounded-full',
+                            win: 'bg-green-200 text-green-900 rounded-full font-bold',
+                            loss: 'bg-red-200 text-red-900 rounded-full font-bold',
+                            modified: 'bg-orange-200 text-orange-900 rounded-full font-bold',
                         }}
                     />
                 </PopoverContent>
@@ -1145,33 +1168,3 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
   );
 }
 
-export default function AlgoInsightsPage() {
-    return (
-        <div className="flex flex-col h-screen bg-background text-foreground font-body">
-            <header className="flex items-center justify-between p-4 border-b border-border shadow-md">
-                <div className="flex items-center gap-4">
-                    <FileBarChart className="w-8 h-8 text-foreground" />
-                    <h1 className="text-2xl font-bold font-headline text-foreground">
-                        Algo Insights
-                    </h1>
-                </div>
-            </header>
-            <main className="flex-1 relative overflow-hidden">
-                <Tabs defaultValue="backtester" className="w-full h-full">
-                    <div className="flex justify-center pt-2">
-                        <TabsList>
-                            <TabsTrigger value="backtester">Backtester</TabsTrigger>
-                            <TabsTrigger value="journal">Journal Reconstruction</TabsTrigger>
-                        </TabsList>
-                    </div>
-                    <TabsContent value="backtester" className="w-full h-full pt-2">
-                        <ChartContainer tab="backtester" />
-                    </TabsContent>
-                    <TabsContent value="journal" className="w-full h-full pt-2">
-                        <ChartContainer tab="journal" />
-                    </TabsContent>
-                </Tabs>
-            </main>
-        </div>
-    )
-}
