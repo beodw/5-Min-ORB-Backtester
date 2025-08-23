@@ -52,11 +52,6 @@ interface InteractiveChartProps {
   timeZone: string;
   endDate?: Date;
   isYAxisLocked: boolean;
-  onWheel?: (e: React.WheelEvent<HTMLDivElement>) => void;
-  onMouseDown?: (e: React.MouseEvent<HTMLDivElement>) => void;
-  onMouseMove?: (e: React.MouseEvent<HTMLDivElement>) => void;
-  onMouseUp?: (e: React.MouseEvent<HTMLDivElement>) => void;
-  onMouseLeave?: (e: React.MouseEvent<HTMLDivElement>) => void;
 }
 
 const Candlestick = (props: any) => {
@@ -103,11 +98,6 @@ export function InteractiveChart({
     timeZone, 
     endDate,
     isYAxisLocked,
-    onWheel,
-    onMouseDown,
-    onMouseMove,
-    onMouseUp,
-    onMouseLeave,
 }: InteractiveChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartScalesRef = useRef<{x: any, y: any, plot: any} | null>(null);
@@ -248,9 +238,12 @@ export function InteractiveChart({
     const padding = (max - min) * 0.1 || 10;
     const newYDomain: [number, number] = [min - padding, max + padding];
     
-    if (newYDomain[0] !== yDomain[0] || newYDomain[1] !== yDomain[1]) {
-        setYDomain(newYDomain);
-    }
+    setYDomain(currentYDomain => {
+        if (newYDomain[0] !== currentYDomain[0] || newYDomain[1] !== currentYDomain[1]) {
+            return newYDomain;
+        }
+        return currentYDomain;
+    });
 
   }, [windowedData, priceMarkers, isYAxisLocked]);
 
@@ -479,11 +472,11 @@ export function InteractiveChart({
     <div 
       ref={chartContainerRef} 
       className="w-full h-full relative"
-      onWheel={onWheel || internalHandleWheel}
-      onMouseDown={onMouseDown || internalHandleMouseDown}
-      onMouseMove={onMouseMove || internalHandleMouseMove}
-      onMouseUp={onMouseUp || internalHandleMouseUp}
-      onMouseLeave={onMouseLeave || internalHandleMouseLeave}
+      onWheel={internalHandleWheel}
+      onMouseDown={internalHandleMouseDown}
+      onMouseMove={internalHandleMouseMove}
+      onMouseUp={internalHandleMouseUp}
+      onMouseLeave={internalHandleMouseLeave}
       style={{ cursor: isPlacingRR || isPlacingPriceMarker ? 'crosshair' : (isDragging ? 'grabbing' : 'crosshair')}}
     >
       {!aggregatedData || aggregatedData.length === 0 ? (
