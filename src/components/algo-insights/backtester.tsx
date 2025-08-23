@@ -203,7 +203,7 @@ const SESSION_KEY = 'algo-insights-session';
 const TOOLBAR_POS_KEY = 'algo-insights-toolbar-positions';
 
 export function Backtester() {
-  const [priceData, setPriceData] = useState<PriceData[]>(() => mockPriceData.map((d, i) => ({...d, index: i})));
+  const [priceData, setPriceData] = useState<PriceData[]>([]);
   const [isDataImported, setIsDataImported] = useState(false);
   const [sessionInfo, setSessionInfo] = useState<SessionInfo | null>(null);
   
@@ -338,6 +338,8 @@ export function Backtester() {
             console.error("Failed to parse session from localStorage", e);
             localStorage.removeItem(SESSION_KEY);
         }
+    } else {
+        setPriceData(mockPriceData.map((d, i) => ({...d, index: i})));
     }
     
     // Load toolbar positions
@@ -576,24 +578,33 @@ export function Backtester() {
         try {
             const text = e.target?.result as string;
             const lines = text.split('\n').filter(line => line.trim() !== '');
-            const header = lines[0].trim().split(',');
-            if (header[0].trim() !== 'Time (UTC)' || header[1].trim() !== 'Open') {
-                throw new Error("Invalid CSV header. Expected 'Time (UTC),Open,...'");
-            }
             if (lines.length <= 1) {
-                throw new Error("CSV file contains no data rows.");
+                toast({ variant: "destructive", title: "CSV Error", description: "CSV file contains no data rows." });
+                return;
             }
-
+            const header = lines[0].trim().split(',');
+            if (header.length < 5) {
+                toast({ variant: "destructive", title: "CSV Error", description: "CSV file has fewer than 5 columns." });
+                return;
+            }
+            if (header[0].trim() !== 'Time (UTC)' || header[1].trim() !== 'Open') {
+                toast({ variant: "destructive", title: "CSV Error", description: "Invalid CSV header. Expected 'Time (UTC),Open,...'" });
+                return;
+            }
+            
             const dataRows = lines.slice(1);
-
             const parsedData = dataRows.map((row, index) => {
                 const columns = row.split(',');
+                if (columns.length < 5) {
+                    console.warn(`Skipping malformed row ${index + 2}: Not enough columns.`);
+                    return null;
+                }
                 const [datePart, timePart] = columns[0].split(' ');
-                
                 const date = parseDate(datePart, timePart);
 
                 if (!date) {
-                    throw new Error(`Invalid date format in row ${index + 2}: ${columns[0]}`);
+                    console.warn(`Skipping row ${index + 2} due to invalid date: ${columns[0]}`);
+                    return null;
                 }
 
                 const open = parseFloat(columns[1]);
@@ -601,12 +612,24 @@ export function Backtester() {
                 const low = parseFloat(columns[3]);
                 const close = parseFloat(columns[4]);
                 
+                if ([open, high, low, close].some(isNaN)) {
+                     console.warn(`Skipping row ${index + 2} due to invalid number format.`);
+                     return null;
+                }
+
                 return { date, open, high, low, close, wick: [low, high] as [number, number] };
-            }).filter(item => item !== null);
+            }).filter((item): item is Exclude<typeof item, null> => item !== null);
+
+            if (parsedData.length === 0) {
+                 toast({ variant: "destructive", title: "Parsing Error", description: "No valid data rows could be parsed." });
+                 return;
+            }
+
+            setPriceData(parsedData.map((d, i) => ({...d, index: i})));
 
             toast({
-                title: "Debug: Rows Parsed",
-                description: `Successfully created ${parsedData.length} price data objects.`,
+                title: "Debug: Step 2 Complete",
+                description: `Successfully stored ${parsedData.length} rows in state.`,
                 duration: 9000,
             });
             return;
@@ -841,7 +864,7 @@ export function Backtester() {
   const handlePlaceMeasurement = () => {
     setPlacingToolType(null);
     setIsPlacingPriceMarker(false);
-    setMeasurementStartPoint(null); // Will be set on first click
+    setMeasurementStartPoint(null);
     setLiveMeasurementTool(null);
     setIsPlacingMeasurement(true);
   };
@@ -1236,7 +1259,3 @@ export function Backtester() {
     </div>
   );
 }
-
-    
-
-    

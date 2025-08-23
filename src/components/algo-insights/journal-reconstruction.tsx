@@ -8,7 +8,7 @@ import { InteractiveChart, type ChartClickData } from "@/components/algo-insight
 import { mockPriceData } from "@/lib/mock-data";
 import { useToast } from "@/hooks/use-toast";
 import type { PriceData, PriceMarker, RiskRewardTool as RRToolType, MeasurementTool as MeasurementToolType, DrawingState, MeasurementPoint } from "@/types";
-import { FileUp, Info, ArrowUp, ArrowDown, Settings, ChevronsRight, Target, Trash2, Lock, Unlock, Ruler, Undo, Redo, GripVertical, ChevronLeft, ChevronRight, RotateCcw, CheckCircle, XCircle, FileX2, Download } from "lucide-react";
+import { FileUp, Info, ArrowUp, ArrowDown, Settings, ChevronsRight, Target, Trash2, Lock, Unlock, Ruler, Undo, Redo, GripVertical, ChevronLeft, ChevronRight, RotateCcw, CheckCircle, XCircle, FileX2, Download, ChevronRight as ChevronRightIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   AlertDialog,
@@ -126,7 +126,7 @@ const formatDateToISO = (date: Date): string => {
 };
 
 export function JournalReconstruction() {
-  const [priceData, setPriceData] = useState<PriceData[]>(() => mockPriceData.map((d, i) => ({...d, index: i})));
+  const [priceData, setPriceData] = useState<PriceData[]>([]);
   const [journalTrades, setJournalTrades] = useState<JournalTrade[]>([]);
   const [journalHeader, setJournalHeader] = useState<string>('');
   
@@ -145,7 +145,7 @@ export function JournalReconstruction() {
   const defaultToolbarPositions: JournalToolbarPositions = {
     main: { x: 16, y: 16 },
     secondary: { x: 16, y: 88 },
-    controls: { x: 16, y: 160 } 
+    controls: { x: (typeof window !== 'undefined' ? window.innerWidth : 1024) - 350 - 16, y: 16 }
   };
 
   const [toolbarPositions, setToolbarPositions] = useState<JournalToolbarPositions>(defaultToolbarPositions);
@@ -351,34 +351,58 @@ export function JournalReconstruction() {
         try {
             const text = e.target?.result as string;
             const lines = text.split('\n').filter(line => line.trim() !== '');
-            const header = lines[0].trim().split(',');
-            if (header[0].trim() !== 'Time (UTC)' || header[1].trim() !== 'Open') {
-                throw new Error("Invalid CSV header. Expected 'Time (UTC),Open,...'");
+            if (lines.length <= 1) {
+                toast({ variant: "destructive", title: "CSV Error", description: "CSV file contains no data rows." });
+                return;
             }
-            if (lines.length <= 1) throw new Error("CSV file contains no data rows.");
+            const header = lines[0].trim().split(',');
+            if (header.length < 5) {
+                toast({ variant: "destructive", title: "CSV Error", description: "CSV file has fewer than 5 columns." });
+                return;
+            }
+            if (header[0].trim() !== 'Time (UTC)' || header[1].trim() !== 'Open') {
+                toast({ variant: "destructive", title: "CSV Error", description: "Invalid CSV header. Expected 'Time (UTC),Open,...'" });
+                return;
+            }
             
             const dataRows = lines.slice(1);
-
             const parsedData = dataRows.map((row, index) => {
                 const columns = row.split(',');
+                 if (columns.length < 5) {
+                    console.warn(`Skipping malformed row ${index + 2}: Not enough columns.`);
+                    return null;
+                }
                 const [datePart, timePart] = columns[0].split(' ');
-                
                 const date = parseDate(datePart, timePart);
+
                 if (!date) {
-                    throw new Error(`Invalid date format in row ${index + 2}: ${columns[0]}`);
+                     console.warn(`Skipping row ${index + 2} due to invalid date: ${columns[0]}`);
+                    return null;
                 }
 
                 const open = parseFloat(columns[1]);
                 const high = parseFloat(columns[2]);
                 const low = parseFloat(columns[3]);
                 const close = parseFloat(columns[4]);
+
+                if ([open, high, low, close].some(isNaN)) {
+                     console.warn(`Skipping row ${index + 2} due to invalid number format.`);
+                     return null;
+                }
                 
                 return { date, open, high, low, close, wick: [low, high] as [number, number] };
-            }).filter(item => item !== null);
+            }).filter((item): item is Exclude<typeof item, null> => item !== null);
+            
+            if (parsedData.length === 0) {
+                 toast({ variant: "destructive", title: "Parsing Error", description: "No valid data rows could be parsed." });
+                 return;
+            }
 
+            setPriceData(parsedData.map((d, i) => ({...d, index: i})));
+            
             toast({
-                title: "Debug: Rows Parsed",
-                description: `Successfully created ${parsedData.length} price data objects.`,
+                title: "Debug: Step 2 Complete",
+                description: `Successfully stored ${parsedData.length} rows in state.`,
                 duration: 9000,
             });
             return;
@@ -677,7 +701,7 @@ export function JournalReconstruction() {
     let lastDay = new Date(currentDate);
     lastDay.setUTCHours(0, 0, 0, 0);
 
-    for (let i = searchStartIndex; i < priceData.length; i++) {
+    for (let i = 0; i < priceData.length; i++) {
         const pointDate = priceData[i].date;
         
         const pointDay = new Date(pointDate);
@@ -911,7 +935,7 @@ export function JournalReconstruction() {
                       <Tooltip>
                           <TooltipTrigger asChild>
                               <Button variant="ghost" size="icon" onClick={handleNextCandle} className="text-muted-foreground" disabled={priceData.length === 0}>
-                                  <ChevronRight className="h-5 w-5" />
+                                  <ChevronRightIcon className="h-5 w-5" />
                               </Button>
                           </TooltipTrigger>
                           <TooltipContent><p>Next Candle</p></TooltipContent>
@@ -1142,7 +1166,3 @@ export function JournalReconstruction() {
     </div>
   );
 }
-
-    
-
-    
