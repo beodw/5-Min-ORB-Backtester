@@ -742,13 +742,20 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     journalFileInputRef.current?.click();
   };
 
-  const parseDateFromJournal = (dateString: string): Date | null => {
+  const parseDateFromJournal = (dateString: string, rowNum: number): Date => {
     const cleanString = dateString.trim();
+    // Expected format: "MM/DD/YYYY HH:mm:ss"
     const parts = cleanString.match(/(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2}):(\d{2})/);
-    if (!parts) return null;
+    if (!parts) {
+        throw new Error(`Invalid date format on row ${rowNum}. Expected 'MM/DD/YYYY HH:mm:ss', found '${dateString}'.`);
+    }
     const [, month, day, year, hour, minute, second] = parts.map(Number);
+    // Month is 0-indexed in JavaScript Date
     const date = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
-    return isNaN(date.getTime()) ? null : date;
+    if (isNaN(date.getTime())) {
+        throw new Error(`Invalid date values on row ${rowNum}. Could not parse: '${dateString}'`);
+    }
+    return date;
   };
   
   const handleJournalFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -785,19 +792,20 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
             }
 
             const parsedTrades: JournalTrade[] = lines.slice(1).map((row, i) => {
+                const rowNum = i + 2; // For error reporting
                 const columns = row.split(',');
                 if (columns.length < headerLine.length) {
-                  console.warn(`Skipping row ${i+2}: not enough columns.`);
-                  return null;
+                   throw new Error(`Row ${rowNum} has incorrect number of columns. Expected ${headerLine.length}, got ${columns.length}.`);
                 }
-                const dateTaken = parseDateFromJournal(columns[headerIndices.dateTaken]);
-                const dateClosed = parseDateFromJournal(columns[headerIndices.dateClosed]);
-                const maxR = parseFloat(columns[headerIndices.maxR]);
+                const dateTaken = parseDateFromJournal(columns[headerIndices.dateTaken], rowNum);
+                const dateClosed = parseDateFromJournal(columns[headerIndices.dateClosed], rowNum);
                 
-                if (!dateTaken || !dateClosed || isNaN(maxR)) {
-                    console.warn(`Skipping invalid row: ${i+2}`, {row, dateTaken, dateClosed, maxR});
-                    return null;
+                const maxRString = columns[headerIndices.maxR];
+                const maxR = parseFloat(maxRString);
+                if (isNaN(maxR)) {
+                    throw new Error(`Invalid 'Maximum Favourable Excursion (R)' value on row ${rowNum}: '${maxRString}'. Must be a number.`);
                 }
+                
                 return {
                     pair: columns[headerIndices.pair].trim(),
                     dateTaken,
@@ -806,7 +814,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                     status: 'default',
                     originalRow: row,
                 };
-            }).filter((t): t is JournalTrade => t !== null);
+            });
 
             if (parsedTrades.length === 0) {
               throw new Error("No valid trade rows could be parsed from the journal file. Check data and column headers.");
@@ -834,13 +842,13 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
           }
 
           const currentDayStatus = results[dateKey];
-          // If a day is already a 'win' or 'modified', don't let a loss overwrite it.
-          // A single win makes the day a win, unless it's later modified.
-          if (currentDayStatus === 'win' || currentDayStatus === 'modified') {
-             return;
+          // A single win makes the day a win, unless it's later modified or was already a win.
+          // A loss only sets the day to loss if it's not already a win or modified.
+          if (trade.maxR >= 2) {
+             results[dateKey] = 'win';
+          } else if (currentDayStatus !== 'win') {
+             results[dateKey] = 'loss';
           }
-          
-          results[dateKey] = trade.maxR >= 2 ? 'win' : 'loss';
       });
       setDayResults(results);
   };
