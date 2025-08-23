@@ -344,7 +344,6 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
   useEffect(() => {
     const shouldSave = isDataImported || journalTrades.length > 0 || rrTools.length > 0 || priceMarkers.length > 0 || measurementTools.length > 0;
     if (!shouldSave) {
-        // Clear previous session if it's a fresh start with no data
         const savedSessionRaw = localStorage.getItem(sessionKey);
         if(savedSessionRaw) {
            // localStorage.removeItem(sessionKey);
@@ -764,14 +763,25 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
             const lines = text.split('\n').filter(line => line.trim() !== '');
             if (lines.length <= 1) throw new Error("Journal CSV is empty or has only a header.");
             
-            const headerLine = lines[0].trim().split(',');
-            const requiredHeaders = ['Pair', 'Date Taken', 'Date Closed', 'Maximum Favourable Excursion (R)'];
-            const headerIndices = requiredHeaders.reduce((acc, h) => {
-                const index = headerLine.findIndex(col => col.trim() === h);
-                if (index === -1) throw new Error(`Missing required column: ${h}`);
-                acc[h] = index;
-                return acc;
-            }, {} as Record<string, number>);
+            const headerLine = lines[0].trim().split(',').map(h => h.trim());
+            
+            const requiredHeaders = {
+                pair: "Pair",
+                dateTaken: "Date Taken",
+                dateClosed: "Date Closed",
+                maxR: "Maximum Favourable Excursion (R)"
+            };
+
+            const headerIndices = {
+                pair: headerLine.indexOf(requiredHeaders.pair),
+                dateTaken: headerLine.indexOf(requiredHeaders.dateTaken),
+                dateClosed: headerLine.indexOf(requiredHeaders.dateClosed),
+                maxR: headerLine.indexOf(requiredHeaders.maxR)
+            };
+            
+            for (const [key, index] of Object.entries(headerIndices)) {
+                if (index === -1) throw new Error(`Missing required column: "${(requiredHeaders as any)[key]}"`);
+            }
 
             const parsedTrades: JournalTrade[] = lines.slice(1).map((row, i) => {
                 const columns = row.split(',');
@@ -779,16 +789,16 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                   console.warn(`Skipping row ${i+2}: not enough columns.`);
                   return null;
                 }
-                const dateTaken = parseDateFromJournal(columns[headerIndices['Date Taken']]);
-                const dateClosed = parseDateFromJournal(columns[headerIndices['Date Closed']]);
-                const maxR = parseFloat(columns[headerIndices['Maximum Favourable Excursion (R)']]);
+                const dateTaken = parseDateFromJournal(columns[headerIndices.dateTaken]);
+                const dateClosed = parseDateFromJournal(columns[headerIndices.dateClosed]);
+                const maxR = parseFloat(columns[headerIndices.maxR]);
                 
                 if (!dateTaken || !dateClosed || isNaN(maxR)) {
-                    console.warn("Skipping invalid row:", row);
+                    console.warn(`Skipping invalid row: ${i+2}`, {row, dateTaken, dateClosed, maxR});
                     return null;
                 }
                 return {
-                    pair: columns[headerIndices['Pair']].trim(),
+                    pair: columns[headerIndices.pair].trim(),
                     dateTaken,
                     dateClosed,
                     maxR,
@@ -796,6 +806,10 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                     originalRow: row,
                 };
             }).filter((t): t is JournalTrade => t !== null);
+
+            if (parsedTrades.length === 0) {
+              throw new Error("No valid trade rows could be parsed from the journal file. Check data and column headers.");
+            }
 
             setJournalTrades(parsedTrades);
             processJournalTrades(parsedTrades);
@@ -812,17 +826,20 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
       const results: Record<string, DayResult> = {};
       trades.forEach(trade => {
           const dateKey = trade.dateTaken.toISOString().split('T')[0];
-          // Don't overwrite an existing win or modified status with a loss.
-          if (results[dateKey] === 'win' || results[dateKey] === 'modified') {
-             // If it's already a win, and we see a loss, it's still a win day overall.
+          
+          if (trade.status !== 'default') {
+              results[dateKey] = 'modified';
+              return;
+          }
+
+          const currentDayStatus = results[dateKey];
+          // If a day is already a 'win' or 'modified', don't let a loss overwrite it.
+          // A single win makes the day a win, unless it's later modified.
+          if (currentDayStatus === 'win' || currentDayStatus === 'modified') {
              return;
           }
           
-          if (trade.status === 'traded' || trade.status === 'not traded') {
-            results[dateKey] = 'modified';
-          } else {
-            results[dateKey] = trade.maxR >= 2 ? 'win' : 'loss';
-          }
+          results[dateKey] = trade.maxR >= 2 ? 'win' : 'loss';
       });
       setDayResults(results);
   };
@@ -843,7 +860,8 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     
     let tradeUpdated = false;
     const updatedTrades = journalTrades.map(trade => {
-        if (trade.dateTaken.toISOString().startsWith(selectedDateKey)) {
+        const tradeDateKey = trade.dateTaken.toISOString().split('T')[0];
+        if (tradeDateKey === selectedDateKey) {
             tradeUpdated = true;
             return { ...trade, status };
         }
@@ -863,17 +881,18 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         toast({ variant: "destructive", title: "No Journal Data", description: "Please import a journal file first." });
         return;
     }
-    
-    const originalHeader = journalTrades[0]?.originalRow.split('\n')[0].trim();
-    if (!originalHeader) {
+
+    const headerLine = lines[0].trim();
+    if (!headerLine) {
         toast({variant: "destructive", title: "Download Failed", description: "Could not determine original CSV header."});
         return;
     }
 
-    const header = `${originalHeader},Status\n`;
+    const header = `${headerLine},Status\n`;
     
     const rows = journalTrades.map(trade => {
         const status = trade.status === 'default' ? 'traded' : trade.status;
+        // Trim to remove potential trailing \r from original row
         return `${trade.originalRow.trim()},${status}\n`;
     }).join('');
 
@@ -888,19 +907,8 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   };
-
-  const getDayClassName = (date: Date): string => {
-      const dateKey = date.toISOString().split('T')[0];
-      const result = dayResults[dateKey];
-      if (!result) return "";
-      
-      switch (result) {
-          case 'win': return 'bg-green-200 text-green-900 rounded-full font-bold';
-          case 'loss': return 'bg-red-200 text-red-900 rounded-full font-bold';
-          case 'modified': return 'bg-orange-200 text-orange-900 rounded-full font-bold';
-          default: return "";
-      }
-  };
+  
+  const [lines, setLines] = useState<string[]>([]);
   
   // --- END JOURNAL FUNCTIONS ---
 
@@ -1168,3 +1176,4 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
   );
 }
 
+    
