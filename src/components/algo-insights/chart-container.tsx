@@ -784,16 +784,16 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
       let currentRow: string[] = [];
       let currentField = '';
       let inQuotedField = false;
+      const normalizedText = text.replace(/(\r\n|\r)/g, '\n');
 
-      for (let i = 0; i < text.length; i++) {
-          const char = text[i];
+      for (let i = 0; i < normalizedText.length; i++) {
+          const char = normalizedText[i];
           
           if (inQuotedField) {
               if (char === '"') {
-                  // Check for escaped quote
-                  if (i + 1 < text.length && text[i+1] === '"') {
+                  if (i + 1 < normalizedText.length && normalizedText[i+1] === '"') {
                       currentField += '"';
-                      i++; // Skip the second quote
+                      i++;
                   } else {
                       inQuotedField = false;
                   }
@@ -806,16 +806,11 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
               } else if (char === ',') {
                   currentRow.push(currentField);
                   currentField = '';
-              } else if (char === '\n' || char === '\r') {
-                  if (i > 0 && text[i-1] !== '\r' && text[i-1] !== '\n') { // handle CRLF and LF
-                      currentRow.push(currentField);
-                      rows.push(currentRow);
-                      currentRow = [];
-                      currentField = '';
-                  }
-                  if (char === '\r' && text[i+1] === '\n') {
-                    i++; // Skip LF in CRLF
-                  }
+              } else if (char === '\n') {
+                  currentRow.push(currentField);
+                  rows.push(currentRow);
+                  currentRow = [];
+                  currentField = '';
               } else {
                   currentField += char;
               }
@@ -827,7 +822,6 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         rows.push(currentRow);
       }
       
-      // Filter out completely empty rows that might be created by trailing newlines
       return rows.filter(row => row.length > 1 || (row.length === 1 && row[0].trim() !== ''));
   };
   
@@ -1029,7 +1023,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         return;
     }
 
-    const outcomeIndex = journalHeader.indexOf("Trade Outcome");
+    const outcomeIndex = 10; // Hardcoded to be the 11th column (0-indexed)
     let statusIndex = journalHeader.indexOf("Status"); 
 
     let finalHeader = [...journalHeader];
@@ -1046,12 +1040,21 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         const finalStatus = trade.status === 'default' ? 'traded' : trade.status;
         const finalOutcome = trade.outcome || trade.originalOutcome || (trade.maxR >= 2 ? 'Win' : 'Loss');
         
-        if (outcomeIndex !== -1) {
+        // Ensure the array is long enough before assigning
+        if (newColumns.length > outcomeIndex) {
             newColumns[outcomeIndex] = finalOutcome;
         }
 
-        newColumns[statusIndex] = finalStatus;
-
+        // Handle Status column
+        if (statusIndex < newColumns.length) {
+            newColumns[statusIndex] = finalStatus;
+        } else {
+            // Pad columns if status is a new column
+            while(newColumns.length < statusIndex) {
+                newColumns.push('');
+            }
+            newColumns.push(finalStatus);
+        }
 
         return newColumns.map(field => {
             const fieldStr = String(field ?? '').trim();
@@ -1362,3 +1365,4 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     
 
     
+
