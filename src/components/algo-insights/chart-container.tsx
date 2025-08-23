@@ -846,11 +846,11 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                 .filter((trade): trade is JournalTrade => trade !== null);
 
             if (parsedTrades.length === 0) {
-              throw new Error(`No valid trade rows could be parsed for the pair 'US30'. Check data and column headers.`);
+              throw new Error(`No valid trade rows could be parsed for the pair '${selectedPair}'. Check data and column headers.`);
             }
 
             setAllJournalTrades(parsedTrades); 
-            toast({ title: "Journal Imported", description: `${parsedTrades.length} trades loaded for US30.` });
+            toast({ title: "Journal Imported", description: `${parsedTrades.length} trades loaded for ${selectedPair}.` });
         } catch (error: any) {
             toast({ variant: "destructive", title: "Journal Import Failed", description: error.message, duration: 9000 });
         }
@@ -1182,7 +1182,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                         mode="single"
                         selected={selectedDate}
                         onSelect={setSelectedDate}
-                        initialFocus
+                        defaultMonth={selectedDate}
                         modifiers={{ 
                             win: (date) => dayResults[date.toISOString().split('T')[0]] === 'win',
                             loss: (date) => dayResults[date.toISOString().split('T')[0]] === 'loss',
@@ -1232,5 +1232,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     </div>
   );
 }
+
+    
 
     
