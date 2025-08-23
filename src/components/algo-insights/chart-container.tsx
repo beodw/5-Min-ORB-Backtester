@@ -833,7 +833,9 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                     
                     const columns = row.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g)?.map(col => col.replace(/"/g, '')) || [];
                     
-                    // Always filter for US30, regardless of the dropdown selection.
+                    // Log the found pair value for debugging
+                    console.log(`Row ${rowNum} Pair Value:`, columns[headerIndices.pair]?.trim());
+
                     if (columns[headerIndices.pair]?.trim() !== "US30") {
                         return null;
                     }
@@ -1312,5 +1314,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     </div>
   );
 }
+
+    
 
     
