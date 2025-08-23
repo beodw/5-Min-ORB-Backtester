@@ -811,37 +811,46 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                 if (index === -1) throw new Error(`Missing required column: "${(requiredHeaders as any)[key]}"`);
             }
 
-            const parsedTrades: JournalTrade[] = lines.slice(1).map((row, i) => {
-                const rowNum = i + 2; // For error reporting
-                const columns = row.split(',');
-                if (columns.length < headerLine.length) {
-                   throw new Error(`Row ${rowNum} has incorrect number of columns. Expected ${headerLine.length}, got ${columns.length}.`);
-                }
-                const dateTaken = parseDateFromJournal(columns[headerIndices.dateTaken], rowNum);
-                const dateClosed = parseDateFromJournal(columns[headerIndices.dateClosed], rowNum);
-                
-                const maxRString = columns[headerIndices.maxR];
-                const maxR = parseFloat(maxRString);
-                if (isNaN(maxR)) {
-                    throw new Error(`Invalid 'Maximum Favourable Excursion (R)' value on row ${rowNum}: '${maxRString}'. Must be a number.`);
-                }
-                
-                return {
-                    pair: columns[headerIndices.pair].trim(),
-                    dateTaken,
-                    dateClosed,
-                    maxR,
-                    status: 'default',
-                    originalRow: row,
-                };
-            });
+            const parsedTrades: JournalTrade[] = lines.slice(1)
+                .map((row, i) => {
+                    const rowNum = i + 2; // For error reporting
+                    const columns = row.split(',');
+                    if (columns.length < headerLine.length) {
+                       throw new Error(`Row ${rowNum} has incorrect number of columns. Expected ${headerLine.length}, got ${columns.length}.`);
+                    }
+
+                    // Pre-filter rows based on the selected pair before detailed parsing
+                    const pair = columns[headerIndices.pair]?.trim();
+                    if (pair !== selectedPair) {
+                        return null;
+                    }
+
+                    const dateTaken = parseDateFromJournal(columns[headerIndices.dateTaken], rowNum);
+                    const dateClosed = parseDateFromJournal(columns[headerIndices.dateClosed], rowNum);
+                    
+                    const maxRString = columns[headerIndices.maxR];
+                    const maxR = parseFloat(maxRString);
+                    if (isNaN(maxR)) {
+                        throw new Error(`Invalid 'Maximum Favourable Excursion (R)' value on row ${rowNum}: '${maxRString}'. Must be a number.`);
+                    }
+                    
+                    return {
+                        pair: pair,
+                        dateTaken,
+                        dateClosed,
+                        maxR,
+                        status: 'default',
+                        originalRow: row,
+                    };
+                })
+                .filter((trade): trade is JournalTrade => trade !== null);
 
             if (parsedTrades.length === 0) {
-              throw new Error("No valid trade rows could be parsed from the journal file. Check data and column headers.");
+              throw new Error(`No valid trade rows could be parsed for the pair '${selectedPair}'. Check data and column headers.`);
             }
 
-            setAllJournalTrades(parsedTrades); // This will trigger the useEffect to filter by pair
-            toast({ title: "Journal Imported", description: `${parsedTrades.length} total trades loaded.` });
+            setAllJournalTrades(parsedTrades); // Store all trades (which are already filtered by pair)
+            toast({ title: "Journal Imported", description: `${parsedTrades.length} trades loaded for ${selectedPair}.` });
         } catch (error: any) {
             toast({ variant: "destructive", title: "Journal Import Failed", description: error.message, duration: 9000 });
         }
