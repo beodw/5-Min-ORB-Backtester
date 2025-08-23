@@ -20,6 +20,7 @@ import { MeasurementTool } from "./measurement-tool";
 import { useMemo, useRef, useState, useCallback, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { findClosestIndex } from "@/lib/chart-utils";
+import { useToast } from "@/hooks/use-toast";
 
 export type ChartClickData = {
     price: number;
@@ -101,6 +102,7 @@ export function InteractiveChart({
 }: InteractiveChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartScalesRef = useRef<{x: any, y: any, plot: any} | null>(null);
+  const { toast } = useToast();
   
   const aggregatedData = useMemo(() => {
     if (!data || data.length === 0) {
@@ -161,6 +163,16 @@ export function InteractiveChart({
     
     return result;
   }, [data, timeframe, endDate]);
+
+  useEffect(() => {
+    if (aggregatedData.length > 0) {
+        toast({
+            title: "Debug: Step 3 Complete",
+            description: `Successfully computed aggregatedData with ${aggregatedData.length} rows.`,
+            duration: 9000,
+        });
+    }
+  }, [aggregatedData, toast]);
   
   const [xDomain, setXDomain] = useState<[number, number]>([0, 100]);
   const [yDomain, setYDomain] = useState<[number, number]>([0, 100]);
@@ -237,14 +249,12 @@ export function InteractiveChart({
 
     const padding = (max - min) * 0.1 || 10;
     const newYDomain: [number, number] = [min - padding, max + padding];
-    
-    setYDomain(currentYDomain => {
-        if (newYDomain[0] !== currentYDomain[0] || newYDomain[1] !== currentYDomain[1]) {
-            return newYDomain;
-        }
-        return currentYDomain;
-    });
 
+    if (newYDomain[0] !== yDomain[0] || newYDomain[1] !== yDomain[1]) {
+        if(isFinite(newYDomain[0]) && isFinite(newYDomain[1])) {
+             setYDomain(newYDomain);
+        }
+    }
   }, [windowedData, priceMarkers, isYAxisLocked]);
 
     const getChartCoordinates = (e: any): ChartClickData | null => {
