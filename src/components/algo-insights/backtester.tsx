@@ -594,8 +594,9 @@ export function Backtester() {
             setIsDataImported(true);
             setSelectedDate(processedData[processedData.length - 1].date);
             toast({
-                title: "Import Successful",
-                description: `Loaded ${file.name}`,
+                title: "Debug: Step 1/X Complete",
+                description: `Successfully parsed ${file.name} in Backtester.`,
+                duration: 9000,
             });
             
         } catch (error: any) {
@@ -1223,6 +1224,3 @@ export function Backtester() {
     </div>
   );
 }
-
-    
-    

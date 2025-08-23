@@ -109,8 +109,8 @@ export function JournalReconstruction() {
   const [redoStack, setRedoStack] = useState<DrawingState[]>([]);
 
   const defaultToolbarPositions: JournalToolbarPositions = {
-    main: { x: 16, y: 88 },
-    secondary: { x: 16, y: 16 },
+    main: { x: 16, y: 16 },
+    secondary: { x: 16, y: 88 },
     controls: { x: window.innerWidth - 380, y: 16 }
   };
 
@@ -190,7 +190,7 @@ export function JournalReconstruction() {
         try {
             const savedPos = JSON.parse(savedToolbarPosRaw);
             // Merge with defaults to avoid errors if a new toolbar was added
-            setToolbarPositions(prev => ({ ...prev, ...savedPos }));
+            setToolbarPositions(prev => ({ ...defaultToolbarPositions, ...savedPos }));
         } catch (e) {
             console.error("Failed to parse journal toolbar positions from localStorage", e);
         }
@@ -351,7 +351,11 @@ export function JournalReconstruction() {
             setPriceData(processedData);
             setIsPriceDataImported(true);
             setSessionInfo(prev => ({ ...prev, priceDataFileName: file.name }));
-            toast({ title: "Import Successful", description: `Loaded ${file.name}` });
+            toast({ 
+                title: "Debug: Step 1/X Complete",
+                description: `Successfully parsed ${file.name} in Journal Reconstruction.`,
+                duration: 9000,
+            });
         } catch (error: any) {
             toast({ variant: "destructive", title: "Price Data Import Failed", description: `Error: ${error.message}`, duration: 9000 });
             setIsPriceDataImported(false);
@@ -808,6 +812,11 @@ export function JournalReconstruction() {
     ? `Restore session with ${sessionToRestore.priceDataFileName || 'N/A'} and ${sessionToRestore.journalFileName || 'N/A'}?`
     : 'An unknown previous session was found. Restore?';
 
+  const chartEventHandlers = {
+    onChartClick: handleChartClick,
+    onChartMouseMove: handleChartMouseMove,
+  };
+
   return (
     <div className="w-full h-full relative">
        <AlertDialog open={showRestoreDialog} onOpenChange={setShowRestoreDialog}>
@@ -827,26 +836,25 @@ export function JournalReconstruction() {
 
         <div className="absolute inset-0">
             <InteractiveChart
-            data={priceData}
-            trades={[]}
-            onChartClick={handleChartClick}
-            onChartMouseMove={handleChartMouseMove}
-            rrTools={rrTools}
-            onUpdateTool={(tool) => { pushToHistory(drawingState); setRrTools(prev => prev.map(t => t.id === tool.id ? tool : t)); }}
-            onRemoveTool={(id) => { pushToHistory(drawingState); setRrTools(prev => prev.filter(t => t.id !== id)); }}
-            isPlacingRR={!!placingToolType}
-            isPlacingPriceMarker={isPlacingPriceMarker}
-            priceMarkers={priceMarkers}
-            onRemovePriceMarker={(id) => { pushToHistory(drawingState); setPriceMarkers(prev => prev.filter(m => m.id !== id)); }}
-            onUpdatePriceMarker={(id, price) => { pushToHistory(drawingState); setPriceMarkers(prev => prev.map(m => m.id === id ? {...m, price} : m)); }}
-            measurementTools={measurementTools}
-            onRemoveMeasurementTool={(id) => { pushToHistory(drawingState); setMeasurementTools(prev => prev.filter(t => t.id !== id)); }}
-            liveMeasurementTool={liveMeasurementTool}
-            pipValue={pipValue}
-            timeframe={timeframe}
-            timeZone="UTC"
-            endDate={selectedDate}
-            isYAxisLocked={isYAxisLocked}
+                {...chartEventHandlers}
+                data={priceData}
+                trades={[]}
+                rrTools={rrTools}
+                onUpdateTool={(tool) => { pushToHistory(drawingState); setRrTools(prev => prev.map(t => t.id === tool.id ? tool : t)); }}
+                onRemoveTool={(id) => { pushToHistory(drawingState); setRrTools(prev => prev.filter(t => t.id !== id)); }}
+                isPlacingRR={!!placingToolType}
+                isPlacingPriceMarker={isPlacingPriceMarker}
+                priceMarkers={priceMarkers}
+                onRemovePriceMarker={(id) => { pushToHistory(drawingState); setPriceMarkers(prev => prev.filter(m => m.id !== id)); }}
+                onUpdatePriceMarker={(id, price) => { pushToHistory(drawingState); setPriceMarkers(prev => prev.map(m => m.id === id ? {...m, price} : m)); }}
+                measurementTools={measurementTools}
+                onRemoveMeasurementTool={(id) => { pushToHistory(drawingState); setMeasurementTools(prev => prev.filter(t => t.id !== id)); }}
+                liveMeasurementTool={liveMeasurementTool}
+                pipValue={pipValue}
+                timeframe={timeframe}
+                timeZone="UTC"
+                endDate={selectedDate}
+                isYAxisLocked={isYAxisLocked}
             />
             {!isPriceDataImported && !sessionInfo.priceDataFileName && (
                 <div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center">
@@ -1111,5 +1119,3 @@ export function JournalReconstruction() {
     </div>
   );
 }
-
-    
