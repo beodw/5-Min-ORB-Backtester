@@ -7,7 +7,6 @@ export interface PriceData {
   low: number;
   close: number;
   wick: [number, number];
-  index: number;
 }
 
 // Added to fix a type error in InteractiveChart
@@ -19,14 +18,13 @@ export interface Trade {
 }
 
 export interface RiskRewardTool {
-  id:string;
+  id: string;
   entryPrice: number;
   stopLoss: number;
   takeProfit: number;
   entryDate: Date;
   widthInPoints: number;
   position: 'long' | 'short';
-  pair: string;
 }
 
 export interface PriceMarker {
@@ -51,16 +49,3 @@ export interface MeasurementTool {
   startPoint: MeasurementPoint;
   endPoint: MeasurementPoint;
 }
-
-export interface ToolbarPositions {
-  main: { x: number; y: number };
-  secondary: { x: number; y: number };
-}
-
-export type DrawingState = {
-    rrTools: RiskRewardTool[];
-    priceMarkers: PriceMarker[];
-    measurementTools: MeasurementTool[];
-};
-
-    

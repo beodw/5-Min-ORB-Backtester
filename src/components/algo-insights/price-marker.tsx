@@ -22,7 +22,7 @@ export function PriceMarker({ marker, onRemove, onUpdate, yScale, plot, svgBound
 
   const isDeletable = marker.isDeletable !== false;
   const labelText = `${marker.label ? `${marker.label}: ` : ''}${marker.price.toFixed(5)}`;
-  const labelWidth = labelText.length * 6.5 + 8;
+  const labelWidth = labelText.length * 6.5 + 8; // A reasonable estimate for width
 
   const handleContextMenu = (e: React.MouseEvent) => {
     if (isDeletable) {
@@ -33,7 +33,7 @@ export function PriceMarker({ marker, onRemove, onUpdate, yScale, plot, svgBound
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (e.button !== 0 || !isDeletable) return;
+    if (e.button !== 0 || !isDeletable) return; // Only allow left-click drag on deletable markers
     e.stopPropagation();
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
@@ -42,6 +42,7 @@ export function PriceMarker({ marker, onRemove, onUpdate, yScale, plot, svgBound
             const mouseYInSvg = moveEvent.clientY - svgBounds.top;
             const mouseYInPlot = mouseYInSvg - plot.top;
             
+            // Clamp the drag to within the plot area
             const clampedY = Math.max(0, Math.min(mouseYInPlot, plot.height));
 
             const newPrice = yScale.invert(clampedY);
@@ -76,6 +77,7 @@ export function PriceMarker({ marker, onRemove, onUpdate, yScale, plot, svgBound
         strokeDasharray="4 4"
         style={{ pointerEvents: 'none' }}
       />
+      {/* Invisible hitbox for easier interaction */}
        <line
         x1={plot.left}
         y1={yPosition}

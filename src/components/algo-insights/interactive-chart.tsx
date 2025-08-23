@@ -11,12 +11,14 @@ import {
   Bar,
   Customized,
   Tooltip,
+  Cross,
 } from "recharts";
 import type { PriceData, Trade, RiskRewardTool as RRToolType, PriceMarker as PriceMarkerType, MeasurementTool as MeasurementToolType } from "@/types";
 import { RiskRewardTool } from "./risk-reward-tool";
 import { PriceMarker } from "./price-marker";
 import { MeasurementTool } from "./measurement-tool";
 import { useMemo, useRef, useState, useCallback, useEffect } from "react";
+import { cn } from "@/lib/utils";
 import { findClosestIndex } from "@/lib/chart-utils";
 
 export type ChartClickData = {
@@ -103,10 +105,10 @@ export function InteractiveChart({
       return [];
     }
   
-    const baseData = data.map((d, i) => ({ ...d, index: i }));
+    const filteredByDate = data;
     
     if (timeframe === '1m') {
-      return baseData;
+      return filteredByDate;
     }
   
     const getIntervalMinutes = (tf: string): number => {
@@ -120,12 +122,12 @@ export function InteractiveChart({
     };
   
     const interval = getIntervalMinutes(timeframe) * 60 * 1000;
-    if (interval <= 60000) return baseData;
+    if (interval <= 60000) return filteredByDate;
   
-    const result: (PriceData & { index: number })[] = [];
-    let currentCandle: (PriceData & { index: number }) | null = null;
+    const result: PriceData[] = [];
+    let currentCandle: PriceData | null = null;
     
-    for (const point of baseData) {
+    for (const point of filteredByDate) {
       const pointTime = point.date.getTime();
       const bucketTimestamp = Math.floor(pointTime / interval) * interval;
       
@@ -134,8 +136,12 @@ export function InteractiveChart({
           result.push(currentCandle);
         }
         currentCandle = {
-          ...point,
           date: new Date(bucketTimestamp),
+          open: point.open,
+          high: point.high,
+          low: point.low,
+          close: point.close,
+          wick: [point.low, point.high],
         };
       } else {
         currentCandle.high = Math.max(currentCandle.high, point.high);
@@ -161,7 +167,7 @@ export function InteractiveChart({
   const windowedData = useMemo(() => {
     if (!aggregatedData.length) return [];
     const [start, end] = xDomain;
-    const buffer = 10; 
+    const buffer = 100;
     const startIndex = Math.max(0, Math.floor(start) - buffer);
     const endIndex = Math.min(aggregatedData.length, Math.ceil(end) + buffer);
     
@@ -169,16 +175,23 @@ export function InteractiveChart({
   }, [xDomain, aggregatedData]);
 
   useEffect(() => {
-    if (aggregatedData.length > 0) {
-        const panToEnd = () => {
-            const domainWidth = 100;
-            const targetIndex = aggregatedData.length - 1;
-            const newEnd = targetIndex + (domainWidth * 0.1); 
-            const newStart = newEnd - domainWidth;
-            return [newStart > 0 ? newStart : 0, newEnd];
-        };
-        setXDomain(panToEnd());
-    }
+    if (aggregatedData.length === 0) return;
+
+    const panToEnd = () => {
+        const domainWidth = 100;
+        const targetIndex = aggregatedData.length - 1;
+        const newEnd = targetIndex + (domainWidth * 0.1); 
+        const newStart = newEnd - domainWidth;
+        return [newStart > 0 ? newStart : 0, newEnd];
+    };
+
+    setXDomain(prev => {
+        const isInitialLoad = (prev[0] === 0 && prev[1] === 100);
+        if (isInitialLoad) {
+            return panToEnd();
+        }
+        return prev;
+    });
   }, [aggregatedData]);
 
 
@@ -213,13 +226,37 @@ export function InteractiveChart({
 
     const padding = (max - min) * 0.1 || 10;
     const newYDomain: [number, number] = [min - padding, max + padding];
-
+    
     if (newYDomain[0] !== yDomain[0] || newYDomain[1] !== yDomain[1]) {
-        if(isFinite(newYDomain[0]) && isFinite(newYDomain[1])) {
-            setYDomain(newYDomain);
-        }
+        setYDomain(newYDomain);
     }
-  }, [windowedData, priceMarkers, isYAxisLocked, yDomain]);
+  }, [windowedData, priceMarkers, yDomain, isYAxisLocked]);
+
+  const xDataDomain = useMemo(() => {
+    if (!aggregatedData.length) return [0, 0];
+    return [
+      aggregatedData[0].date.getTime(),
+      aggregatedData[aggregatedData.length - 1].date.getTime()
+    ];
+  }, [aggregatedData]);
+
+  const xTimeDomain = useMemo(() => {
+    if (!aggregatedData || aggregatedData.length === 0) return [0, 0];
+    
+    const [start, end] = xDomain;
+    
+    const firstPointTime = aggregatedData[0].date.getTime();
+    
+    const interval = aggregatedData.length > 1 
+      ? aggregatedData[1].date.getTime() - firstPointTime
+      : 60000; 
+
+    const startTime = firstPointTime + start * interval;
+    const endTime = firstPointTime + end * interval;
+
+    return [startTime, endTime];
+
+  }, [aggregatedData, xDomain]);
 
     const getChartCoordinates = (e: any): ChartClickData | null => {
         if (!e || !chartScalesRef.current) return null;
@@ -234,14 +271,12 @@ export function InteractiveChart({
         }
 
         const price = yScale.invert(mouseYInPlot);
-        const dataIndexFloat = xScale.invert(mouseXInPlot);
-        const dataIndex = Math.round(dataIndexFloat);
+        const timestamp = xScale.invert(mouseXInPlot);
+        const dataIndex = findClosestIndex(aggregatedData, timestamp);
+        const candle = aggregatedData[dataIndex];
         
-        if (price !== undefined && dataIndex >= 0 && dataIndex < aggregatedData.length) {
-            const candle = aggregatedData[dataIndex];
-            if (candle) {
-                return { price, date: candle.date, dataIndex, closePrice: candle.close, yDomain, xDomain, candle };
-            }
+        if (price !== undefined && candle) {
+            return { price, date: candle.date, dataIndex, closePrice: candle.close, yDomain, xDomain, candle };
         }
         return null;
     }
@@ -262,15 +297,14 @@ export function InteractiveChart({
         const coords = getChartCoordinates(e);
 
         if (coords) {
-            onChartMouseMove(coords); // For live measurement tool
+            onChartMouseMove(coords);
         }
     };
 
     const handleMouseLeaveChart = () => {
-        // Placeholder for any future leave logic
     }
 
-  const internalHandleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
     if (!chartContainerRef.current) return;
   
@@ -287,7 +321,6 @@ export function InteractiveChart({
         const mouseIndex = domainStart + (chartX / plotWidth) * domainWidth;
         
         const zoomFactor = 1.1;
-        // scroll up (e.deltaY < 0) zooms in, scroll down zooms out.
         let newDomainWidth = e.deltaY < 0 ? domainWidth / zoomFactor : domainWidth * zoomFactor;
       
         if (newDomainWidth < 10) {
@@ -306,7 +339,7 @@ export function InteractiveChart({
     });
   };
 
-  const internalHandleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (isPlacingRR || isPlacingPriceMarker || !chartContainerRef.current) return;
     e.preventDefault();
     
@@ -318,7 +351,7 @@ export function InteractiveChart({
     };
 
     const { right } = chartContainerRef.current.getBoundingClientRect();
-    const yAxisAreaStart = right - 80; // approximate axis width
+    const yAxisAreaStart = right - 80;
 
     if (e.clientX > yAxisAreaStart && !isYAxisLocked) {
         setIsYAxisDragging(true);
@@ -330,7 +363,7 @@ export function InteractiveChart({
     }
   };
   
-  const internalHandleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!chartContainerRef.current) return;
 
     if (dragStart) {
@@ -342,9 +375,9 @@ export function InteractiveChart({
             const plotHeight = height - 20;
             if (plotHeight <= 0) return;
             const dy = e.clientY - dragStart.y;
-            const scaleFactor = 1 - (dy / plotHeight) * 2; // Sensitivity factor
+            const scaleFactor = 1 - (dy / plotHeight) * 2;
 
-            if (scaleFactor <= 0.01) return; // Prevent inverting or collapsing
+            if (scaleFactor <= 0.01) return;
 
             const [yStart, yEnd] = dragStart.yDomain;
             const originalWidth = yEnd - yStart;
@@ -390,7 +423,7 @@ export function InteractiveChart({
         }
     } else if (!isPlacingRR && !isPlacingPriceMarker) {
         const { right } = chartContainerRef.current.getBoundingClientRect();
-        const yAxisAreaStart = right - 80; // approximate axis width
+        const yAxisAreaStart = right - 80;
         if (e.clientX > yAxisAreaStart && !isYAxisLocked) {
             chartContainerRef.current.style.cursor = 'ns-resize';
         } else {
@@ -401,7 +434,7 @@ export function InteractiveChart({
     }
   };
   
-  const internalHandleMouseUp = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleMouseUp = (e: React.MouseEvent<HTMLDivElement>) => {
     setIsDragging(false);
     setIsYAxisDragging(false);
     setDragStart(null);
@@ -412,9 +445,9 @@ export function InteractiveChart({
     }
   };
   
-  const internalHandleMouseLeave = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleMouseLeave = (e: React.MouseEvent<HTMLDivElement>) => {
     if (isDragging || isYAxisDragging) {
-        internalHandleMouseUp(e);
+        handleMouseUp(e);
     }
     if (chartContainerRef.current) {
       chartContainerRef.current.style.cursor = 'default';
@@ -423,44 +456,45 @@ export function InteractiveChart({
   };
 
   const formatXAxis = useCallback((tickItem: any) => {
-    const index = Math.round(tickItem);
-    const point = aggregatedData[index];
-    if (!point) return '';
-
-    const date = point.date;
+    const date = new Date(tickItem);
     if (isNaN(date.getTime())) return '';
     
     const [start, end] = xDomain;
-    const domainWidth = end - start;
+    const timePerIndex = aggregatedData.length > 1 
+      ? aggregatedData[1].date.getTime() - aggregatedData[0].date.getTime() 
+      : 60000;
     
-    if (domainWidth > 3 * 24 * 60) { // More than 3 days visible
+    const visibleRangeInMs = (end - start) * timePerIndex;
+    const visibleRangeInMinutes = visibleRangeInMs / 60000;
+
+    if (visibleRangeInMinutes > 3 * 24 * 60) {
       return date.toLocaleDateString([], { month: 'short', day: 'numeric', timeZone });
     }
-    if (domainWidth > 24 * 60) { // More than 1 day visible
+    if (visibleRangeInMinutes > 24 * 60) {
       return date.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone });
     }
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone });
   }, [xDomain, aggregatedData, timeZone]);
-  
+
   return (
     <div 
       ref={chartContainerRef} 
       className="w-full h-full relative"
-      onWheel={internalHandleWheel}
-      onMouseDown={internalHandleMouseDown}
-      onMouseMove={internalHandleMouseMove}
-      onMouseUp={internalHandleMouseUp}
-      onMouseLeave={internalHandleMouseLeave}
+      onWheel={handleWheel}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseLeave}
       style={{ cursor: isPlacingRR || isPlacingPriceMarker ? 'crosshair' : (isDragging ? 'grabbing' : 'crosshair')}}
     >
       {!aggregatedData || aggregatedData.length === 0 ? (
         <div className="flex items-center justify-center w-full h-full text-muted-foreground">
-          No data available. Please import a CSV file.
+          No data available for the selected time range.
         </div>
       ) : (
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart 
-            data={aggregatedData} 
+            data={windowedData} 
             onClick={handleClick}
             onMouseMove={handleMouseMoveRecharts} 
             onMouseLeave={handleMouseLeaveChart}
@@ -468,7 +502,7 @@ export function InteractiveChart({
         >
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border) / 0.5)" />
           <XAxis
-            dataKey="index"
+            dataKey="date"
             tickFormatter={formatXAxis}
             stroke="hsl(var(--muted-foreground))"
             fontSize={12}
@@ -477,7 +511,7 @@ export function InteractiveChart({
             interval="preserveStartEnd"
             minTickGap={80}
             xAxisId="main"
-            domain={xDomain}
+            domain={xTimeDomain}
             type="number"
             allowDataOverflow={true}
           />
@@ -499,7 +533,7 @@ export function InteractiveChart({
                 isAnimationActive={false}
             />
 
-          <Bar dataKey="wick" shape={<Candlestick />} isAnimationActive={false} xAxisId="main" yAxisId="main" data={windowedData} />
+          <Bar dataKey="wick" shape={<Candlestick />} isAnimationActive={false} xAxisId="main" yAxisId="main"/>
 
           {trades.map((trade) => (
             <ReferenceDot
@@ -532,7 +566,6 @@ export function InteractiveChart({
                 left: mainXAxis.x
               };
 
-              // Store scales in ref for the main onClick handler
               chartScalesRef.current = {
                 x: mainXAxis.scale,
                 y: mainYAxis.scale,
@@ -592,5 +625,3 @@ export function InteractiveChart({
     </div>
   );
 }
-
-    

@@ -1,4 +1,3 @@
-
 import type {Metadata} from 'next';
 import { Inter, Space_Grotesk } from 'next/font/google';
 import './globals.css';
@@ -16,8 +15,8 @@ const fontHeadline = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: 'Algo Insights',
-  description: 'Interactive charting and backtesting with AI-powered analysis.',
+  title: '5 Minute ORB Backtester',
+  description: 'Backtest the 5 minute opening range breakout strategy.',
 };
 
 export default function RootLayout({

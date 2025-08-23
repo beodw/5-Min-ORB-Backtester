@@ -6,7 +6,7 @@ import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, Chevr
 import { Button } from "@/components/ui/button";
 import { InteractiveChart, type ChartClickData } from "@/components/algo-insights/interactive-chart";
 import { mockPriceData } from "@/lib/mock-data";
-import type { RiskRewardTool as RRToolType, PriceMarker, MeasurementTool as MeasurementToolType, PriceData, ToolbarPositions, MeasurementPoint } from "@/types";
+import type { RiskRewardTool as RRToolType, PriceMarker, MeasurementTool as MeasurementToolType, MeasurementPoint, PriceData } from "@/types";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -43,14 +43,10 @@ type DrawingState = {
     measurementTools: MeasurementToolType[];
 };
 
-type SessionInfo = {
-    fileName: string;
-};
-
 type SessionState = {
     drawingState: DrawingState;
     selectedDate: string; // Stored as ISO string
-    sessionInfo: SessionInfo | null;
+    fileName: string;
 };
 
 const formatDateForCsv = (date: Date | null): string => {
@@ -58,8 +54,12 @@ const formatDateForCsv = (date: Date | null): string => {
     const day = String(date.getUTCDate()).padStart(2, '0');
     const month = String(date.getUTCMonth() + 1).padStart(2, '0'); // Month is 0-indexed
     const year = date.getUTCFullYear();
+    
+    const hours = String(date.getUTCHours()).padStart(2, '0');
+    const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+    const seconds = String(date.getUTCSeconds()).padStart(2, '0');
 
-    return `${month}/${day}/${year}`;
+    return `${month}/${day}/${year} ${hours}:${minutes}:${seconds}`;
 };
 
 const simulateTrade = (
@@ -117,7 +117,7 @@ const simulateTrade = (
     let maxR = riskAmountPrice > 0 ? maxProfitPrice / riskAmountPrice : 0;
     
     return {
-        pair: tool.pair,
+        pair: '',
         dateTaken: formatDateForCsv(dateTaken),
         dateClosed: formatDateForCsv(dateClosed),
         maxR: maxR.toFixed(2),
@@ -127,46 +127,12 @@ const simulateTrade = (
 };
 
 
-const parseDate = (dateStr: string, timeStr: string): Date | null => {
-    const timeParts = timeStr.split(':').map(Number);
-    if (timeParts.length !== 3) return null;
-
-    // Try MM/DD/YYYY
-    let dateParts = dateStr.split('/').map(Number);
-    if (dateParts.length === 3) {
-        const [month, day, year] = dateParts;
-        if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
-            return new Date(Date.UTC(year, month - 1, day, timeParts[0], timeParts[1], timeParts[2]));
-        }
-    }
-
-    // Try DD.MM.YYYY
-    dateParts = dateStr.split('.').map(Number);
-    if (dateParts.length === 3) {
-        const [day, month, year] = dateParts;
-        if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
-            return new Date(Date.UTC(year, month - 1, day, timeParts[0], timeParts[1], timeParts[2]));
-        }
-    }
-    
-    // Try YYYY-MM-DD
-    dateParts = dateStr.split('-').map(Number);
-    if (dateParts.length === 3) {
-        const [year, month, day] = dateParts;
-         if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
-            return new Date(Date.UTC(year, month - 1, day, timeParts[0], timeParts[1], timeParts[2]));
-        }
-    }
-    
-    return null;
-}
-
-const fillGapsInData = (data: Omit<PriceData, 'index'>[]): PriceData[] => {
+const fillGapsInData = (data: PriceData[]): PriceData[] => {
     if (data.length < 2) {
-        return data.map((d, i) => ({...d, index: i}));
+        return data;
     }
 
-    const processedData: Omit<PriceData, 'index'>[] = [data[0]];
+    const processedData: PriceData[] = [data[0]];
     const oneMinute = 60 * 1000;
 
     for (let i = 1; i < data.length; i++) {
@@ -193,19 +159,23 @@ const fillGapsInData = (data: Omit<PriceData, 'index'>[]): PriceData[] => {
         }
         processedData.push(currentPoint);
     }
-    return processedData.map((d, i) => ({...d, index: i}));
+    return processedData;
 };
 
+type ToolbarPositions = {
+  main: { x: number, y: number };
+  secondary: { x: number, y: number };
+};
 
 // Local storage keys
 const APP_SETTINGS_KEY = 'algo-insights-settings';
-const SESSION_KEY = 'algo-insights-session';
+const SESSION_KEY_PREFIX = 'algo-insights-session-'; // One for backtester, one for journal
 const TOOLBAR_POS_KEY = 'algo-insights-toolbar-positions';
 
-export function Backtester() {
-  const [priceData, setPriceData] = useState<PriceData[]>([]);
+export function ChartContainer() {
+  const [priceData, setPriceData] = useState<PriceData[]>(mockPriceData);
   const [isDataImported, setIsDataImported] = useState(false);
-  const [sessionInfo, setSessionInfo] = useState<SessionInfo | null>(null);
+  const [fileName, setFileName] = useState('');
   
   const [drawingState, setDrawingState] = useState<DrawingState>({
     rrTools: [],
@@ -273,7 +243,7 @@ export function Backtester() {
   const [timeframe, setTimeframe] = useState('1m');
   const [timeZone, setTimeZone] = useState<string>('');
   const [timezones, setTimezones] = useState<{ value: string; label: string }[]>([]);
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [sessionStartTime, setSessionStartTime] = useState('09:30');
   const [isYAxisLocked, setIsYAxisLocked] = useState(true);
   const [pipValue, setPipValue] = useState(0.0001);
@@ -281,7 +251,11 @@ export function Backtester() {
   const { toast } = useToast();
 
   const [showRestoreDialog, setShowRestoreDialog] = useState(false);
-  const [sessionToRestore, setSessionToRestore] = useState<SessionInfo | null>(null);
+  const [sessionToRestore, setSessionToRestore] = useState<string | null>(null);
+  
+  // This ref helps us distinguish between backtester and journal instances
+  const instanceId = useRef(Math.random().toString(36).substring(7)).current;
+  const sessionKey = `${SESSION_KEY_PREFIX}${instanceId}`;
 
   // Effect for loading settings and checking for saved session on initial load
   useEffect(() => {
@@ -325,21 +299,19 @@ export function Backtester() {
         setTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
     }
     
-    // Check for a saved session
-    const savedSessionRaw = localStorage.getItem(SESSION_KEY);
+    // Check for a saved session for this specific instance
+    const savedSessionRaw = localStorage.getItem(sessionKey);
     if (savedSessionRaw) {
         try {
             const savedSession: SessionState = JSON.parse(savedSessionRaw);
-            if (savedSession.sessionInfo) {
-                setSessionToRestore(savedSession.sessionInfo);
+            if (savedSession.fileName) {
+                setSessionToRestore(savedSession.fileName);
                 setShowRestoreDialog(true);
             }
         } catch (e) {
             console.error("Failed to parse session from localStorage", e);
-            localStorage.removeItem(SESSION_KEY);
+            localStorage.removeItem(sessionKey);
         }
-    } else {
-        setPriceData(mockPriceData.map((d, i) => ({...d, index: i})));
     }
     
     // Load toolbar positions
@@ -353,7 +325,7 @@ export function Backtester() {
         }
     }
 
-  }, []);
+  }, [sessionKey]);
 
   // Effect for saving app settings
   useEffect(() => {
@@ -378,16 +350,16 @@ export function Backtester() {
 
     const sessionState: SessionState = {
         drawingState: serializableDrawingState as any,
-        selectedDate: selectedDate ? selectedDate.toISOString() : new Date().toISOString(),
-        sessionInfo,
+        selectedDate: selectedDate.toISOString(),
+        fileName,
     };
-    localStorage.setItem(SESSION_KEY, JSON.stringify(sessionState));
+    localStorage.setItem(sessionKey, JSON.stringify(sessionState));
 
-  }, [drawingState, selectedDate, sessionInfo, isDataImported]);
+  }, [drawingState, selectedDate, fileName, isDataImported, sessionKey]);
 
   const handleRestoreSession = () => {
     setShowRestoreDialog(false);
-    const savedSessionRaw = localStorage.getItem(SESSION_KEY);
+    const savedSessionRaw = localStorage.getItem(sessionKey);
     if (savedSessionRaw) {
         try {
             const savedSession: SessionState = JSON.parse(savedSessionRaw);
@@ -404,13 +376,13 @@ export function Backtester() {
 
             setDrawingState(restoredDrawingState);
             setSelectedDate(new Date(savedSession.selectedDate));
-            setSessionInfo(savedSession.sessionInfo);
+            setFileName(savedSession.fileName);
             setPriceData([]);
             setIsDataImported(false);
 
             toast({
                 title: "Session Restored",
-                description: `Drawings and settings loaded. Please re-import the file: ${sessionToRestore?.fileName}.`,
+                description: `Drawings and settings loaded. Please re-import "${savedSession.fileName}" to see the chart data.`,
                 duration: 9000
             });
         } catch (e) {
@@ -423,13 +395,13 @@ export function Backtester() {
 
   const handleDeclineRestore = () => {
       setShowRestoreDialog(false);
-      localStorage.removeItem(SESSION_KEY);
+      localStorage.removeItem(sessionKey);
       setDrawingState({ rrTools: [], priceMarkers: [], measurementTools: [] });
       setHistory([]);
       setRedoStack([]);
-      setSessionInfo(null);
+      setFileName('');
       setIsDataImported(false);
-      setPriceData(mockPriceData.map((d, i) => ({...d, index: i})));
+      setPriceData(mockPriceData);
   };
 
 
@@ -447,8 +419,6 @@ export function Backtester() {
       const visibleIndexRange = chartData.xDomain[1] - chartData.xDomain[0];
       const widthInPoints = Math.round(visibleIndexRange * 0.25);
 
-      const pairName = sessionInfo?.fileName.split('_')[0] || 'N/A';
-
       const newTool: RRToolType = {
         id: `rr-${Date.now()}`,
         entryPrice: entryPrice,
@@ -457,7 +427,6 @@ export function Backtester() {
         entryDate: chartData.date,
         widthInPoints: widthInPoints,
         position: placingToolType,
-        pair: pairName,
       };
       
       setRrTools(prevTools => [...prevTools, newTool]);
@@ -542,6 +511,11 @@ export function Backtester() {
     setPriceMarkers(prevMarkers => prevMarkers.filter(m => m.id !== id));
   };
 
+  const handleRemoveMeasurementTool = (id: string) => {
+    pushToHistory(drawingState);
+    setMeasurementTools(prev => prev.filter(t => t.id !== id));
+  };
+
   const handleUpdatePriceMarker = (id: string, price: number) => {
     pushToHistory(drawingState);
     setPriceMarkers(prevMarkers => 
@@ -549,11 +523,6 @@ export function Backtester() {
         m.id === id ? { ...m, price } : m
       )
     );
-  };
-
-  const handleRemoveMeasurementTool = (id: string) => {
-    pushToHistory(drawingState);
-    setMeasurementTools(prev => prev.filter(t => t.id !== id));
   };
 
   const handleClearAllDrawings = () => {
@@ -573,90 +542,93 @@ export function Backtester() {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    setFileName(file.name);
     const reader = new FileReader();
+
     reader.onload = (e) => {
         try {
-            const text = e.target?.result as string;
+            const text = e.target?.result;
+            if (typeof text !== 'string') throw new Error("Could not read file contents.");
+
             const lines = text.split('\n').filter(line => line.trim() !== '');
-            if (lines.length <= 1) {
-                toast({ variant: "destructive", title: "CSV Error", description: "CSV file contains no data rows." });
-                return;
-            }
-            const header = lines[0].trim().split(',');
-            if (header.length < 5) {
-                toast({ variant: "destructive", title: "CSV Error", description: "CSV file has fewer than 5 columns." });
-                return;
-            }
-            if (header[0].trim() !== 'Time (UTC)' || header[1].trim() !== 'Open') {
-                toast({ variant: "destructive", title: "CSV Error", description: "Invalid CSV header. Expected 'Time (UTC),Open,...'" });
-                return;
-            }
-            
+            if (lines.length <= 1) throw new Error("CSV is empty or has only a header.");
+
             const dataRows = lines.slice(1);
-            const parsedData = dataRows.map((row, index) => {
+
+            const parsedData: PriceData[] = dataRows.map((row, index) => {
                 const columns = row.split(',');
-                if (columns.length < 5) {
-                    console.warn(`Skipping malformed row ${index + 2}: Not enough columns.`);
-                    return null;
-                }
-                const [datePart, timePart] = columns[0].split(' ');
-                const date = parseDate(datePart, timePart);
+                const [localTime, openStr, highStr, lowStr, closeStr] = columns;
 
-                if (!date) {
-                    console.warn(`Skipping row ${index + 2} due to invalid date: ${columns[0]}`);
-                    return null;
+                if (!localTime || !openStr || !highStr || !lowStr || !closeStr) {
+                    throw new Error(`Row ${index + 2} has missing columns. Expected 5, found ${columns.length}.`);
                 }
 
-                const open = parseFloat(columns[1]);
-                const high = parseFloat(columns[2]);
-                const low = parseFloat(columns[3]);
-                const close = parseFloat(columns[4]);
+                const dateTimeString = localTime.trim().replace(' GMT', '');
+                const [datePart, timePart] = dateTimeString.split(' ');
                 
-                if ([open, high, low, close].some(isNaN)) {
-                     console.warn(`Skipping row ${index + 2} due to invalid number format.`);
-                     return null;
+                if (!datePart || !timePart) {
+                    throw new Error(`Invalid date format on row ${index + 2}. Expected 'DD.MM.YYYY HH:MM:SS', but found '${localTime}'.`);
+                }
+                
+                const [day, month, year] = datePart.split('.').map(Number);
+                const [hour, minute] = timePart.split(':').map(Number);
+                const second = timePart.includes(':') && timePart.split(':')[2] ? Number(timePart.split(':')[2]) || 0 : 0;
+                
+                if (isNaN(day) || isNaN(month) || isNaN(year) || isNaN(hour) || isNaN(minute) || isNaN(second)) {
+                    throw new Error(`Invalid date values on row ${index + 2}. Could not parse: '${localTime}'`);
+                }
+                const date = new Date(Date.UTC(year, month - 1, day, hour, minute, Math.floor(second)));
+                if (isNaN(date.getTime())) throw new Error(`Invalid date on row ${index + 2}. Parsed to an invalid Date object from: '${localTime}'`);
+
+                const open = parseFloat(openStr);
+                const high = parseFloat(highStr);
+                const low = parseFloat(lowStr);
+                const close = parseFloat(closeStr);
+                
+                if (isNaN(open) || isNaN(high) || isNaN(low) || isNaN(close)) {
+                    throw new Error(`Invalid price data on row ${index + 2}. Check for non-numeric values.`);
                 }
 
-                return { date, open, high, low, close, wick: [low, high] as [number, number] };
-            }).filter((item): item is Exclude<typeof item, null> => item !== null);
-
-            if (parsedData.length === 0) {
-                 toast({ variant: "destructive", title: "Parsing Error", description: "No valid data rows could be parsed." });
-                 return;
-            }
-            
-            const processedData = fillGapsInData(parsedData);
-            setPriceData(processedData);
-            setSessionInfo({ fileName: file.name });
-            setIsDataImported(true);
-            setSelectedDate(undefined); // Clear selected date on new import
-            toast({
-                title: "Import Successful",
-                description: `Loaded and processed ${processedData.length} data points.`,
+                return { date, open, high, low, close, wick: [low, high] };
             });
 
+            if (parsedData.length > 0) {
+                parsedData.sort((a, b) => a.date.getTime() - b.date.getTime());
+                const processedData = fillGapsInData(parsedData);
+                setPriceData(processedData);
+                setIsDataImported(true);
+                // On first import, pan to end. On re-import for session restore, selectedDate is already set.
+                const savedSession = localStorage.getItem(sessionKey);
+                if (!savedSession) {
+                    setSelectedDate(processedData[processedData.length - 1].date);
+                }
+            } else {
+                throw new Error("No valid data rows were parsed from the file.");
+            }
         } catch (error: any) {
             toast({
                 variant: "destructive",
                 title: "CSV Import Failed",
-                description: `Error: ${error.message}`,
+                description: `Please check the file format. Error: ${error.message}`,
                 duration: 9000,
             });
             setIsDataImported(false);
-        } finally {
-            if(fileInputRef.current) {
-                fileInputRef.current.value = "";
-            }
         }
     };
+
     reader.onerror = () => {
         toast({
             variant: "destructive",
             title: "File Read Error",
-            description: "Could not read the selected file.",
+            description: "An error occurred while reading the file.",
         });
+        setIsDataImported(false);
     };
+
     reader.readAsText(file);
+    if(fileInputRef.current) {
+        fileInputRef.current.value = "";
+    }
   };
 
 
@@ -684,7 +656,10 @@ export function Backtester() {
     const rows = sortedTools.map(tool => {
         const reportRow = simulateTrade(tool, priceData, pipValue);
         if (!reportRow) return null;
-        
+
+        const pair = fileName ? fileName.split('-')[0].trim() : 'N/A';
+        reportRow.pair = pair;
+
         const sanitize = (val: any) => {
             const str = String(val);
             if (str.includes(',')) return `"${str}"`;
@@ -705,7 +680,7 @@ export function Backtester() {
     }).filter(row => row !== null).join('\n');
 
     const csvContent = `${headers}\n${rows}`;
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf--8;' });
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     if (link.href) {
       URL.revokeObjectURL(link.href);
@@ -718,132 +693,8 @@ export function Backtester() {
     link.click();
     document.body.removeChild(link);
   };
-
-  const handleDateSelect = (date: Date | undefined) => {
-    if (date) {
-        const endOfDay = new Date(date);
-        endOfDay.setUTCHours(23, 59, 59, 999);
-        setSelectedDate(endOfDay);
-    } else {
-        setSelectedDate(undefined);
-    }
-  };
   
-  const handleNextCandle = () => {
-    if (!selectedDate) return;
-
-    const getDuration = (tf: string): number => {
-      switch (tf) {
-        case '1m': return 60 * 1000;
-        case '30m': return 30 * 60 * 1000;
-        case '1H': return 60 * 60 * 1000;
-        case '4H': return 4 * 60 * 60 * 1000;
-        case '1D': return 24 * 60 * 60 * 1000;
-        default: return 24 * 60 * 60 * 1000;
-      }
-    };
-
-    setSelectedDate(currentDate => {
-      if (!currentDate) return undefined;
-      const newDate = new Date(currentDate.getTime() + getDuration(timeframe));
-      const lastAvailableDate = priceData[priceData.length - 1]?.date;
-
-      if (lastAvailableDate && newDate > lastAvailableDate) {
-        return lastAvailableDate;
-      }
-      
-      return newDate;
-    });
-  };
-
-  const findNextSessionStartIndex = (currentDate: Date): number => {
-    const [sessionHour, sessionMinute] = sessionStartTime.split(':').map(Number);
-    
-    const searchStartIndex = priceData.findIndex(p => p.date > currentDate);
-    if (searchStartIndex === -1) return -1;
-
-    let lastDay = new Date(currentDate);
-    lastDay.setUTCHours(0, 0, 0, 0);
-
-    for (let i = searchStartIndex; i < priceData.length; i++) {
-        const pointDate = priceData[i].date;
-        
-        const pointDay = new Date(pointDate);
-        pointDay.setUTCHours(0, 0, 0, 0);
-
-        if (pointDay.getTime() > lastDay.getTime()) {
-            if (pointDate.getUTCHours() > sessionHour || (pointDate.getUTCHours() === sessionHour && pointDate.getUTCMinutes() >= sessionMinute)) {
-                return i;
-            }
-        }
-    }
-
-    return -1;
-  };
-  
-  
-  const handleNextSession = () => {
-    if (!sessionStartTime || !priceData.length) return;
-
-    const startDate = selectedDate || priceData[0]?.date || new Date();
-    const startIndex = findNextSessionStartIndex(startDate);
-
-
-    if (startIndex !== -1) {
-        const endIndex = startIndex + 5;
-        if (endIndex > priceData.length) {
-            toast({
-                variant: "destructive",
-                title: "Not Enough Data",
-                description: "Not enough data to draw the opening range.",
-            });
-            setSelectedDate(priceData[startIndex].date);
-            return;
-        }
-        const openingRangeCandles = priceData.slice(startIndex, endIndex);
-
-        let openingRangeHigh = openingRangeCandles[0].high;
-        let openingRangeLow = openingRangeCandles[0].low;
-
-        for (const candle of openingRangeCandles) {
-            openingRangeHigh = Math.max(openingRangeHigh, candle.high);
-            openingRangeLow = Math.min(openingRangeLow, candle.low);
-        }
-
-        const otherMarkers = priceMarkers.filter(
-            m => m.label !== "High" && m.label !== "Low"
-        );
-        
-        const highMarker: PriceMarker = {
-            id: `or-high-${startIndex}`,
-            price: openingRangeHigh,
-            label: 'High',
-            isDeletable: true,
-        };
-        const lowMarker: PriceMarker = {
-            id: `or-low-${startIndex}`,
-            price: openingRangeLow,
-            label: 'Low',
-            isDeletable: true,
-        };
-        
-        pushToHistory(drawingState);
-        setPriceMarkers(prev => [...otherMarkers, highMarker, lowMarker]);
-
-        const viewEndIndex = Math.min(startIndex + 15, priceData.length - 1);
-        setSelectedDate(priceData[viewEndIndex].date);
-        
-        return;
-    }
-    
-    toast({
-      variant: "destructive",
-      title: "Session Not Found",
-      description: "Could not find the start of the next session in the available data.",
-    });
-  };
-
-  const handlePlaceLong = () => {
+    const handlePlaceLong = () => {
     setIsPlacingPriceMarker(false);
     setIsPlacingMeasurement(false);
     setMeasurementStartPoint(null);
@@ -870,12 +721,13 @@ export function Backtester() {
   const handlePlaceMeasurement = () => {
     setPlacingToolType(null);
     setIsPlacingPriceMarker(false);
-    setMeasurementStartPoint(null);
+    setMeasurementStartPoint(null); // Will be set on first click
     setLiveMeasurementTool(null);
     setIsPlacingMeasurement(true);
   };
 
   const handleMouseDownOnToolbar = (e: React.MouseEvent, target: 'main' | 'secondary') => {
+    // Only drag with left mouse button
     if (e.button !== 0) return;
     
     const targetElement = e.currentTarget as HTMLDivElement;
@@ -915,19 +767,17 @@ export function Backtester() {
   };
 
   const isPlacingAnything = !!placingToolType || isPlacingPriceMarker || isPlacingMeasurement;
-  
-  const restoreMessage = sessionToRestore 
-        ? `We found saved drawings and settings for the file "${sessionToRestore.fileName}". Would you like to restore this session? You will be prompted to re-import the file.`
-        : 'An unknown previous session was found. Restore?';
 
   return (
     <div className="w-full h-full relative">
-        <AlertDialog open={showRestoreDialog} onOpenChange={setShowRestoreDialog}>
+       <AlertDialog open={showRestoreDialog} onOpenChange={setShowRestoreDialog}>
             <AlertDialogContent>
                 <AlertDialogHeader>
                     <AlertDialogTitle>Restore Previous Session?</AlertDialogTitle>
                     <AlertDialogDescription>
-                        {restoreMessage}
+                        We found saved drawings and settings for the file: <strong>{sessionToRestore}</strong>.
+                        <br />
+                        Would you like to restore this session? You will be prompted to re-import the file.
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -960,6 +810,70 @@ export function Backtester() {
                 isYAxisLocked={isYAxisLocked}
             />
         </div>
+        <div 
+          className="absolute z-20 flex items-center gap-4 top-4 right-4"
+        >
+            <span className="text-sm text-muted-foreground hidden sm:inline-block">{timeZone.replace(/_/g, ' ')}</span>
+            <div className="flex items-center gap-1">
+                <Button variant="ghost" size="icon" onClick={handleUndo} disabled={history.length === 0}>
+                    <Undo className="h-5 w-5" />
+                </Button>
+                <Button variant="ghost" size="icon" onClick={handleRedo} disabled={redoStack.length === 0}>
+                    <Redo className="h-5 w-5" />
+                </Button>
+            </div>
+            <Popover>
+                <PopoverTrigger asChild>
+                    <Button variant="ghost" size="icon">
+                        <Settings className="h-5 w-5" />
+                    </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80 mr-4">
+                    <div className="grid gap-4">
+                        <div className="space-y-2">
+                            <h4 className="font-medium leading-none">Settings</h4>
+                            <p className="text-sm text-muted-foreground">
+                                Adjust chart display options.
+                            </p>
+                        </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor="timezone">Timezone</Label>
+                            <Select value={timeZone} onValueChange={setTimeZone} disabled={!timezones.length}>
+                                <SelectTrigger id="timezone" className="w-full">
+                                    <SelectValue placeholder="Select timezone" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <ScrollArea className="h-72">
+                                    {timezones.map(tz => (
+                                        <SelectItem key={tz.value} value={tz.value}>{tz.label}</SelectItem>
+                                    ))}
+                                  </ScrollArea>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor="session-start">Session Start Time (UTC)</Label>
+                            <Input
+                                id="session-start"
+                                type="time"
+                                value={sessionStartTime}
+                                onChange={(e) => setSessionStartTime(e.target.value)}
+                            />
+                        </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor="pip-value">Pip / Point Value</Label>
+                            <Input
+                                id="pip-value"
+                                type="number"
+                                step="0.0001"
+                                value={pipValue}
+                                onChange={(e) => setPipValue(parseFloat(e.target.value) || 0)}
+                            />
+                        </div>
+                    </div>
+                </PopoverContent>
+            </Popover>
+        </div>
 
         <div 
           className="absolute z-10 flex flex-col items-start gap-2"
@@ -987,109 +901,7 @@ export function Backtester() {
                             <SelectItem value="1D">1 Day</SelectItem>
                         </SelectContent>
                     </Select>
-
-                    <Popover>
-                        <PopoverTrigger asChild>
-                            <Button variant="ghost" size="icon" className="text-muted-foreground">
-                                <CalendarIcon className="h-5 w-5" />
-                            </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0">
-                            <Calendar
-                                mode="single"
-                                selected={selectedDate}
-                                onSelect={handleDateSelect}
-                                defaultMonth={selectedDate}
-                                initialFocus
-                                disabled={(date) =>
-                                    date > new Date() || date < new Date("1900-01-01")
-                                    }
-                            />
-                        </PopoverContent>
-                    </Popover>
                     
-                    <div className="flex items-center gap-1">
-                        <TooltipProvider>
-                          <Tooltip>
-                              <TooltipTrigger asChild>
-                                  <Button variant="ghost" size="icon" onClick={handleNextCandle} className="text-muted-foreground" disabled={!selectedDate || priceData.length === 0}>
-                                      <ChevronRight className="h-5 w-5" />
-                                  </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                  <p>Next Candle</p>
-                              </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-
-                        <TooltipProvider>
-                          <Tooltip>
-                              <TooltipTrigger asChild>
-                                  <Button variant="ghost" size="icon" onClick={handleNextSession} className="text-muted-foreground" disabled={priceData.length === 0}>
-                                      <ChevronsRight className="h-5 w-5" />
-                                  </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                  <p>Next Session Open</p>
-                              </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                    </div>
-
-                    <div className="h-6 border-l border-border/50 mx-2"></div>
-                    
-                    <Popover>
-                        <PopoverTrigger asChild>
-                            <Button variant="ghost" size="icon">
-                                <Settings className="h-5 w-5" />
-                            </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-80 mr-4">
-                            <div className="grid gap-4">
-                                <div className="space-y-2">
-                                    <h4 className="font-medium leading-none">Settings</h4>
-                                    <p className="text-sm text-muted-foreground">
-                                        Adjust chart display options.
-                                    </p>
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label htmlFor="timezone">Timezone</Label>
-                                    <Select value={timeZone} onValueChange={setTimeZone} disabled={!timezones.length}>
-                                        <SelectTrigger id="timezone" className="w-full">
-                                            <SelectValue placeholder="Select timezone" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          <ScrollArea className="h-72">
-                                            {timezones.map(tz => (
-                                                <SelectItem key={tz.value} value={tz.value}>{tz.label}</SelectItem>
-                                            ))}
-                                          </ScrollArea>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label htmlFor="session-start">Session Start Time (UTC)</Label>
-                                    <Input
-                                        id="session-start"
-                                        type="time"
-                                        value={sessionStartTime}
-                                        onChange={(e) => setSessionStartTime(e.target.value)}
-                                    />
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label htmlFor="pip-value">Pip / Point Value</Label>
-                                    <Input
-                                        id="pip-value"
-                                        type="number"
-                                        step="0.0001"
-                                        value={pipValue}
-                                        onChange={(e) => setPipValue(parseFloat(e.target.value) || 0)}
-                                    />
-                                </div>
-                            </div>
-                        </PopoverContent>
-                    </Popover>
-
                     <div className="h-6 border-l border-border/50"></div>
                 
                     <TooltipProvider>
@@ -1132,10 +944,10 @@ export function Backtester() {
                 </>
             </div>
             
-            {sessionInfo && (
+            {fileName && (
                 <div className="bg-card/70 backdrop-blur-sm rounded-md px-2 py-1 shadow-md ml-8">
                     <p className="text-xs text-muted-foreground/80">
-                        Loaded: <span className="font-medium text-foreground/90">{sessionInfo.fileName}</span>
+                        Loaded: <span className="font-medium text-foreground/90">{fileName}</span>
                     </p>
                 </div>
             )}
@@ -1151,17 +963,6 @@ export function Backtester() {
                 >
                     <GripVertical className="h-5 w-5 text-muted-foreground/50" />
                 </div>
-                <div className="flex items-center gap-1">
-                    <Button variant="ghost" size="icon" onClick={handleUndo} disabled={history.length === 0}>
-                        <Undo className="h-5 w-5" />
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={handleRedo} disabled={redoStack.length === 0}>
-                        <Redo className="h-5 w-5" />
-                    </Button>
-                </div>
-
-                <div className="h-6 border-l border-border/50"></div>
-
                 <TooltipProvider>
                     <div className="flex justify-center gap-1">
                         <Tooltip>
@@ -1264,5 +1065,3 @@ export function Backtester() {
     </div>
   );
 }
-
-    
