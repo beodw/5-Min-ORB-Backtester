@@ -576,14 +576,6 @@ export function Backtester() {
         try {
             const text = e.target?.result as string;
             const lines = text.split('\n').filter(line => line.trim() !== '');
-
-            toast({
-                title: "Debug: 1/4",
-                description: `File read, ${lines.length} lines found.`,
-                duration: 9000,
-            });
-
-            // Check headers
             const header = lines[0].trim().split(',');
             if (header[0].trim() !== 'Time (UTC)' || header[1].trim() !== 'Open') {
                 throw new Error("Invalid CSV header. Expected 'Time (UTC),Open,...'");
@@ -592,19 +584,7 @@ export function Backtester() {
                 throw new Error("CSV file contains no data rows.");
             }
 
-            toast({
-                title: "Debug: 2/4",
-                description: `Header validated.`,
-                duration: 9000,
-            });
-            
             const dataRows = lines.slice(1);
-
-             toast({
-                title: "Debug: 3/4",
-                description: `Processing ${dataRows.length} rows.`,
-                duration: 9000,
-            });
 
             const parsedData = dataRows.map((row, index) => {
                 const columns = row.split(',');
@@ -625,28 +605,11 @@ export function Backtester() {
             }).filter(item => item !== null);
 
             toast({
-                title: "Debug: 4/4",
-                description: "Row parsing complete. Now filling gaps...",
+                title: "Debug: Rows Parsed",
+                description: `Successfully created ${parsedData.length} price data objects.`,
                 duration: 9000,
             });
-            
-            const filledData = fillGapsInData(parsedData);
-            setPriceData(filledData);
-            setDrawingState({ rrTools: [], priceMarkers: [], measurementTools: [] });
-            setHistory([]);
-            setRedoStack([]);
-            setIsDataImported(true);
-            setSessionInfo({ fileName: file.name });
-            if (filledData.length > 0) {
-              const lastDate = filledData[filledData.length - 1].date;
-              setSelectedDate(lastDate);
-            }
-
-            toast({
-                title: "Step 1 Complete",
-                description: `Successfully parsed ${file.name} in Backtester.`,
-                duration: 9000,
-            });
+            return;
 
         } catch (error: any) {
             toast({
@@ -718,7 +681,7 @@ export function Backtester() {
     }).filter(row => row !== null).join('\n');
 
     const csvContent = `${headers}\n${rows}`;
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf--8;' });
     const link = document.createElement("a");
     if (link.href) {
       URL.revokeObjectURL(link.href);
@@ -1273,5 +1236,7 @@ export function Backtester() {
     </div>
   );
 }
+
+    
 
     

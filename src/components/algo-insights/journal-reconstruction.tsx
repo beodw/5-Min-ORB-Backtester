@@ -7,7 +7,7 @@ import { Calendar, type CalendarProps } from "@/components/ui/calendar";
 import { InteractiveChart, type ChartClickData } from "@/components/algo-insights/interactive-chart";
 import { mockPriceData } from "@/lib/mock-data";
 import { useToast } from "@/hooks/use-toast";
-import type { PriceData, PriceMarker, RiskRewardTool as RRToolType, MeasurementTool as MeasurementToolType, DrawingState, MeasurementPoint, JournalToolbarPositions as JournalToolbarPositionsType } from "@/types";
+import type { PriceData, PriceMarker, RiskRewardTool as RRToolType, MeasurementTool as MeasurementToolType, DrawingState, MeasurementPoint } from "@/types";
 import { FileUp, Info, ArrowUp, ArrowDown, Settings, ChevronsRight, Target, Trash2, Lock, Unlock, Ruler, Undo, Redo, GripVertical, ChevronLeft, ChevronRight, RotateCcw, CheckCircle, XCircle, FileX2, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -41,7 +41,11 @@ type SessionInfo = {
     journalFileName: string | null;
 };
 
-type JournalToolbarPositions = JournalToolbarPositionsType;
+type JournalToolbarPositions = {
+    main: { x: number; y: number };
+    secondary: { x: number; y: number };
+    controls: { x: number; y: number };
+};
 
 type SessionState = {
     drawingState: DrawingState;
@@ -141,7 +145,7 @@ export function JournalReconstruction() {
   const defaultToolbarPositions: JournalToolbarPositions = {
     main: { x: 16, y: 16 },
     secondary: { x: 16, y: 88 },
-    controls: { x: window.innerWidth - 380, y: 16 }
+    controls: { x: 16, y: 160 } 
   };
 
   const [toolbarPositions, setToolbarPositions] = useState<JournalToolbarPositions>(defaultToolbarPositions);
@@ -347,33 +351,14 @@ export function JournalReconstruction() {
         try {
             const text = e.target?.result as string;
             const lines = text.split('\n').filter(line => line.trim() !== '');
-
-            toast({
-                title: "Debug: 1/4",
-                description: `File read, ${lines.length} lines found.`,
-                duration: 9000,
-            });
-
             const header = lines[0].trim().split(',');
             if (header[0].trim() !== 'Time (UTC)' || header[1].trim() !== 'Open') {
                 throw new Error("Invalid CSV header. Expected 'Time (UTC),Open,...'");
             }
             if (lines.length <= 1) throw new Error("CSV file contains no data rows.");
             
-            toast({
-                title: "Debug: 2/4",
-                description: `Header validated.`,
-                duration: 9000,
-            });
-
             const dataRows = lines.slice(1);
 
-            toast({
-                title: "Debug: 3/4",
-                description: `Processing ${dataRows.length} rows.`,
-                duration: 9000,
-            });
-            
             const parsedData = dataRows.map((row, index) => {
                 const columns = row.split(',');
                 const [datePart, timePart] = columns[0].split(' ');
@@ -392,25 +377,12 @@ export function JournalReconstruction() {
             }).filter(item => item !== null);
 
             toast({
-                title: "Debug: 4/4",
-                description: "Row parsing complete. Now filling gaps...",
+                title: "Debug: Rows Parsed",
+                description: `Successfully created ${parsedData.length} price data objects.`,
                 duration: 9000,
             });
+            return;
 
-            const filledData = fillGapsInData(parsedData);
-            setPriceData(filledData);
-            setIsPriceDataImported(true);
-            setSessionInfo(prev => ({ ...prev, priceDataFileName: file.name }));
-            if (!selectedDate && filledData.length > 0) {
-              const lastDate = filledData[filledData.length - 1].date;
-              setSelectedDate(lastDate);
-            }
-            
-            toast({ 
-                title: "Step 1 Complete",
-                description: `Successfully parsed ${file.name} in Journal Reconstruction.`,
-                duration: 9000,
-            });
         } catch (error: any) {
             toast({ variant: "destructive", title: "Price Data Import Failed", description: `Error: ${error.message}`, duration: 9000 });
             setIsPriceDataImported(false);
@@ -867,11 +839,6 @@ export function JournalReconstruction() {
     ? `Restore session with ${sessionToRestore.priceDataFileName || 'N/A'} and ${sessionToRestore.journalFileName || 'N/A'}?`
     : 'An unknown previous session was found. Restore?';
 
-  const chartEventHandlers = {
-    onChartClick: handleChartClick,
-    onChartMouseMove: handleChartMouseMove,
-  };
-
   return (
     <div className="w-full h-full relative">
        <AlertDialog open={showRestoreDialog} onOpenChange={setShowRestoreDialog}>
@@ -893,6 +860,8 @@ export function JournalReconstruction() {
             <InteractiveChart
                 data={priceData}
                 trades={[]}
+                onChartClick={handleChartClick}
+                onChartMouseMove={handleChartMouseMove}
                 rrTools={rrTools}
                 onUpdateTool={(tool) => { pushToHistory(drawingState); setRrTools(prev => prev.map(t => t.id === tool.id ? tool : t)); }}
                 onRemoveTool={(id) => { pushToHistory(drawingState); setRrTools(prev => prev.filter(t => t.id !== id)); }}
@@ -909,8 +878,6 @@ export function JournalReconstruction() {
                 timeZone="UTC"
                 endDate={selectedDate}
                 isYAxisLocked={isYAxisLocked}
-                onChartClick={handleChartClick}
-                onChartMouseMove={handleChartMouseMove}
             />
             {!isPriceDataImported && !sessionInfo.priceDataFileName && (
                 <div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center">
@@ -1175,5 +1142,7 @@ export function JournalReconstruction() {
     </div>
   );
 }
+
+    
 
     
