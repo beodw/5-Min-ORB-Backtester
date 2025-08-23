@@ -48,7 +48,6 @@ interface InteractiveChartProps {
   pipValue: number;
   timeframe: string;
   timeZone: string;
-  endDate?: Date;
   isYAxisLocked: boolean;
 }
 
@@ -94,7 +93,6 @@ export function InteractiveChart({
     pipValue,
     timeframe, 
     timeZone, 
-    endDate,
     isYAxisLocked
 }: InteractiveChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -105,8 +103,7 @@ export function InteractiveChart({
       return [];
     }
   
-    const filteredByDate = endDate ? data.filter(point => point.date <= endDate) : data;
-    const baseData = filteredByDate.map((d, i) => ({ ...d, index: i }));
+    const baseData = data.map((d, i) => ({ ...d, index: i }));
     
     if (timeframe === '1m') {
       return baseData;
@@ -152,7 +149,7 @@ export function InteractiveChart({
     }
     
     return result;
-  }, [data, timeframe, endDate]);
+  }, [data, timeframe]);
   
   const [xDomain, setXDomain] = useState<[number, number]>([0, 100]);
   const [yDomain, setYDomain] = useState<[number, number]>([0, 100]);
@@ -182,7 +179,7 @@ export function InteractiveChart({
         };
         setXDomain(panToEnd());
     }
-  }, [aggregatedData, endDate]);
+  }, [aggregatedData]);
 
 
   useEffect(() => {
@@ -595,3 +592,5 @@ export function InteractiveChart({
     </div>
   );
 }
+
+    

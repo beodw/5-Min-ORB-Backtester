@@ -957,7 +957,6 @@ export function Backtester() {
                 pipValue={pipValue}
                 timeframe={timeframe}
                 timeZone={timeZone}
-                endDate={selectedDate}
                 isYAxisLocked={isYAxisLocked}
             />
         </div>
@@ -1265,3 +1264,5 @@ export function Backtester() {
     </div>
   );
 }
+
+    

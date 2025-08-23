@@ -901,7 +901,6 @@ export function JournalReconstruction() {
                 pipValue={pipValue}
                 timeframe={timeframe}
                 timeZone="UTC"
-                endDate={selectedDate}
                 isYAxisLocked={isYAxisLocked}
             />
             {!isPriceDataImported && !sessionInfo.priceDataFileName && (
@@ -1166,3 +1165,5 @@ export function JournalReconstruction() {
     </div>
   );
 }
+
+    
