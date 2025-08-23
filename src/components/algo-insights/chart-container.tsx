@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect, useRef } from "react";
@@ -52,6 +51,7 @@ type SessionState = {
     fileName: string;
     journalFileName: string;
     journalTrades: JournalTrade[];
+    selectedPair: string;
 };
 
 type DayResult = 'win' | 'loss' | 'modified';
@@ -179,6 +179,8 @@ const APP_SETTINGS_KEY = 'algo-insights-settings';
 const SESSION_KEY_PREFIX = 'algo-insights-session-'; 
 const TOOLBAR_POS_KEY = 'algo-insights-toolbar-positions';
 
+const JOURNAL_PAIRS = ["US30", "JPN225", "HKG40", "US100"];
+
 export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
   const [priceData, setPriceData] = useState<PriceData[]>(mockPriceData);
   const [isDataImported, setIsDataImported] = useState(false);
@@ -204,7 +206,9 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
   }>({ target: null, offsetX: 0, offsetY: 0 });
 
   // Journal specific state
+  const [allJournalTrades, setAllJournalTrades] = useState<JournalTrade[]>([]);
   const [journalTrades, setJournalTrades] = useState<JournalTrade[]>([]);
+  const [selectedPair, setSelectedPair] = useState<string>(JOURNAL_PAIRS[0]);
   const [journalFileName, setJournalFileName] = useState('');
   const [dayResults, setDayResults] = useState<Record<string, DayResult>>({});
   const journalFileInputRef = useRef<HTMLInputElement>(null);
@@ -342,7 +346,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
   }, [timeZone, sessionStartTime, pipValue]);
 
   useEffect(() => {
-    const shouldSave = isDataImported || journalTrades.length > 0 || rrTools.length > 0 || priceMarkers.length > 0 || measurementTools.length > 0;
+    const shouldSave = isDataImported || allJournalTrades.length > 0 || rrTools.length > 0 || priceMarkers.length > 0 || measurementTools.length > 0;
     if (!shouldSave) {
         const savedSessionRaw = localStorage.getItem(sessionKey);
         if(savedSessionRaw) {
@@ -359,7 +363,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         })),
     };
 
-    const serializableJournalTrades = journalTrades.map(trade => ({
+    const serializableJournalTrades = allJournalTrades.map(trade => ({
         ...trade,
         dateTaken: trade.dateTaken.toISOString(),
         dateClosed: trade.dateClosed.toISOString(),
@@ -371,10 +375,17 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         fileName,
         journalFileName,
         journalTrades: serializableJournalTrades as any,
+        selectedPair,
     };
     localStorage.setItem(sessionKey, JSON.stringify(sessionState));
 
-  }, [drawingState, selectedDate, fileName, isDataImported, sessionKey, journalTrades, journalFileName]);
+  }, [drawingState, selectedDate, fileName, isDataImported, sessionKey, allJournalTrades, journalFileName, selectedPair]);
+  
+  useEffect(() => {
+    const filtered = allJournalTrades.filter(t => t.pair === selectedPair);
+    setJournalTrades(filtered);
+  }, [allJournalTrades, selectedPair]);
+
 
   const handleRestoreSession = () => {
     setShowRestoreDialog(false);
@@ -400,12 +411,20 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
             }));
 
             setDrawingState(restoredDrawingState);
-            setJournalTrades(restoredJournalTrades);
-            if (restoredJournalTrades.length > 0) processJournalTrades(restoredJournalTrades);
+            setAllJournalTrades(restoredJournalTrades);
 
             setSelectedDate(new Date(savedSession.selectedDate));
             setFileName(savedSession.fileName);
             setJournalFileName(savedSession.journalFileName || '');
+            if (savedSession.selectedPair) setSelectedPair(savedSession.selectedPair);
+            
+            // This will trigger the filtering useEffect
+            if (restoredJournalTrades.length > 0) {
+                const filtered = restoredJournalTrades.filter(t => t.pair === (savedSession.selectedPair || JOURNAL_PAIRS[0]));
+                setJournalTrades(filtered);
+                processJournalTrades(filtered);
+            }
+            
             setPriceData(mockPriceData);
             setIsDataImported(false);
 
@@ -430,6 +449,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
       setRedoStack([]);
       setFileName('');
       setJournalFileName('');
+      setAllJournalTrades([]);
       setJournalTrades([]);
       setDayResults({});
       setIsDataImported(false);
@@ -744,14 +764,14 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
 
   const parseDateFromJournal = (dateString: string, rowNum: number): Date => {
     const cleanString = dateString.trim();
-    // Expected format: "MM/DD/YYYY HH:mm:ss"
-    const parts = cleanString.match(/(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2}):(\d{2})/);
+    // Expected format: MM/DD/YYYY
+    const parts = cleanString.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
     if (!parts) {
-        throw new Error(`Invalid date format on row ${rowNum}. Expected 'MM/DD/YYYY HH:mm:ss', found '${dateString}'.`);
+        throw new Error(`Invalid date format on row ${rowNum}. Expected 'MM/DD/YYYY', found '${dateString}'.`);
     }
-    const [, month, day, year, hour, minute, second] = parts.map(Number);
+    const [, month, day, year] = parts.map(Number);
     // Month is 0-indexed in JavaScript Date
-    const date = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+    const date = new Date(Date.UTC(year, month - 1, day));
     if (isNaN(date.getTime())) {
         throw new Error(`Invalid date values on row ${rowNum}. Could not parse: '${dateString}'`);
     }
@@ -820,9 +840,8 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
               throw new Error("No valid trade rows could be parsed from the journal file. Check data and column headers.");
             }
 
-            setJournalTrades(parsedTrades);
-            processJournalTrades(parsedTrades);
-            toast({ title: "Journal Imported", description: `${parsedTrades.length} trades loaded.` });
+            setAllJournalTrades(parsedTrades); // This will trigger the useEffect to filter by pair
+            toast({ title: "Journal Imported", description: `${parsedTrades.length} total trades loaded.` });
         } catch (error: any) {
             toast({ variant: "destructive", title: "Journal Import Failed", description: error.message, duration: 9000 });
         }
@@ -836,14 +855,18 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
       trades.forEach(trade => {
           const dateKey = trade.dateTaken.toISOString().split('T')[0];
           
+          // If a day is already marked as modified, it stays modified.
+          if (results[dateKey] === 'modified') {
+              return;
+          }
+
           if (trade.status !== 'default') {
               results[dateKey] = 'modified';
               return;
           }
 
           const currentDayStatus = results[dateKey];
-          // A single win makes the day a win, unless it's later modified or was already a win.
-          // A loss only sets the day to loss if it's not already a win or modified.
+          // A single win makes the day a win, unless it's later modified.
           if (trade.maxR >= 2) {
              results[dateKey] = 'win';
           } else if (currentDayStatus !== 'win') {
@@ -854,9 +877,11 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
   };
   
   useEffect(() => {
-    // Re-process when trades are updated (e.g. status change)
+    // Re-process when trades are updated (e.g. status change, pair change)
     if (journalTrades.length > 0) {
         processJournalTrades(journalTrades);
+    } else {
+        setDayResults({}); // Clear results if no trades for selected pair
     }
   }, [journalTrades]);
 
@@ -868,9 +893,10 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     const selectedDateKey = selectedDate.toISOString().split('T')[0];
     
     let tradeUpdated = false;
-    const updatedTrades = journalTrades.map(trade => {
+    const updatedAllTrades = allJournalTrades.map(trade => {
         const tradeDateKey = trade.dateTaken.toISOString().split('T')[0];
-        if (tradeDateKey === selectedDateKey) {
+        // We update the status on the main list of all trades
+        if (tradeDateKey === selectedDateKey && trade.pair === selectedPair) {
             tradeUpdated = true;
             return { ...trade, status };
         }
@@ -878,20 +904,20 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     });
 
     if (tradeUpdated) {
-        setJournalTrades(updatedTrades);
-        toast({ title: "Trade Status Updated", description: `Trades on ${selectedDateKey} marked as '${status}'.` });
+        setAllJournalTrades(updatedAllTrades);
+        toast({ title: "Trade Status Updated", description: `Trades on ${selectedDateKey} for ${selectedPair} marked as '${status}'.` });
     } else {
-        toast({ variant: "destructive", title: "No Trade Found", description: `No trade found on ${selectedDateKey}.` });
+        toast({ variant: "destructive", title: "No Trade Found", description: `No trade found on ${selectedDateKey} for ${selectedPair}.` });
     }
   };
   
   const handleDownloadJournal = () => {
-    if (journalTrades.length === 0) {
+    if (allJournalTrades.length === 0) {
         toast({ variant: "destructive", title: "No Journal Data", description: "Please import a journal file first." });
         return;
     }
 
-    const headerLine = lines[0].trim();
+    const headerLine = lines[0]?.trim();
     if (!headerLine) {
         toast({variant: "destructive", title: "Download Failed", description: "Could not determine original CSV header."});
         return;
@@ -899,7 +925,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
 
     const header = `${headerLine},Status\n`;
     
-    const rows = journalTrades.map(trade => {
+    const rows = allJournalTrades.map(trade => {
         const status = trade.status === 'default' ? 'traded' : trade.status;
         // Trim to remove potential trailing \r from original row
         return `${trade.originalRow.trim()},${status}\n`;
@@ -961,6 +987,19 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                         </SelectContent>
                     </Select>
                     
+                    {tab === 'journal' && (
+                        <Select value={selectedPair} onValueChange={setSelectedPair}>
+                            <SelectTrigger className="w-[120px]">
+                                <SelectValue placeholder="Pair" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {JOURNAL_PAIRS.map(pair => (
+                                    <SelectItem key={pair} value={pair}>{pair}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    )}
+
                     <div className="h-6 border-l border-border/50"></div>
                 
                     <TooltipProvider>
@@ -986,7 +1025,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                                 <Tooltip>
                                     <TooltipTrigger asChild>
                                         <Button variant="ghost" size="icon" onClick={handleImportJournalClick}>
-                                            <BookOpen className={cn("h-5 w-5", journalTrades.length > 0 ? "text-chart-2" : "text-muted-foreground")} />
+                                            <BookOpen className={cn("h-5 w-5", allJournalTrades.length > 0 ? "text-chart-2" : "text-muted-foreground")} />
                                         </Button>
                                     </TooltipTrigger>
                                     <TooltipContent><p>Import Journal CSV</p></TooltipContent>
@@ -1041,7 +1080,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                     <TooltipProvider>
                        <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => updateTradeStatus('traded')} disabled={!selectedDate || journalTrades.length === 0}><ThumbsUp className="w-5 h-5 text-accent"/></Button></TooltipTrigger><TooltipContent><p>Mark Day as Traded</p></TooltipContent></Tooltip>
                        <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => updateTradeStatus('not traded')} disabled={!selectedDate || journalTrades.length === 0}><ThumbsDown className="w-5 h-5 text-destructive"/></Button></TooltipTrigger><TooltipContent><p>Mark Day as Not Traded</p></TooltipContent></Tooltip>
-                       <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handleDownloadJournal} disabled={journalTrades.length === 0}><FileDown className="w-5 h-5 text-foreground"/></Button></TooltipTrigger><TooltipContent><p>Download Updated Journal</p></TooltipContent></Tooltip>
+                       <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handleDownloadJournal} disabled={allJournalTrades.length === 0}><FileDown className="w-5 h-5 text-foreground"/></Button></TooltipTrigger><TooltipContent><p>Download Updated Journal</p></TooltipContent></Tooltip>
                     </TooltipProvider>
                   </>
                 )}
@@ -1184,3 +1223,5 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     </div>
   );
 }
+
+    
