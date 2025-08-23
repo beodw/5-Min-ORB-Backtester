@@ -56,7 +56,7 @@ export interface JournalTrade {
   dateClosed: Date;
   maxR: number;
   status: 'traded' | 'not traded' | 'default';
-  originalRow: string; // To preserve the original CSV row data
+  originalRow: string[]; // To preserve the original CSV row data
   originalOutcome?: 'Win' | 'Loss';
   outcome?: 'Win' | 'Loss';
 }

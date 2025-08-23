@@ -878,7 +878,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                 .map((columns, i) => {
                     const rowNum = i + 2;
 
-                    if (columns.length !== headerLine.length) {
+                    if (columns.length < headerLine.length) {
                        console.warn(`Row ${rowNum} has incorrect number of columns. Expected ${headerLine.length}, got ${columns.length}. Skipping.`);
                        return null;
                     }
@@ -907,7 +907,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                         dateClosed,
                         maxR,
                         status: 'default',
-                        originalRow: columns.join(','),
+                        originalRow: columns,
                         originalOutcome,
                         outcome: originalOutcome,
                     };
@@ -1029,35 +1029,27 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     let finalHeader = [...journalHeader];
     if (statusIndex === -1) {
         finalHeader.push("Status");
-        statusIndex = finalHeader.length -1;
+        statusIndex = finalHeader.length - 1;
     }
 
     const rows = allJournalTrades.map(trade => {
-        const originalColumns = trade.originalRow.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g)?.map(col => col.replace(/^"|"$/g, '').replace(/""/g, '"')) || [];
-        
-        let newColumns = [...originalColumns];
+        let newColumns = [...trade.originalRow];
 
+        // Ensure the array is long enough before assigning
+        while (newColumns.length <= Math.max(outcomeIndex, statusIndex)) {
+            newColumns.push('');
+        }
+        
         const finalStatus = trade.status === 'default' ? 'traded' : trade.status;
         const finalOutcome = trade.outcome || trade.originalOutcome || (trade.maxR >= 2 ? 'Win' : 'Loss');
         
-        // Ensure the array is long enough before assigning
-        if (newColumns.length > outcomeIndex) {
-            newColumns[outcomeIndex] = finalOutcome;
-        }
-
-        // Handle Status column
-        if (statusIndex < newColumns.length) {
-            newColumns[statusIndex] = finalStatus;
-        } else {
-            // Pad columns if status is a new column
-            while(newColumns.length < statusIndex) {
-                newColumns.push('');
-            }
-            newColumns.push(finalStatus);
-        }
+        // Directly set the values at their correct indices
+        newColumns[outcomeIndex] = finalOutcome;
+        newColumns[statusIndex] = finalStatus;
 
         return newColumns.map(field => {
             const fieldStr = String(field ?? '').trim();
+            // Quote fields containing commas, double quotes, or newlines
             if (fieldStr.includes(',') || fieldStr.includes('"') || fieldStr.includes('\n')) {
                 const sanitizedField = fieldStr.replace(/"/g, '""');
                 return `"${sanitizedField}"`;
@@ -1365,4 +1357,5 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     
 
     
+
 
