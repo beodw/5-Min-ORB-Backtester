@@ -233,6 +233,11 @@ export function InteractiveChart({
       min = Math.min(min, marker.price);
       max = Math.max(max, marker.price);
     }
+
+    if (openingRange) {
+        min = Math.min(min, openingRange.low);
+        max = Math.max(max, openingRange.high);
+    }
     
     if (min === Infinity || max === -Infinity) {
        if (priceMarkers.length > 0) {
@@ -252,7 +257,7 @@ export function InteractiveChart({
     if (newYDomain[0] !== yDomain[0] || newYDomain[1] !== yDomain[1]) {
         setYDomain(newYDomain);
     }
-  }, [windowedData, priceMarkers, yDomain, isYAxisLocked]);
+  }, [windowedData, priceMarkers, yDomain, isYAxisLocked, openingRange]);
 
   const xDataDomain = useMemo(() => {
     if (!aggregatedData.length) return [0, 0];
@@ -575,8 +580,8 @@ export function InteractiveChart({
           
           {openingRange && (
             <>
-              <ReferenceLine y={openingRange.high} stroke="hsl(var(--primary))" strokeDasharray="3 3" yAxisId="main" ifOverflow="extendDomain" />
-              <ReferenceLine y={openingRange.low} stroke="hsl(var(--primary))" strokeDasharray="3 3" yAxisId="main" ifOverflow="extendDomain" />
+              <ReferenceLine y={openingRange.high} stroke="hsl(var(--primary))" strokeDasharray="3 3" yAxisId="main" ifOverflow="visible" />
+              <ReferenceLine y={openingRange.low} stroke="hsl(var(--primary))" strokeDasharray="3 3" yAxisId="main" ifOverflow="visible" />
             </>
           )}
 
@@ -657,3 +662,5 @@ export function InteractiveChart({
     </div>
   );
 }
+
+    
