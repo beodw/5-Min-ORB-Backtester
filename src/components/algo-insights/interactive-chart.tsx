@@ -572,7 +572,7 @@ export function InteractiveChart({
               yAxisId="main"
             />
           ))}
-
+          
           {openingRange && (
             <>
               <ReferenceLine y={openingRange.high} stroke="hsl(var(--primary))" strokeDasharray="3 3" yAxisId="main" ifOverflow="extendDomain" />

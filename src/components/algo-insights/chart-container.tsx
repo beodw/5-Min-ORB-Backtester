@@ -276,37 +276,34 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
   const sessionKey = `${SESSION_KEY_PREFIX}${tab}`;
 
   useEffect(() => {
+    if (tab === 'journal' && selectedDate) {
+        // Hardcoded test to ensure rendering pipeline works
+        const dataForDay = priceData.filter(p => {
+             const adjustedEndDate = new Date(selectedDate);
+             adjustedEndDate.setUTCHours(23, 59, 59, 999);
+             return p.date >= selectedDate && p.date <= adjustedEndDate;
+        });
+
+        if (dataForDay.length > 0) {
+            let min = Infinity, max = -Infinity;
+            dataForDay.forEach(p => {
+                if (p.low < min) min = p.low;
+                if (p.high > max) max = p.high;
+            });
+            const midPoint = (max + min) / 2;
+            setOpeningRange({ high: midPoint + 1, low: midPoint -1 });
+        } else {
+            setOpeningRange(null);
+        }
+        return;
+    }
+
     if (tab !== 'journal' || !selectedDate || !isDataImported || !sessionStartTime) {
       setOpeningRange(null);
       return;
     }
-
-    const [startHour, startMinute] = sessionStartTime.split(':').map(Number);
-    
-    const rangeStart = new Date(selectedDate);
-    rangeStart.setUTCHours(startHour, startMinute, 0, 0);
-    
-    // The range ends exactly 5 minutes after it starts.
-    // e.g., 09:30:00 to 09:35:00. This will include candles from 09:30 to 09:34.
-    const rangeEnd = new Date(rangeStart.getTime() + 5 * 60 * 1000);
-    
-    const openingCandles = priceData.filter(p => 
-      p.date.getTime() >= rangeStart.getTime() && 
-      p.date.getTime() < rangeEnd.getTime()
-    );
-
-    if (openingCandles.length > 0) {
-      let high = -Infinity;
-      let low = Infinity;
-      for (const candle of openingCandles) {
-        if (candle.high > high) high = candle.high;
-        if (candle.low < low) low = candle.low;
-      }
-      setOpeningRange({ high, low });
-    } else {
-      setOpeningRange(null);
-    }
   }, [selectedDate, priceData, sessionStartTime, isDataImported, tab]);
+
 
   useEffect(() => {
     const getOffsetInMinutes = (timeZone: string): number => {
@@ -1223,17 +1220,17 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                 </div>
                 <TooltipProvider>
                     <div className="flex justify-center gap-1">
-                        <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceLong} disabled={isPlacingAnything || !isDataImported}><ArrowUp className="w-5 h-5 text-accent"/></Button></TooltipTrigger><TooltipContent><p>Place Long Position</p></TooltipContent></Tooltip>
-                        <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceShort} disabled={isPlacingAnything || !isDataImported}><ArrowDown className="w-5 h-5 text-destructive"/></Button></TooltipTrigger><TooltipContent><p>Place Short Position</p></TooltipContent></Tooltip>
+                        <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceLong} disabled={isPlacingAnything || (!isDataImported && tab === 'backtester')}><ArrowUp className="w-5 h-5 text-accent"/></Button></TooltipTrigger><TooltipContent><p>Place Long Position</p></TooltipContent></Tooltip>
+                        <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceShort} disabled={isPlacingAnything || (!isDataImported && tab === 'backtester')}><ArrowDown className="w-5 h-5 text-destructive"/></Button></TooltipTrigger><TooltipContent><p>Place Short Position</p></TooltipContent></Tooltip>
                     </div>
                 </TooltipProvider>
                 
                 <div className="h-6 border-l border-border/50"></div>
 
                 <TooltipProvider>
-                    <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceMarker} disabled={isPlacingAnything || !isDataImported}><Target className="w-5 h-5 text-foreground"/></Button></TooltipTrigger><TooltipContent><p>Place Price Marker</p></TooltipContent></Tooltip>
+                    <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceMarker} disabled={isPlacingAnything || (!isDataImported && tab === 'backtester')}><Target className="w-5 h-5 text-foreground"/></Button></TooltipTrigger><TooltipContent><p>Place Price Marker</p></TooltipContent></Tooltip>
                     <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => setIsYAxisLocked(prev => !prev)}>{isYAxisLocked ? <Lock className="h-5 w-5" /> : <Unlock className="h-5 w-5" />}</Button></TooltipTrigger><TooltipContent><p>{isYAxisLocked ? "Unlock Y-Axis" : "Lock Y-Axis"}</p></TooltipContent></Tooltip>
-                    <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceMeasurement} disabled={isPlacingAnything || !isDataImported}><Ruler className="w-5 h-5 text-foreground"/></Button></TooltipTrigger><TooltipContent><p>Measure Distance</p></TooltipContent></Tooltip>
+                    <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceMeasurement} disabled={isPlacingAnything || (!isDataImported && tab === 'backtester')}><Ruler className="w-5 h-5 text-foreground"/></Button></TooltipTrigger><TooltipContent><p>Measure Distance</p></TooltipContent></Tooltip>
                 </TooltipProvider>
 
                 {tab === 'journal' && (
