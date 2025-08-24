@@ -277,11 +277,12 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
 
   useEffect(() => {
     if (!selectedDate || !isDataImported || !sessionStartTime || tab !== 'journal') {
-      setOpeningRange(null);
-      return;
+        setOpeningRange(null);
+        return;
     }
 
     const [startHour, startMinute] = sessionStartTime.split(':').map(Number);
+    
     const sessionStart = new Date(selectedDate);
     sessionStart.setUTCFullYear(selectedDate.getUTCFullYear(), selectedDate.getUTCMonth(), selectedDate.getUTCDate());
     sessionStart.setUTCHours(startHour, startMinute, 0, 0);
@@ -289,7 +290,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     const sessionEnd = new Date(sessionStart.getTime() + 5 * 60 * 1000);
     
     const rangeCandles = priceData.filter(p => 
-        p.date.getTime() >= sessionStart.getTime() && p.date.getTime() < sessionEnd.getTime()
+        p.date.getTime() >= sessionStart.getTime() && p.date.getTime() <= sessionEnd.getTime()
     );
 
     if (rangeCandles.length > 0) {
@@ -1388,6 +1389,8 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     </div>
   );
 }
+
+    
 
     
 
