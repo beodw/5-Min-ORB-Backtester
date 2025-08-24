@@ -276,22 +276,21 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
   const sessionKey = `${SESSION_KEY_PREFIX}${tab}`;
 
   useEffect(() => {
-    if (!selectedDate || !isDataImported || !sessionStartTime) {
+    if (!selectedDate || !isDataImported || !sessionStartTime || tab !== 'journal') {
       setOpeningRange(null);
       return;
     }
 
-    // Logic to calculate the actual opening range
     const [startHour, startMinute] = sessionStartTime.split(':').map(Number);
     const sessionStart = new Date(selectedDate);
-    // IMPORTANT: Assuming the CSV data is in UTC, we must set the time in UTC.
+    sessionStart.setUTCFullYear(selectedDate.getUTCFullYear(), selectedDate.getUTCMonth(), selectedDate.getUTCDate());
     sessionStart.setUTCHours(startHour, startMinute, 0, 0);
     
-    const sessionEnd = new Date(sessionStart);
-    sessionEnd.setUTCMinutes(sessionStart.getUTCMinutes() + 5);
+    const sessionEnd = new Date(sessionStart.getTime() + 5 * 60 * 1000);
     
-    // Find candles within the 5-minute range
-    const rangeCandles = priceData.filter(p => p.date >= sessionStart && p.date < sessionEnd);
+    const rangeCandles = priceData.filter(p => 
+        p.date.getTime() >= sessionStart.getTime() && p.date.getTime() < sessionEnd.getTime()
+    );
 
     if (rangeCandles.length > 0) {
         let high = -Infinity;
