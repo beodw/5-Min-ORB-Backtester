@@ -53,7 +53,7 @@ interface InteractiveChartProps {
   timeZone: string;
   endDate?: Date;
   isYAxisLocked: boolean;
-  openingRange?: OpeningRange | null;
+  openingRange: OpeningRange | null;
 }
 
 const Candlestick = (props: any) => {
@@ -113,7 +113,7 @@ export function InteractiveChart({
     let filteredByDate = data;
     if (endDate) {
         const adjustedEndDate = new Date(endDate);
-        adjustedEndDate.setHours(23, 59, 59, 999); // Set to end of the selected day
+        adjustedEndDate.setUTCHours(23, 59, 59, 999); // Set to end of the selected day
         filteredByDate = data.filter(point => point.date <= adjustedEndDate);
     }
     
@@ -636,19 +636,19 @@ export function InteractiveChart({
                   ))}
                   {allMeasurementTools.map(tool => (
                     <MeasurementTool
-                      key={tool.id}
-                      tool={tool}
-                      onRemove={onRemoveMeasurementTool}
-                      data={aggregatedData}
-                      xScale={mainXAxis.scale}
-                      yScale={mainYAxis.scale}
-                      plot={plot}
-                      pipValue={pipValue}
-                      isLive={tool.id === 'live-measure'}
+                        key={tool.id}
+                        tool={tool}
+                        onRemove={onRemoveMeasurementTool}
+                        data={aggregatedData}
+                        xScale={mainXAxis.scale}
+                        yScale={mainYAxis.scale}
+                        plot={plot}
+                        pipValue={pipValue}
+                        isLive={tool.id === 'live-measure'}
                     />
                   ))}
                 </g>
-              )
+              );
             }}
           />
         </ComposedChart>
