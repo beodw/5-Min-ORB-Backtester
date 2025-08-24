@@ -54,6 +54,7 @@ interface InteractiveChartProps {
   endDate?: Date;
   isYAxisLocked: boolean;
   openingRange: OpeningRange | null;
+  tab: 'backtester' | 'journal';
 }
 
 const Candlestick = (props: any) => {
@@ -101,6 +102,7 @@ export function InteractiveChart({
     endDate,
     isYAxisLocked,
     openingRange,
+    tab,
 }: InteractiveChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartScalesRef = useRef<{x: any, y: any, plot: any} | null>(null);
@@ -578,6 +580,13 @@ export function InteractiveChart({
             />
           ))}
           
+          {tab === 'journal' && (
+             <>
+                <ReferenceLine y={45000} stroke="hsl(var(--primary))" strokeDasharray="3 3" yAxisId="main" ifOverflow="visible" />
+                <ReferenceLine y={44000} stroke="hsl(var(--primary))" strokeDasharray="3 3" yAxisId="main" ifOverflow="visible" />
+             </>
+          )}
+
           {openingRange && (
             <>
               <ReferenceLine y={openingRange.high} stroke="hsl(var(--primary))" strokeDasharray="3 3" yAxisId="main" ifOverflow="visible" />
@@ -662,5 +671,3 @@ export function InteractiveChart({
     </div>
   );
 }
-
-    

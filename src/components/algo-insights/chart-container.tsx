@@ -281,7 +281,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         return;
     }
 
-    if (tab !== 'journal' || !selectedDate || !isDataImported || !sessionStartTime) {
+    if (tab !== 'backtester' || !selectedDate || !isDataImported || !sessionStartTime) {
       setOpeningRange(null);
       return;
     }
@@ -289,11 +289,13 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     // Logic to calculate the actual opening range
     const [startHour, startMinute] = sessionStartTime.split(':').map(Number);
     const sessionStart = new Date(selectedDate);
+    // IMPORTANT: Assuming the CSV data is in UTC, we must set the time in UTC.
     sessionStart.setUTCHours(startHour, startMinute, 0, 0);
     
     const sessionEnd = new Date(sessionStart);
     sessionEnd.setUTCMinutes(sessionStart.getUTCMinutes() + 5);
     
+    // Find candles within the 5-minute range
     const rangeCandles = priceData.filter(p => p.date >= sessionStart && p.date < sessionEnd);
 
     if (rangeCandles.length > 0) {
@@ -1124,7 +1126,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     })) 
     : [];
   
-  const currentOpeningRange = tab === 'journal' ? openingRange : null;
+  const currentOpeningRange = tab === 'backtester' ? openingRange : null;
 
   const renderToolbar = () => (
     <>
@@ -1225,8 +1227,8 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                 </div>
                 <TooltipProvider>
                     <div className="flex justify-center gap-1">
-                        <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceLong} disabled={isPlacingAnything || (!isDataImported && tab === 'backtester') && (tab !== 'journal')}><ArrowUp className="w-5 h-5 text-accent"/></Button></TooltipTrigger><TooltipContent><p>Place Long Position</p></TooltipContent></Tooltip>
-                        <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceShort} disabled={isPlacingAnything || (!isDataImported && tab === 'backtester') && (tab !== 'journal')}><ArrowDown className="w-5 h-5 text-destructive"/></Button></TooltipTrigger><TooltipContent><p>Place Short Position</p></TooltipContent></Tooltip>
+                        <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceLong} disabled={isPlacingAnything || (!isDataImported && tab === 'backtester')}><ArrowUp className="w-5 h-5 text-accent"/></Button></TooltipTrigger><TooltipContent><p>Place Long Position</p></TooltipContent></Tooltip>
+                        <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceShort} disabled={isPlacingAnything || (!isDataImported && tab === 'backtester')}><ArrowDown className="w-5 h-5 text-destructive"/></Button></TooltipTrigger><TooltipContent><p>Place Short Position</p></TooltipContent></Tooltip>
                     </div>
                 </TooltipProvider>
                 
@@ -1318,6 +1320,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                 endDate={selectedDate}
                 isYAxisLocked={isYAxisLocked}
                 openingRange={currentOpeningRange}
+                tab={tab}
             />
         </div>
         <div 
