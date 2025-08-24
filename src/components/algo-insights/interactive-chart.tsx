@@ -579,20 +579,6 @@ export function InteractiveChart({
               yAxisId="main"
             />
           ))}
-          
-          {tab === 'journal' && (
-             <>
-                <ReferenceLine y={45000} stroke="hsl(var(--primary))" strokeDasharray="3 3" yAxisId="main" ifOverflow="visible" />
-                <ReferenceLine y={44000} stroke="hsl(var(--primary))" strokeDasharray="3 3" yAxisId="main" ifOverflow="visible" />
-             </>
-          )}
-
-          {openingRange && (
-            <>
-              <ReferenceLine y={openingRange.high} stroke="hsl(var(--primary))" strokeDasharray="3 3" yAxisId="main" ifOverflow="visible" />
-              <ReferenceLine y={openingRange.low} stroke="hsl(var(--primary))" strokeDasharray="3 3" yAxisId="main" ifOverflow="visible" />
-            </>
-          )}
 
           <Customized
             component={(props: any) => {
@@ -621,9 +607,43 @@ export function InteractiveChart({
               const allMeasurementTools = liveMeasurementTool 
                 ? [...measurementTools, liveMeasurementTool] 
                 : measurementTools;
+              
+              const renderOpeningRange = () => {
+                if (!openingRange) return null;
+
+                const yHigh = mainYAxis.scale(openingRange.high);
+                const yLow = mainYAxis.scale(openingRange.low);
+
+                if (isNaN(yHigh) || isNaN(yLow)) return null;
+                
+                return (
+                  <>
+                    <line
+                      x1={plot.left}
+                      y1={yHigh}
+                      x2={plot.left + plot.width}
+                      y2={yHigh}
+                      stroke="hsl(var(--primary))"
+                      strokeWidth={1}
+                      strokeDasharray="4 4"
+                    />
+                     <line
+                      x1={plot.left}
+                      y1={yLow}
+                      x2={plot.left + plot.width}
+                      y2={yLow}
+                      stroke="hsl(var(--primary))"
+                      strokeWidth={1}
+                      strokeDasharray="4 4"
+                    />
+                  </>
+                )
+              }
+
 
               return (
                 <g>
+                  {renderOpeningRange()}
                   {priceMarkers.map(marker => (
                     <PriceMarker
                       key={marker.id}

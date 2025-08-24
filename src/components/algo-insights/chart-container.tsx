@@ -276,12 +276,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
   const sessionKey = `${SESSION_KEY_PREFIX}${tab}`;
 
   useEffect(() => {
-    if (tab === 'journal' && selectedDate) {
-        setOpeningRange({ high: 45000, low: 44000 });
-        return;
-    }
-
-    if (tab !== 'backtester' || !selectedDate || !isDataImported || !sessionStartTime) {
+    if (!selectedDate || !isDataImported || !sessionStartTime) {
       setOpeningRange(null);
       return;
     }
@@ -1125,8 +1120,6 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         type: t.maxR >= 2 ? 'win' : 'loss' as 'win' | 'loss'
     })) 
     : [];
-  
-  const currentOpeningRange = tab === 'backtester' ? openingRange : null;
 
   const renderToolbar = () => (
     <>
@@ -1227,17 +1220,17 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                 </div>
                 <TooltipProvider>
                     <div className="flex justify-center gap-1">
-                        <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceLong} disabled={isPlacingAnything || (!isDataImported && tab === 'backtester')}><ArrowUp className="w-5 h-5 text-accent"/></Button></TooltipTrigger><TooltipContent><p>Place Long Position</p></TooltipContent></Tooltip>
-                        <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceShort} disabled={isPlacingAnything || (!isDataImported && tab === 'backtester')}><ArrowDown className="w-5 h-5 text-destructive"/></Button></TooltipTrigger><TooltipContent><p>Place Short Position</p></TooltipContent></Tooltip>
+                        <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceLong} disabled={isPlacingAnything || !isDataImported}><ArrowUp className="w-5 h-5 text-accent"/></Button></TooltipTrigger><TooltipContent><p>Place Long Position</p></TooltipContent></Tooltip>
+                        <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceShort} disabled={isPlacingAnything || !isDataImported}><ArrowDown className="w-5 h-5 text-destructive"/></Button></TooltipTrigger><TooltipContent><p>Place Short Position</p></TooltipContent></Tooltip>
                     </div>
                 </TooltipProvider>
                 
                 <div className="h-6 border-l border-border/50"></div>
 
                 <TooltipProvider>
-                    <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceMarker} disabled={isPlacingAnything || (!isDataImported && tab === 'backtester')}><Target className="w-5 h-5 text-foreground"/></Button></TooltipTrigger><TooltipContent><p>Place Price Marker</p></TooltipContent></Tooltip>
+                    <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceMarker} disabled={isPlacingAnything || !isDataImported}><Target className="w-5 h-5 text-foreground"/></Button></TooltipTrigger><TooltipContent><p>Place Price Marker</p></TooltipContent></Tooltip>
                     <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => setIsYAxisLocked(prev => !prev)}>{isYAxisLocked ? <Lock className="h-5 w-5" /> : <Unlock className="h-5 w-5" />}</Button></TooltipTrigger><TooltipContent><p>{isYAxisLocked ? "Unlock Y-Axis" : "Lock Y-Axis"}</p></TooltipContent></Tooltip>
-                    <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceMeasurement} disabled={isPlacingAnything || (!isDataImported && tab === 'backtester')}><Ruler className="w-5 h-5 text-foreground"/></Button></TooltipTrigger><TooltipContent><p>Measure Distance</p></TooltipContent></Tooltip>
+                    <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceMeasurement} disabled={isPlacingAnything || !isDataImported}><Ruler className="w-5 h-5 text-foreground"/></Button></TooltipTrigger><TooltipContent><p>Measure Distance</p></TooltipContent></Tooltip>
                 </TooltipProvider>
 
                 {tab === 'journal' && (
@@ -1319,7 +1312,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                 timeZone={timeZone}
                 endDate={selectedDate}
                 isYAxisLocked={isYAxisLocked}
-                openingRange={currentOpeningRange}
+                openingRange={openingRange}
                 tab={tab}
             />
         </div>
