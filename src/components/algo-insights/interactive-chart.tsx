@@ -626,7 +626,7 @@ export function InteractiveChart({
                       key={tool.id}
                       tool={tool}
                       onUpdateTool={onUpdateTool}
-                      onRemove={onRemoveTool}
+                      onRemove={onRemove}
                       data={aggregatedData}
                       xScale={mainXAxis.scale}
                       yScale={mainYAxis.scale}

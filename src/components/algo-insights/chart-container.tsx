@@ -920,10 +920,11 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                        console.warn(`Row ${rowNum} has incorrect number of columns. Expected ${headerLine.length}, got ${columns.length}. Skipping.`);
                        return null;
                     }
-                    console.log(`Pair value at index ${headerIndices.pair}:`, columns[headerIndices.pair]?.trim());
+                    
+                    const pairValue = columns[headerIndices.pair]?.trim();
+                    console.log(`Row ${rowNum} Pair:`, pairValue);
 
-
-                    if (columns[headerIndices.pair]?.trim() !== "US30") {
+                    if (pairValue !== "US30") {
                         return null;
                     }
 
@@ -1120,6 +1121,8 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         type: t.maxR >= 2 ? 'win' : 'loss' as 'win' | 'loss'
     })) 
     : [];
+  
+  const currentOpeningRange = tab === 'journal' ? openingRange : null;
 
   const renderToolbar = () => (
     <>
@@ -1312,7 +1315,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                 timeZone={timeZone}
                 endDate={selectedDate}
                 isYAxisLocked={isYAxisLocked}
-                openingRange={openingRange}
+                openingRange={currentOpeningRange}
             />
         </div>
         <div 
