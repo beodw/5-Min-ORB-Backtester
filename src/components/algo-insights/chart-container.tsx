@@ -6,7 +6,7 @@ import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, Chevr
 import { Button } from "@/components/ui/button";
 import { InteractiveChart, type ChartClickData } from "@/components/algo-insights/interactive-chart";
 import { mockPriceData } from "@/lib/mock-data";
-import type { RiskRewardTool as RRToolType, PriceMarker, MeasurementTool as MeasurementToolType, MeasurementPoint, PriceData, JournalTrade } from "@/types";
+import type { RiskRewardTool as RRToolType, PriceMarker, MeasurementTool as MeasurementToolType, MeasurementPoint, PriceData, JournalTrade, OpeningRange } from "@/types";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -213,6 +213,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
   const [dayResults, setDayResults] = useState<Record<string, DayResult>>({});
   const journalFileInputRef = useRef<HTMLInputElement>(null);
   const [journalHeader, setJournalHeader] = useState<string[]>([]);
+  const [openingRange, setOpeningRange] = useState<OpeningRange | null>(null);
 
 
   const { rrTools, priceMarkers, measurementTools } = drawingState;
@@ -273,6 +274,39 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
   const [sessionToRestore, setSessionToRestore] = useState<string | null>(null);
   
   const sessionKey = `${SESSION_KEY_PREFIX}${tab}`;
+
+  useEffect(() => {
+    if (tab !== 'journal' || !selectedDate || !isDataImported || !sessionStartTime) {
+      setOpeningRange(null);
+      return;
+    }
+
+    const [startHour, startMinute] = sessionStartTime.split(':').map(Number);
+    
+    const rangeStart = new Date(selectedDate);
+    rangeStart.setUTCHours(startHour, startMinute, 0, 0);
+    
+    // The range ends exactly 5 minutes after it starts.
+    // e.g., 09:30:00 to 09:35:00. This will include candles from 09:30 to 09:34.
+    const rangeEnd = new Date(rangeStart.getTime() + 5 * 60 * 1000);
+    
+    const openingCandles = priceData.filter(p => 
+      p.date.getTime() >= rangeStart.getTime() && 
+      p.date.getTime() < rangeEnd.getTime()
+    );
+
+    if (openingCandles.length > 0) {
+      let high = -Infinity;
+      let low = Infinity;
+      for (const candle of openingCandles) {
+        if (candle.high > high) high = candle.high;
+        if (candle.low < low) low = candle.low;
+      }
+      setOpeningRange({ high, low });
+    } else {
+      setOpeningRange(null);
+    }
+  }, [selectedDate, priceData, sessionStartTime, isDataImported, tab]);
 
   useEffect(() => {
     const getOffsetInMinutes = (timeZone: string): number => {
@@ -865,7 +899,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                 toast({
                     variant: "destructive",
                     title: "Journal Import Failed",
-                    description: `Could not find the required column: "${requiredHeaders.pair}". Please check your CSV header.`,
+                    description: `The required column "${requiredHeaders.pair}" was not found in your CSV header.`,
                     duration: 9000
                 });
                 return;
@@ -1278,6 +1312,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                 timeZone={timeZone}
                 endDate={selectedDate}
                 isYAxisLocked={isYAxisLocked}
+                openingRange={openingRange}
             />
         </div>
         <div 

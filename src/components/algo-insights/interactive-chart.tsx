@@ -8,12 +8,13 @@ import {
   XAxis,
   YAxis,
   ReferenceDot,
+  ReferenceLine,
   Bar,
   Customized,
   Tooltip,
   Cross,
 } from "recharts";
-import type { PriceData, Trade, RiskRewardTool as RRToolType, PriceMarker as PriceMarkerType, MeasurementTool as MeasurementToolType } from "@/types";
+import type { PriceData, Trade, RiskRewardTool as RRToolType, PriceMarker as PriceMarkerType, MeasurementTool as MeasurementToolType, OpeningRange } from "@/types";
 import { RiskRewardTool } from "./risk-reward-tool";
 import { PriceMarker } from "./price-marker";
 import { MeasurementTool } from "./measurement-tool";
@@ -52,6 +53,7 @@ interface InteractiveChartProps {
   timeZone: string;
   endDate?: Date;
   isYAxisLocked: boolean;
+  openingRange?: OpeningRange | null;
 }
 
 const Candlestick = (props: any) => {
@@ -97,7 +99,8 @@ export function InteractiveChart({
     timeframe, 
     timeZone, 
     endDate,
-    isYAxisLocked
+    isYAxisLocked,
+    openingRange,
 }: InteractiveChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartScalesRef = useRef<{x: any, y: any, plot: any} | null>(null);
@@ -559,7 +562,7 @@ export function InteractiveChart({
           {trades.map((trade) => (
             <ReferenceDot
               key={trade.id}
-              x={trade.entryDate.toString()}
+              x={trade.entryDate.getTime()}
               y={trade.entryPrice}
               r={5}
               ifOverflow="extendDomain"
@@ -569,6 +572,13 @@ export function InteractiveChart({
               yAxisId="main"
             />
           ))}
+
+          {openingRange && (
+            <>
+              <ReferenceLine y={openingRange.high} stroke="hsl(var(--primary))" strokeDasharray="3 3" yAxisId="main" ifOverflow="extendDomain" />
+              <ReferenceLine y={openingRange.low} stroke="hsl(var(--primary))" strokeDasharray="3 3" yAxisId="main" ifOverflow="extendDomain" />
+            </>
+          )}
 
           <Customized
             component={(props: any) => {
