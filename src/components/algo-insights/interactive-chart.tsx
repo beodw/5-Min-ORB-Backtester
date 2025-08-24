@@ -106,8 +106,13 @@ export function InteractiveChart({
     if (!data || data.length === 0) {
       return [];
     }
-  
-    const filteredByDate = endDate ? data.filter(point => point.date <= endDate) : data;
+    
+    let filteredByDate = data;
+    if (endDate) {
+        const adjustedEndDate = new Date(endDate);
+        adjustedEndDate.setHours(23, 59, 59, 999); // Set to end of the selected day
+        filteredByDate = data.filter(point => point.date <= adjustedEndDate);
+    }
     
     if (timeframe === '1m') {
       return filteredByDate;
