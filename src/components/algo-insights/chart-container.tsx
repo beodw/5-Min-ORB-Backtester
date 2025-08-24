@@ -967,29 +967,38 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     if(journalFileInputRef.current) journalFileInputRef.current.value = "";
   };
 
-  const processJournalTrades = (trades: JournalTrade[]) => {
+    const processJournalTrades = (trades: JournalTrade[]) => {
       const results: Record<string, DayResult> = {};
+      const groupedByDay: Record<string, JournalTrade[]> = {};
+
+      // Group trades by day
       trades.forEach(trade => {
           const dateKey = trade.dateTaken.toISOString().split('T')[0];
-          
-          if (trade.outcome && trade.outcome !== trade.originalOutcome) {
-              results[dateKey] = 'modified';
-              return;
+          if (!groupedByDay[dateKey]) {
+              groupedByDay[dateKey] = [];
           }
-
-          const currentDayStatus = results[dateKey];
-          if (results[dateKey] === 'modified') return;
-          
-          const finalOutcome = trade.outcome || (trade.maxR >= 2 ? 'Win' : 'Loss');
-          
-          if (finalOutcome === 'Win') {
-             results[dateKey] = 'win';
-          } else if (currentDayStatus !== 'win') {
-             results[dateKey] = 'loss';
-          }
+          groupedByDay[dateKey].push(trade);
       });
+
+      // Process each day
+      for (const dateKey in groupedByDay) {
+          const dayTrades = groupedByDay[dateKey];
+          const isModified = dayTrades.some(t => t.outcome && t.outcome !== t.originalOutcome);
+          
+          if (isModified) {
+              results[dateKey] = 'modified';
+          } else {
+              // If not modified, determine win/loss. A single win makes the day a 'win'.
+              const hasWin = dayTrades.some(t => {
+                  const finalOutcome = t.outcome || (t.maxR >= 2 ? 'Win' : 'Loss');
+                  return finalOutcome === 'Win';
+              });
+              results[dateKey] = hasWin ? 'win' : 'loss';
+          }
+      }
       setDayResults(results);
   };
+
   
   useEffect(() => {
     // Re-process when trades are updated (e.g. status change, pair change)
