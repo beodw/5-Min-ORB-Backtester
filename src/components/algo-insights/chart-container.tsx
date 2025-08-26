@@ -1150,8 +1150,8 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
             sessionStart.setUTCFullYear(adjustedDate.getUTCFullYear(), adjustedDate.getUTCMonth(), adjustedDate.getUTCDate());
             sessionStart.setUTCHours(startHour, startMinute, 0, 0);
 
-            // Set the end of the visible range to be 10 minutes after the session start (5 for range + 5 for context)
-            const initialVisibleEndDate = new Date(sessionStart.getTime() + 10 * 60 * 1000);
+            // Set the end of the visible range to be 25 minutes after session start (5 for range + 20 for context)
+            const initialVisibleEndDate = new Date(sessionStart.getTime() + 25 * 60 * 1000);
             setBacktestEndDate(initialVisibleEndDate);
         }
     };
@@ -1429,7 +1429,6 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                         selected={selectedDate}
                         onSelect={setSelectedDate}
                         defaultMonth={selectedDate}
-                        disabled={tab === 'backtester' && !!backtestEndDate}
                         modifiers={{ 
                             win: (date) => dayResults[date.toISOString().split('T')[0]] === 'win',
                             loss: (date) => dayResults[date.toISOString().split('T')[0]] === 'loss',
