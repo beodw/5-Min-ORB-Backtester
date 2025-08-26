@@ -276,7 +276,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
   const sessionKey = `${SESSION_KEY_PREFIX}${tab}`;
 
   useEffect(() => {
-    if (!selectedDate || !isDataImported || !sessionStartTime || tab !== 'journal') {
+    if (!selectedDate || !isDataImported || !sessionStartTime) {
         setOpeningRange(null);
         return;
     }
@@ -987,14 +987,15 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
           
           if (isModified) {
               results[dateKey] = 'modified';
-          } else {
-              // If not modified, determine win/loss. A single win makes the day a 'win'.
-              const hasWin = dayTrades.some(t => {
-                  const finalOutcome = t.outcome || (t.maxR >= 2 ? 'Win' : 'Loss');
-                  return finalOutcome === 'Win';
-              });
-              results[dateKey] = hasWin ? 'win' : 'loss';
+              continue;
           }
+
+          // If not modified, determine win/loss. A single win makes the day a 'win'.
+          const hasWin = dayTrades.some(t => {
+              const finalOutcome = t.outcome || (t.maxR >= 2 ? 'Win' : 'Loss');
+              return finalOutcome === 'Win';
+          });
+          results[dateKey] = hasWin ? 'win' : 'loss';
       }
       setDayResults(results);
   };
@@ -1117,6 +1118,29 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     URL.revokeObjectURL(url);
   };
   
+    const handleNextDay = () => {
+        if (!isDataImported || !selectedDate) {
+            toast({ variant: "destructive", title: "Cannot Proceed", description: "Please import data and select a date first." });
+            return;
+        }
+
+        const uniqueDates = Array.from(new Set(priceData.map(p => p.date.toISOString().split('T')[0]))).sort();
+        const currentDateStr = selectedDate.toISOString().split('T')[0];
+        const currentIndex = uniqueDates.indexOf(currentDateStr);
+
+        let nextDayIndex = currentIndex + 1;
+        if (nextDayIndex >= uniqueDates.length) {
+            nextDayIndex = 0; // Loop back to the start
+        }
+        
+        const nextDate = new Date(uniqueDates[nextDayIndex]);
+        // Adjust for timezone offset to prevent date from changing
+        const userTimezoneOffset = nextDate.getTimezoneOffset() * 60000;
+        const adjustedDate = new Date(nextDate.getTime() + userTimezoneOffset);
+        
+        setSelectedDate(adjustedDate);
+    };
+
   // --- END JOURNAL FUNCTIONS ---
 
   const isPlacingAnything = !!placingToolType || isPlacingPriceMarker || isPlacingMeasurement;
@@ -1231,6 +1255,16 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                     <div className="flex justify-center gap-1">
                         <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceLong} disabled={isPlacingAnything || !isDataImported}><ArrowUp className="w-5 h-5 text-accent"/></Button></TooltipTrigger><TooltipContent><p>Place Long Position</p></TooltipContent></Tooltip>
                         <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceShort} disabled={isPlacingAnything || !isDataImported}><ArrowDown className="w-5 h-5 text-destructive"/></Button></TooltipTrigger><TooltipContent><p>Place Short Position</p></TooltipContent></Tooltip>
+                         {tab === 'backtester' && (
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button variant="ghost" size="icon" onClick={handleNextDay} disabled={!isDataImported}>
+                                        <ChevronsRight className="w-5 h-5 text-foreground" />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent><p>Go to Next Trading Day</p></TooltipContent>
+                            </Tooltip>
+                        )}
                     </div>
                 </TooltipProvider>
                 
@@ -1398,9 +1432,3 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     </div>
   );
 }
-
-    
-
-    
-
-    

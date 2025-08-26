@@ -609,7 +609,7 @@ export function InteractiveChart({
                 : measurementTools;
               
               const renderOpeningRange = () => {
-                if (!openingRange || tab !== 'journal') return null;
+                if (!openingRange) return null;
 
                 const yHigh = mainYAxis.scale(openingRange.high);
                 const yLow = mainYAxis.scale(openingRange.low);
