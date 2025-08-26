@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, ChevronRight, ChevronsRight, Target, Trash2, FileUp, Lock, Unlock, Ruler, FileBarChart, Undo, Redo, GripVertical, BookOpen, ThumbsUp, ThumbsDown, FileDown } from "lucide-react";
+import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, ChevronRight, ChevronsRight, Target, Trash2, FileUp, Lock, Unlock, Ruler, FileBarChart, Undo, Redo, GripVertical, BookOpen, ThumbsUp, ThumbsDown, FileDown, Forward } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InteractiveChart, type ChartClickData } from "@/components/algo-insights/interactive-chart";
 import { mockPriceData } from "@/lib/mock-data";
@@ -214,6 +214,9 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
   const journalFileInputRef = useRef<HTMLInputElement>(null);
   const [journalHeader, setJournalHeader] = useState<string[]>([]);
   const [openingRange, setOpeningRange] = useState<OpeningRange | null>(null);
+
+  // Backtester stepping state
+  const [backtestEndDate, setBacktestEndDate] = useState<Date | undefined>(undefined);
 
 
   const { rrTools, priceMarkers, measurementTools } = drawingState;
@@ -488,6 +491,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
       setDayResults({});
       setIsDataImported(false);
       setPriceData(mockPriceData);
+      setBacktestEndDate(undefined);
   };
 
 
@@ -987,15 +991,14 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
           
           if (isModified) {
               results[dateKey] = 'modified';
-              continue;
+          } else {
+              // If not modified, determine win/loss. A single win makes the day a 'win'.
+              const hasWin = dayTrades.some(t => {
+                  const finalOutcome = t.outcome || (t.maxR >= 2 ? 'Win' : 'Loss');
+                  return finalOutcome === 'Win';
+              });
+              results[dateKey] = hasWin ? 'win' : 'loss';
           }
-
-          // If not modified, determine win/loss. A single win makes the day a 'win'.
-          const hasWin = dayTrades.some(t => {
-              const finalOutcome = t.outcome || (t.maxR >= 2 ? 'Win' : 'Loss');
-              return finalOutcome === 'Win';
-          });
-          results[dateKey] = hasWin ? 'win' : 'loss';
       }
       setDayResults(results);
   };
@@ -1130,20 +1133,53 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
 
         let nextDayIndex = currentIndex + 1;
         if (nextDayIndex >= uniqueDates.length) {
+            toast({ title: "End of Data", description: "Reached the end of the price data. Looping back to start." });
             nextDayIndex = 0; // Loop back to the start
         }
         
         const nextDate = new Date(uniqueDates[nextDayIndex]);
-        // Adjust for timezone offset to prevent date from changing
         const userTimezoneOffset = nextDate.getTimezoneOffset() * 60000;
         const adjustedDate = new Date(nextDate.getTime() + userTimezoneOffset);
         
         setSelectedDate(adjustedDate);
+
+        // --- Backtester stepping logic ---
+        if (tab === 'backtester') {
+            const [startHour, startMinute] = sessionStartTime.split(':').map(Number);
+            const sessionStart = new Date(adjustedDate);
+            sessionStart.setUTCFullYear(adjustedDate.getUTCFullYear(), adjustedDate.getUTCMonth(), adjustedDate.getUTCDate());
+            sessionStart.setUTCHours(startHour, startMinute, 0, 0);
+
+            // Set the end of the visible range to be 10 minutes after the session start (5 for range + 5 for context)
+            const initialVisibleEndDate = new Date(sessionStart.getTime() + 10 * 60 * 1000);
+            setBacktestEndDate(initialVisibleEndDate);
+        }
     };
+
+    const handleNextCandle = () => {
+        if (tab !== 'backtester' || !backtestEndDate) {
+            toast({ variant: "destructive", title: "Cannot Proceed", description: "This feature is only available in the backtester after selecting a day." });
+            return;
+        }
+
+        const nextCandleDate = new Date(backtestEndDate.getTime() + 1 * 60 * 1000);
+
+        // Simple check to prevent going too far into the future if there's no more data
+        const lastDataPointDate = priceData[priceData.length - 1].date;
+        if (nextCandleDate > lastDataPointDate) {
+             toast({ title: "End of Data", description: "Reached the end of the available price data." });
+             return;
+        }
+
+        setBacktestEndDate(nextCandleDate);
+    }
 
   // --- END JOURNAL FUNCTIONS ---
 
   const isPlacingAnything = !!placingToolType || isPlacingPriceMarker || isPlacingMeasurement;
+  
+  const chartEndDate = tab === 'backtester' ? backtestEndDate : selectedDate;
+
 
   const journalTradesOnChart = tab === 'journal' 
     ? journalTrades.map((t, i) => ({
@@ -1256,14 +1292,24 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                         <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceLong} disabled={isPlacingAnything || !isDataImported}><ArrowUp className="w-5 h-5 text-accent"/></Button></TooltipTrigger><TooltipContent><p>Place Long Position</p></TooltipContent></Tooltip>
                         <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceShort} disabled={isPlacingAnything || !isDataImported}><ArrowDown className="w-5 h-5 text-destructive"/></Button></TooltipTrigger><TooltipContent><p>Place Short Position</p></TooltipContent></Tooltip>
                          {tab === 'backtester' && (
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button variant="ghost" size="icon" onClick={handleNextDay} disabled={!isDataImported}>
-                                        <ChevronsRight className="w-5 h-5 text-foreground" />
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent><p>Go to Next Trading Day</p></TooltipContent>
-                            </Tooltip>
+                            <>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button variant="ghost" size="icon" onClick={handleNextDay} disabled={!isDataImported}>
+                                            <ChevronsRight className="w-5 h-5 text-foreground" />
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent><p>Go to Next Trading Day</p></TooltipContent>
+                                </Tooltip>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button variant="ghost" size="icon" onClick={handleNextCandle} disabled={!backtestEndDate}>
+                                            <Forward className="w-5 h-5 text-foreground" />
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent><p>Show Next Candle</p></TooltipContent>
+                                </Tooltip>
+                            </>
                         )}
                     </div>
                 </TooltipProvider>
@@ -1353,7 +1399,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                 pipValue={pipValue}
                 timeframe={timeframe}
                 timeZone={timeZone}
-                endDate={selectedDate}
+                endDate={chartEndDate}
                 isYAxisLocked={isYAxisLocked}
                 openingRange={openingRange}
                 tab={tab}
@@ -1383,6 +1429,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                         selected={selectedDate}
                         onSelect={setSelectedDate}
                         defaultMonth={selectedDate}
+                        disabled={tab === 'backtester' && !!backtestEndDate}
                         modifiers={{ 
                             win: (date) => dayResults[date.toISOString().split('T')[0]] === 'win',
                             loss: (date) => dayResults[date.toISOString().split('T')[0]] === 'loss',
