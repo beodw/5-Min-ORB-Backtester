@@ -114,9 +114,14 @@ export function InteractiveChart({
     
     let filteredByDate = data;
     if (endDate) {
-        const adjustedEndDate = new Date(endDate);
-        adjustedEndDate.setUTCHours(23, 59, 59, 999); // Set to end of the selected day
-        filteredByDate = data.filter(point => point.date <= adjustedEndDate);
+        if (tab === 'journal') {
+            const adjustedEndDate = new Date(endDate);
+            adjustedEndDate.setUTCHours(23, 59, 59, 999); // Set to end of the selected day for journal view
+            filteredByDate = data.filter(point => point.date <= adjustedEndDate);
+        } else {
+             // For backtester, respect the exact time for stepping
+            filteredByDate = data.filter(point => point.date <= endDate);
+        }
     }
     
     if (timeframe === '1m') {
@@ -167,7 +172,7 @@ export function InteractiveChart({
     }
     
     return result;
-  }, [data, timeframe, endDate]);
+  }, [data, timeframe, endDate, tab]);
   
   const [xDomain, setXDomain] = useState<[number, number]>([0, 100]);
   const [yDomain, setYDomain] = useState<[number, number]>([0, 100]);
@@ -690,4 +695,5 @@ export function InteractiveChart({
       )}
     </div>
   );
-}
+
+    
