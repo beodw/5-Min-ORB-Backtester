@@ -609,7 +609,7 @@ export function InteractiveChart({
                 : measurementTools;
               
               const renderOpeningRange = () => {
-                if (!openingRange) return null;
+                if (!openingRange || tab !== 'journal') return null;
 
                 const yHigh = mainYAxis.scale(openingRange.high);
                 const yLow = mainYAxis.scale(openingRange.low);
@@ -660,7 +660,7 @@ export function InteractiveChart({
                       key={tool.id}
                       tool={tool}
                       onUpdateTool={onUpdateTool}
-                      onRemove={onRemove}
+                      onRemove={onRemoveTool}
                       data={aggregatedData}
                       xScale={mainXAxis.scale}
                       yScale={mainYAxis.scale}
