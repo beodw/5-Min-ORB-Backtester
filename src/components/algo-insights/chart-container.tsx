@@ -307,7 +307,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     } else {
         setOpeningRange(null);
     }
-  }, [selectedDate, priceData, sessionStartTime, isDataImported, tab]);
+  }, [selectedDate, priceData, sessionStartTime, isDataImported]);
 
 
   useEffect(() => {
@@ -1143,22 +1143,19 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         
         setSelectedDate(adjustedDate);
 
-        // --- Backtester stepping logic ---
-        if (tab === 'backtester') {
-            const [startHour, startMinute] = sessionStartTime.split(':').map(Number);
-            const sessionStart = new Date(adjustedDate);
-            sessionStart.setUTCFullYear(adjustedDate.getUTCFullYear(), adjustedDate.getUTCMonth(), adjustedDate.getUTCDate());
-            sessionStart.setUTCHours(startHour, startMinute, 0, 0);
+        const [startHour, startMinute] = sessionStartTime.split(':').map(Number);
+        const sessionStart = new Date(adjustedDate);
+        sessionStart.setUTCFullYear(adjustedDate.getUTCFullYear(), adjustedDate.getUTCMonth(), adjustedDate.getUTCDate());
+        sessionStart.setUTCHours(startHour, startMinute, 0, 0);
 
-            // Set the end of the visible range to be 25 minutes after session start (5 for range + 20 for context)
-            const initialVisibleEndDate = new Date(sessionStart.getTime() + 25 * 60 * 1000);
-            setBacktestEndDate(initialVisibleEndDate);
-        }
+        // Set the end of the visible range to be 25 minutes after session start (5 for range + 20 for context)
+        const initialVisibleEndDate = new Date(sessionStart.getTime() + 25 * 60 * 1000);
+        setBacktestEndDate(initialVisibleEndDate);
     };
 
     const handleNextCandle = () => {
-        if (tab !== 'backtester' || !backtestEndDate) {
-            toast({ variant: "destructive", title: "Cannot Proceed", description: "This feature is only available in the backtester after selecting a day." });
+        if (!backtestEndDate) {
+            toast({ variant: "destructive", title: "Cannot Proceed", description: "This feature is only available after selecting a day with the 'Next Day' button." });
             return;
         }
 
@@ -1178,7 +1175,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
 
   const isPlacingAnything = !!placingToolType || isPlacingPriceMarker || isPlacingMeasurement;
   
-  const chartEndDate = tab === 'backtester' ? backtestEndDate : selectedDate;
+  const chartEndDate = backtestEndDate || selectedDate;
 
 
   const journalTradesOnChart = tab === 'journal' 
@@ -1291,26 +1288,23 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                     <div className="flex justify-center gap-1">
                         <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceLong} disabled={isPlacingAnything || !isDataImported}><ArrowUp className="w-5 h-5 text-accent"/></Button></TooltipTrigger><TooltipContent><p>Place Long Position</p></TooltipContent></Tooltip>
                         <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceShort} disabled={isPlacingAnything || !isDataImported}><ArrowDown className="w-5 h-5 text-destructive"/></Button></TooltipTrigger><TooltipContent><p>Place Short Position</p></TooltipContent></Tooltip>
-                         {tab === 'backtester' && (
-                            <>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <Button variant="ghost" size="icon" onClick={handleNextDay} disabled={!isDataImported}>
-                                            <ChevronsRight className="w-5 h-5 text-foreground" />
-                                        </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent><p>Go to Next Trading Day</p></TooltipContent>
-                                </Tooltip>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <Button variant="ghost" size="icon" onClick={handleNextCandle} disabled={!backtestEndDate}>
-                                            <Forward className="w-5 h-5 text-foreground" />
-                                        </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent><p>Show Next Candle</p></TooltipContent>
-                                </Tooltip>
-                            </>
-                        )}
+                        
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" onClick={handleNextDay} disabled={!isDataImported}>
+                                    <ChevronsRight className="w-5 h-5 text-foreground" />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent><p>Go to Next Trading Day</p></TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" onClick={handleNextCandle} disabled={!backtestEndDate}>
+                                    <Forward className="w-5 h-5 text-foreground" />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent><p>Show Next Candle</p></TooltipContent>
+                        </Tooltip>
                     </div>
                 </TooltipProvider>
                 
@@ -1427,7 +1421,12 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                     <Calendar
                         mode="single"
                         selected={selectedDate}
-                        onSelect={setSelectedDate}
+                        onSelect={(date) => {
+                            if (date) {
+                                setSelectedDate(date);
+                                setBacktestEndDate(undefined); // Reset stepping when a new date is picked
+                            }
+                        }}
                         defaultMonth={selectedDate}
                         modifiers={{ 
                             win: (date) => dayResults[date.toISOString().split('T')[0]] === 'win',
