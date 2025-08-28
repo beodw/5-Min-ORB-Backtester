@@ -991,14 +991,15 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
           
           if (isModified) {
               results[dateKey] = 'modified';
-          } else {
-              // If not modified, determine win/loss. A single win makes the day a 'win'.
-              const hasWin = dayTrades.some(t => {
-                  const finalOutcome = t.outcome || (t.maxR >= 2 ? 'Win' : 'Loss');
-                  return finalOutcome === 'Win';
-              });
-              results[dateKey] = hasWin ? 'win' : 'loss';
+              continue; // Skip to next day once marked as modified
           }
+      
+          // If not modified, determine win/loss. A single win makes the day a 'win'.
+          const hasWin = dayTrades.some(t => {
+              const finalOutcome = t.outcome || (t.maxR >= 2 ? 'Win' : 'Loss');
+              return finalOutcome === 'Win';
+          });
+          results[dateKey] = hasWin ? 'win' : 'loss';
       }
       setDayResults(results);
   };
@@ -1075,9 +1076,10 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     }
 
     const outcomeIndex = 10; // Hardcoded to be the 11th column (0-indexed)
-    let statusIndex = journalHeader.indexOf("Status"); 
-
+    let statusIndex = journalHeader.indexOf("Status");
+    
     let finalHeader = [...journalHeader];
+    // Add "Status" header only if it doesn't exist
     if (statusIndex === -1) {
         finalHeader.push("Status");
         statusIndex = finalHeader.length - 1;
@@ -1086,21 +1088,34 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     const rows = allJournalTrades.map(trade => {
         let newColumns = [...trade.originalRow];
 
-        // Ensure the array is long enough before assigning
-        while (newColumns.length <= Math.max(outcomeIndex, statusIndex)) {
+        // Ensure the array is long enough to hold all headers
+        while (newColumns.length < finalHeader.length) {
             newColumns.push('');
         }
-        
-        const finalStatus = trade.status === 'default' ? 'traded' : trade.status;
-        const finalOutcome = trade.outcome || trade.originalOutcome || (trade.maxR >= 2 ? 'Win' : 'Loss');
-        
-        // Directly set the values at their correct indices
-        newColumns[outcomeIndex] = finalOutcome;
-        newColumns[statusIndex] = finalStatus;
 
+        // Determine the final outcome, defaulting to original, then calculated
+        const finalOutcome = trade.outcome || trade.originalOutcome || (trade.maxR >= 2 ? 'Win' : 'Loss');
+        newColumns[outcomeIndex] = finalOutcome;
+
+        // --- Status Update Logic ---
+        // If the status was modified by the user, use the new status.
+        if (trade.status !== 'default') {
+            newColumns[statusIndex] = trade.status;
+        } else {
+            // If the user didn't modify it, check if a status existed in the original file.
+            // If the original row didn't have a status column (i.e. we added it), default to 'traded'.
+            if (trade.originalRow.length <= statusIndex) {
+                 newColumns[statusIndex] = 'traded';
+            }
+            // If it existed but was empty, also default to 'traded'
+            else if (!newColumns[statusIndex]) {
+                 newColumns[statusIndex] = 'traded';
+            }
+            // Otherwise, the original value (which might be 'traded', 'not traded', or something else) is preserved because it's already in newColumns.
+        }
+        
         return newColumns.map(field => {
             const fieldStr = String(field ?? '').trim();
-            // Quote fields containing commas, double quotes, or newlines
             if (fieldStr.includes(',') || fieldStr.includes('"') || fieldStr.includes('\n')) {
                 const sanitizedField = fieldStr.replace(/"/g, '""');
                 return `"${sanitizedField}"`;
