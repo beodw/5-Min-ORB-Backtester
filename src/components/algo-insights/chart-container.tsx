@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, ChevronRight, ChevronsRight, Target, Trash2, FileUp, Lock, Unlock, Ruler, FileBarChart, Undo, Redo, GripVertical, BookOpen, ThumbsUp, ThumbsDown, FileDown, Forward } from "lucide-react";
+import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, ChevronRight, ChevronsRight, Target, Trash2, FileUp, Lock, Unlock, Ruler, FileBarChart, Undo, Redo, GripVertical, BookOpen, ThumbsUp, ThumbsDown, FileDown, Forward, FastForward } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InteractiveChart, type ChartClickData } from "@/components/algo-insights/interactive-chart";
 import { mockPriceData } from "@/lib/mock-data";
@@ -404,6 +404,8 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         ...trade,
         dateTaken: trade.dateTaken.toISOString(),
         dateClosed: trade.dateClosed.toISOString(),
+        originalOutcome: trade.originalOutcome,
+        outcome: trade.outcome,
     }));
 
     const sessionState: SessionState = {
@@ -887,7 +889,6 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                 dateTaken: "Date Taken (Timestamp)",
                 dateClosed: "Date Closed (Timestamp)",
                 maxR: "Maximum Favourable Excursion (R)",
-                tradeOutcome: "Trade Outcome"
             };
 
             const headerIndices = {
@@ -895,21 +896,11 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                 dateTaken: headerLine.indexOf(requiredHeaders.dateTaken),
                 dateClosed: headerLine.indexOf(requiredHeaders.dateClosed),
                 maxR: headerLine.indexOf(requiredHeaders.maxR),
-                tradeOutcome: headerLine.indexOf(requiredHeaders.tradeOutcome)
+                tradeOutcome: headerLine.indexOf("Trade Outcome") // Optional
             };
             
-            if (headerIndices.pair === -1) {
-                toast({
-                    variant: "destructive",
-                    title: "Journal Import Failed",
-                    description: `The required column "${requiredHeaders.pair}" was not found in your CSV header.`,
-                    duration: 9000
-                });
-                return;
-            }
-            
             for (const [key, index] of Object.entries(headerIndices)) {
-                 if (index === -1 && key !== 'pair') {
+                 if (index === -1 && key !== 'tradeOutcome') {
                     throw new Error(`Missing required column: "${(requiredHeaders as any)[key]}"`);
                 }
             }
@@ -925,9 +916,8 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                     }
                     
                     const pairValue = columns[headerIndices.pair]?.trim();
-                    console.log(`Row ${rowNum} Pair:`, pairValue);
 
-                    if (pairValue !== "US30") {
+                    if (!JOURNAL_PAIRS.includes(pairValue)) {
                         return null;
                     }
 
@@ -941,7 +931,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                         throw new Error(`Invalid 'Maximum Favourable Excursion (R)' value on row ${rowNum}: '${maxRString}'. Must be a number.`);
                     }
 
-                    const originalOutcome = columns[headerIndices.tradeOutcome]?.trim() as 'Win' | 'Loss' | undefined;
+                    const originalOutcome: 'Win' | 'Loss' = maxR >= 2 ? 'Win' : 'Loss';
                     
                     return {
                         pair: pair,
@@ -957,12 +947,13 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                 .filter((trade): trade is JournalTrade => trade !== null);
 
             if (parsedTrades.length === 0) {
-              throw new Error("No valid trade rows could be parsed for the pair 'US30'. Check data and column headers.");
+              throw new Error(`No valid trade rows could be parsed for the supported pairs (${JOURNAL_PAIRS.join(', ')}). Check data and column headers.`);
             }
 
-            setAllJournalTrades(parsedTrades); 
-            setSelectedPair("US30");
-            toast({ title: "Journal Imported", description: `${parsedTrades.length} trades for US30 loaded.` });
+            setAllJournalTrades(parsedTrades);
+            const firstValidPair = parsedTrades.find(t => t.pair)?.pair || selectedPair;
+            setSelectedPair(firstValidPair);
+            toast({ title: "Journal Imported", description: `${parsedTrades.length} trades loaded.` });
         } catch (error: any) {
             toast({ variant: "destructive", title: "Journal Import Failed", description: error.message, duration: 9000 });
         }
@@ -991,7 +982,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
           
           if (isModified) {
               results[dateKey] = 'modified';
-              continue; // Skip to next day once marked as modified
+              continue;
           }
       
           // If not modified, determine win/loss. A single win makes the day a 'win'.
@@ -1075,7 +1066,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         return;
     }
 
-    const outcomeIndex = 10; // Hardcoded to be the 11th column (0-indexed)
+    const outcomeIndex = journalHeader.indexOf("Trade Outcome");
     let statusIndex = journalHeader.indexOf("Status");
     
     let finalHeader = [...journalHeader];
@@ -1094,8 +1085,11 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         }
 
         // Determine the final outcome, defaulting to original, then calculated
-        const finalOutcome = trade.outcome || trade.originalOutcome || (trade.maxR >= 2 ? 'Win' : 'Loss');
-        newColumns[outcomeIndex] = finalOutcome;
+        if (outcomeIndex !== -1) {
+            const finalOutcome = trade.outcome || trade.originalOutcome;
+            newColumns[outcomeIndex] = finalOutcome;
+        }
+
 
         // --- Status Update Logic ---
         // If the status was modified by the user, use the new status.
@@ -1301,13 +1295,17 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                 </div>
                 <TooltipProvider>
                     <div className="flex justify-center gap-1">
-                        <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceLong} disabled={isPlacingAnything || !isDataImported}><ArrowUp className="w-5 h-5 text-accent"/></Button></TooltipTrigger><TooltipContent><p>Place Long Position</p></TooltipContent></Tooltip>
-                        <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceShort} disabled={isPlacingAnything || !isDataImported}><ArrowDown className="w-5 h-5 text-destructive"/></Button></TooltipTrigger><TooltipContent><p>Place Short Position</p></TooltipContent></Tooltip>
+                        {tab === 'backtester' && (
+                            <>
+                                <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceLong} disabled={isPlacingAnything || !isDataImported}><ArrowUp className="w-5 h-5 text-accent"/></Button></TooltipTrigger><TooltipContent><p>Place Long Position</p></TooltipContent></Tooltip>
+                                <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceShort} disabled={isPlacingAnything || !isDataImported}><ArrowDown className="w-5 h-5 text-destructive"/></Button></TooltipTrigger><TooltipContent><p>Place Short Position</p></TooltipContent></Tooltip>
+                            </>
+                        )}
                         
                         <Tooltip>
                             <TooltipTrigger asChild>
                                 <Button variant="ghost" size="icon" onClick={handleNextDay} disabled={!isDataImported}>
-                                    <ChevronsRight className="w-5 h-5 text-foreground" />
+                                    <FastForward className="w-5 h-5 text-foreground" />
                                 </Button>
                             </TooltipTrigger>
                             <TooltipContent><p>Go to Next Trading Day</p></TooltipContent>
@@ -1492,3 +1490,4 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     </div>
   );
 }
+
