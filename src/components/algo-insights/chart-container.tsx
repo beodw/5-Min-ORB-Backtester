@@ -764,7 +764,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         toast({ variant: "destructive", title: "Cannot Export", description: "Please import data and place at least one trade tool to generate a report." });
         return;
     }
-    const headers = ["Pair", "Date Taken", "Date Closed", "Max R", "Stop Loss In Pips", "Max R Timestamp", "Maximum Adverse Excursion (R)", "Comments"].join(',');
+    const headers = ["Pair", "Date Taken (Timestamp)", "Date Closed (Timestamp)", "Maximum Favourable Excursion (R)", "Stop Loss In Pips", "Maximum Favourable Excursion Timestamp", "Maximum Adverse Excursion (R)", "Comments"].join(',');
     const sortedTools = [...rrTools].sort((a, b) => a.entryDate.getTime() - b.entryDate.getTime());
     const rows = sortedTools.map(tool => {
         const reportRow = simulateTrade(tool, priceData, pipValue);
@@ -1557,3 +1557,5 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
 }
 
 
+
+    
