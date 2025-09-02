@@ -37,8 +37,7 @@ type TradeReportRow = {
     maxR: string;
     stopLossPips: string;
     maxRTaken: string;
-    maxAdverseExcursionR: string;
-    maxAdverseExcursionTimestamp: string;
+    reversalPoints: string;
     comments?: string;
 };
 
@@ -89,85 +88,75 @@ const simulateTrade = (
     
     let dateClosed: Date | null = null;
     let comments: string | undefined = undefined;
-    let highSinceEntry = tool.entryPrice;
-    let lowSinceEntry = tool.entryPrice;
-    let dateOfHigh: Date = dateTaken;
-    let dateOfLow: Date = dateTaken;
 
-    // MAE Calculation variables
-    let maxAdversePointer = tool.entryPrice;
-    let maxAdversePointerDate = dateTaken;
-    let maeIsFinal = false;
+    // MFE Tracking
+    let mfePointer = tool.entryPrice;
+    let dateOfMfe = dateTaken;
+
+    // Reversal Points (Local MAE) Tracking
+    const reversalPoints: Record<number, number> = {};
+    let nextRMilestone = 1;
+    let localMaePointer = tool.entryPrice;
     
     for (let i = entryIndex + 1; i < priceData.length; i++) {
         const candle = priceData[i];
 
-        // --- MAE Calculation ---
-        if (!maeIsFinal) {
-            if (tool.position === 'long') {
-                if (candle.low < maxAdversePointer) {
-                    maxAdversePointer = candle.low;
-                    maxAdversePointerDate = candle.date;
-                }
-                // Check if SL was hit to lock MAE at 1R
-                if (maxAdversePointer <= tool.stopLoss) {
-                    maxAdversePointer = tool.stopLoss;
-                    maxAdversePointerDate = candle.date;
-                    maeIsFinal = true;
-                }
-            } else { // Short position
-                if (candle.high > maxAdversePointer) {
-                    maxAdversePointer = candle.high;
-                    maxAdversePointerDate = candle.date;
-                }
-                // Check if SL was hit to lock MAE at 1R
-                if (maxAdversePointer >= tool.stopLoss) {
-                    maxAdversePointer = tool.stopLoss;
-                    maxAdversePointerDate = candle.date;
-                    maeIsFinal = true;
-                }
+        // --- Check for Stop Loss Hit (Terminating Condition) ---
+        if ((tool.position === 'long' && candle.low <= tool.stopLoss) || (tool.position === 'short' && candle.high >= tool.stopLoss)) {
+            dateClosed = candle.date;
+            break; // Exit loop immediately if SL is hit
+        }
+        
+        // --- MFE Calculation ---
+        if (tool.position === 'long') {
+            if (candle.high > mfePointer) {
+                mfePointer = candle.high;
+                dateOfMfe = candle.date;
+            }
+        } else { // Short position
+            if (candle.low < mfePointer) {
+                mfePointer = candle.low;
+                dateOfMfe = candle.date;
             }
         }
-        
-        // --- MFE & Trade Closing Calculation ---
-        if (candle.high > highSinceEntry) {
-            highSinceEntry = candle.high;
-            dateOfHigh = candle.date;
+
+        // --- Local MAE (Reversal Point) Calculation ---
+        if (tool.position === 'long') {
+            if (candle.low < localMaePointer) {
+                localMaePointer = candle.low;
+            }
+        } else { // Short position
+            if (candle.high > localMaePointer) {
+                localMaePointer = candle.high;
+            }
         }
-        if (candle.low < lowSinceEntry) {
-            lowSinceEntry = candle.low;
-            dateOfLow = candle.date;
+
+        // --- Check for R-Milestone Achievement ---
+        const currentMfePriceMove = Math.abs(mfePointer - tool.entryPrice);
+        const currentMfeR = riskAmountPrice > 0 ? currentMfePriceMove / riskAmountPrice : 0;
+
+        while (currentMfeR >= nextRMilestone) {
+            // Calculate drawdown for the phase that just completed
+            const localMaePriceMove = Math.abs(localMaePointer - (tool.entryPrice + (nextRMilestone - 1) * riskAmountPrice * (tool.position === 'long' ? 1 : -1)));
+            const localMaeR = riskAmountPrice > 0 ? localMaePriceMove / riskAmountPrice : 0;
+            
+            reversalPoints[nextRMilestone] = parseFloat(localMaeR.toFixed(2));
+            
+            // Reset for the next phase
+            nextRMilestone++;
+            // The new local MAE pointer starts from the R-level we just crossed
+            localMaePointer = tool.entryPrice + (nextRMilestone - 1) * riskAmountPrice * (tool.position === 'long' ? 1 : -1);
         }
-        
-        // Check for stop loss hit, which is the only exit condition for MFE
-        if (!dateClosed && ((tool.position === 'long' && candle.low <= tool.stopLoss) || (tool.position === 'short' && candle.high >= tool.stopLoss))) {
-            dateClosed = candle.date;
-        }
-        
-        // If trade is closed by SL, we can break the loop
-        if (dateClosed) break;
     }
     
-    // If the loop finished without the SL being hit, the trade is a "runner"
+    // --- Finalize Trade Outcome ---
     if (!dateClosed) {
         dateClosed = priceData[priceData.length - 1].date;
         comments = "Runner";
     }
     
-    let maxProfitPrice = 0;
-    let dateOfMaxR: Date;
-    if (tool.position === 'long') {
-        maxProfitPrice = highSinceEntry - tool.entryPrice;
-        dateOfMaxR = dateOfHigh;
-    } else {
-        maxProfitPrice = tool.entryPrice - lowSinceEntry;
-        dateOfMaxR = dateOfLow;
-    }
+    const maxProfitPrice = Math.abs(mfePointer - tool.entryPrice);
     let maxR = riskAmountPrice > 0 ? maxProfitPrice / riskAmountPrice : 0;
-    
-    // --- Final MAE R-Value Calculation ---
-    const maxAdversePriceMove = Math.abs(tool.entryPrice - maxAdversePointer);
-    const maxAdverseExcursionR = riskAmountPrice > 0 ? maxAdversePriceMove / riskAmountPrice : 0;
     
     return {
         pair: '',
@@ -175,9 +164,8 @@ const simulateTrade = (
         dateClosed: formatDateForCsv(dateClosed),
         maxR: maxR.toFixed(2),
         stopLossPips,
-        maxRTaken: formatDateForCsv(dateOfMaxR),
-        maxAdverseExcursionR: maxAdverseExcursionR.toFixed(2),
-        maxAdverseExcursionTimestamp: formatDateForCsv(maxAdversePointerDate),
+        maxRTaken: formatDateForCsv(dateOfMfe),
+        reversalPoints: JSON.stringify(reversalPoints),
         comments,
     };
 };
@@ -771,7 +759,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         toast({ variant: "destructive", title: "Cannot Export", description: "Please import data and place at least one trade tool to generate a report." });
         return;
     }
-    const headers = ["Pair", "Date Taken (Timestamp)", "Date Closed (Timestamp)", "Maximum Favourable Excursion (R)", "Stop Loss In Pips", "Maximum Favourable Excursion Timestamp", "Maximum Adverse Excursion (R)", "Maximum Adverse Excursion (Timestamp)", "Comments"].join(',');
+    const headers = ["Pair", "Date Taken (Timestamp)", "Date Closed (Timestamp)", "Maximum Favourable Excursion (R)", "Stop Loss In Pips", "Maximum Favourable Excursion Timestamp", "ReversalPoints", "Comments"].join(',');
     const sortedTools = [...rrTools].sort((a, b) => a.entryDate.getTime() - b.entryDate.getTime());
     const rows = sortedTools.map(tool => {
         const reportRow = simulateTrade(tool, priceData, pipValue);
@@ -779,7 +767,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         const pair = fileName ? fileName.split('-')[0].trim() : 'N/A';
         reportRow.pair = pair;
         const sanitize = (val: any) => `"${String(val ?? '').replace(/"/g, '""')}"`;
-        return [reportRow.pair, reportRow.dateTaken, reportRow.dateClosed, reportRow.maxR, reportRow.stopLossPips, reportRow.maxRTaken, reportRow.maxAdverseExcursionR, reportRow.maxAdverseExcursionTimestamp, reportRow.comments].map(sanitize).join(',');
+        return [reportRow.pair, reportRow.dateTaken, reportRow.dateClosed, reportRow.maxR, reportRow.stopLossPips, reportRow.maxRTaken, reportRow.reversalPoints, reportRow.comments].map(sanitize).join(',');
     }).filter(row => row !== null).join('\n');
     const csvContent = `${headers}\n${rows}`;
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -1564,5 +1552,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
 }
 
 
+
+    
 
     
