@@ -37,6 +37,7 @@ type TradeReportRow = {
     maxR: string;
     stopLossPips: string;
     maxRTaken: string;
+    maxAdverseExcursionR: string;
 };
 
 type DrawingState = {
@@ -89,10 +90,38 @@ const simulateTrade = (
     let lowSinceEntry = tool.entryPrice;
     let dateOfHigh: Date = dateTaken;
     let dateOfLow: Date = dateTaken;
+
+    // MAE Calculation variables
+    let maxAdversePointer = tool.entryPrice;
+    let maeIsFinal = false;
     
     for (let i = entryIndex + 1; i < priceData.length; i++) {
         const candle = priceData[i];
 
+        // --- MAE Calculation ---
+        if (!maeIsFinal) {
+            if (tool.position === 'long') {
+                if (candle.low < maxAdversePointer) {
+                    maxAdversePointer = candle.low;
+                }
+                // Check if SL was hit to lock MAE at 1R
+                if (maxAdversePointer <= tool.stopLoss) {
+                    maxAdversePointer = tool.stopLoss;
+                    maeIsFinal = true;
+                }
+            } else { // Short position
+                if (candle.high > maxAdversePointer) {
+                    maxAdversePointer = candle.high;
+                }
+                // Check if SL was hit to lock MAE at 1R
+                if (maxAdversePointer >= tool.stopLoss) {
+                    maxAdversePointer = tool.stopLoss;
+                    maeIsFinal = true;
+                }
+            }
+        }
+        
+        // --- MFE & Trade Closing Calculation ---
         if (candle.high > highSinceEntry) {
             highSinceEntry = candle.high;
             dateOfHigh = candle.date;
@@ -101,11 +130,19 @@ const simulateTrade = (
             lowSinceEntry = candle.low;
             dateOfLow = candle.date;
         }
-
-        if ((tool.position === 'long' && candle.low <= tool.stopLoss) || (tool.position === 'short' && candle.high >= tool.stopLoss)) {
+        
+        // Check for stop loss hit
+        if (!dateClosed && ((tool.position === 'long' && candle.low <= tool.stopLoss) || (tool.position === 'short' && candle.high >= tool.stopLoss))) {
             dateClosed = candle.date;
-            break; 
         }
+        
+        // Only check for take profit if trade is not already closed by SL
+        if (!dateClosed && ((tool.position === 'long' && candle.high >= tool.takeProfit) || (tool.position === 'short' && candle.low <= tool.takeProfit))) {
+            dateClosed = candle.date;
+        }
+
+        // If trade is closed, we can break the loop
+        if (dateClosed) break;
     }
     
     if (!dateClosed) {
@@ -123,6 +160,10 @@ const simulateTrade = (
     }
     let maxR = riskAmountPrice > 0 ? maxProfitPrice / riskAmountPrice : 0;
     
+    // --- Final MAE R-Value Calculation ---
+    const maxAdversePriceMove = Math.abs(tool.entryPrice - maxAdversePointer);
+    const maxAdverseExcursionR = riskAmountPrice > 0 ? maxAdversePriceMove / riskAmountPrice : 0;
+    
     return {
         pair: '',
         dateTaken: formatDateForCsv(dateTaken),
@@ -130,6 +171,7 @@ const simulateTrade = (
         maxR: maxR.toFixed(2),
         stopLossPips,
         maxRTaken: formatDateForCsv(dateOfMaxR),
+        maxAdverseExcursionR: maxAdverseExcursionR.toFixed(2),
     };
 };
 
@@ -459,9 +501,11 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
             
             // This will trigger the filtering useEffect
             if (restoredJournalTrades.length > 0) {
-                const filtered = restoredJournalTrades.filter(t => t.pair === (savedSession.selectedPair || JOURNAL_PAIRS[0]));
+                const firstValidPair = restoredJournalTrades.find(t => t.pair)?.pair || JOURNAL_PAIRS[0];
+                const restoredPair = savedSession.selectedPair || firstValidPair;
+                const filtered = restoredJournalTrades.filter(t => t.pair === restoredPair);
                 setJournalTrades(filtered);
-                processJournalTrades(filtered);
+                processJournalTrades(restoredJournalTrades); // Process all trades to populate calendar correctly
             }
             
             setPriceData(mockPriceData);
@@ -720,7 +764,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         toast({ variant: "destructive", title: "Cannot Export", description: "Please import data and place at least one trade tool to generate a report." });
         return;
     }
-    const headers = ["Pair", "Date Taken", "Date Closed", "Max R", "Stop Loss In Pips", "Max R Timestamp"].join(',');
+    const headers = ["Pair", "Date Taken", "Date Closed", "Max R", "Stop Loss In Pips", "Max R Timestamp", "Maximum Adverse Excursion (R)"].join(',');
     const sortedTools = [...rrTools].sort((a, b) => a.entryDate.getTime() - b.entryDate.getTime());
     const rows = sortedTools.map(tool => {
         const reportRow = simulateTrade(tool, priceData, pipValue);
@@ -728,7 +772,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         const pair = fileName ? fileName.split('-')[0].trim() : 'N/A';
         reportRow.pair = pair;
         const sanitize = (val: any) => `"${String(val).replace(/"/g, '""')}"`;
-        return [reportRow.pair, reportRow.dateTaken, reportRow.dateClosed, reportRow.maxR, reportRow.stopLossPips, reportRow.maxRTaken].map(sanitize).join(',');
+        return [reportRow.pair, reportRow.dateTaken, reportRow.dateClosed, reportRow.maxR, reportRow.stopLossPips, reportRow.maxRTaken, reportRow.maxAdverseExcursionR].map(sanitize).join(',');
     }).filter(row => row !== null).join('\n');
     const csvContent = `${headers}\n${rows}`;
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -896,11 +940,13 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                 dateTaken: headerLine.indexOf(requiredHeaders.dateTaken),
                 dateClosed: headerLine.indexOf(requiredHeaders.dateClosed),
                 maxR: headerLine.indexOf(requiredHeaders.maxR),
-                tradeOutcome: headerLine.indexOf("Trade Outcome") // Optional
+                // Optional columns
+                tradeOutcome: headerLine.indexOf("Trade Outcome"),
+                status: headerLine.indexOf("Status"),
             };
             
             for (const [key, index] of Object.entries(headerIndices)) {
-                 if (index === -1 && key !== 'tradeOutcome') {
+                 if (index === -1 && ['tradeOutcome', 'status'].indexOf(key) === -1) {
                     throw new Error(`Missing required column: "${(requiredHeaders as any)[key]}"`);
                 }
             }
@@ -933,15 +979,33 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
 
                     const originalOutcome: 'Win' | 'Loss' = maxR >= 2 ? 'Win' : 'Loss';
                     
+                    // User-set outcome from the file, if present. Otherwise, it will be same as originalOutcome
+                    let fileOutcome = originalOutcome;
+                    if(headerIndices.tradeOutcome !== -1) {
+                       const outcomeFromFile = columns[headerIndices.tradeOutcome]?.trim();
+                       if(outcomeFromFile === 'Win' || outcomeFromFile === 'Loss') {
+                          fileOutcome = outcomeFromFile;
+                       }
+                    }
+
+                    // User-set status from the file
+                    let fileStatus: JournalTrade['status'] = 'default';
+                     if(headerIndices.status !== -1) {
+                       const statusFromFile = columns[headerIndices.status]?.trim();
+                       if(statusFromFile === 'traded' || statusFromFile === 'not traded') {
+                          fileStatus = statusFromFile as JournalTrade['status'];
+                       }
+                    }
+
                     return {
                         pair: pair,
                         dateTaken,
                         dateClosed,
                         maxR,
-                        status: 'default',
+                        status: fileStatus,
                         originalRow: columns,
                         originalOutcome,
-                        outcome: originalOutcome,
+                        outcome: fileOutcome,
                     };
                 })
                 .filter((trade): trade is JournalTrade => trade !== null);
@@ -966,30 +1030,28 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
       const results: Record<string, DayResult> = {};
       const groupedByDay: Record<string, JournalTrade[]> = {};
 
-      // Group trades by day
-      trades.forEach(trade => {
+      // Group all trades by day, regardless of selected pair, for the calendar
+      allJournalTrades.forEach(trade => {
           const dateKey = trade.dateTaken.toISOString().split('T')[0];
           if (!groupedByDay[dateKey]) {
               groupedByDay[dateKey] = [];
           }
           groupedByDay[dateKey].push(trade);
       });
-
+      
       // Process each day
       for (const dateKey in groupedByDay) {
           const dayTrades = groupedByDay[dateKey];
-          const isModified = dayTrades.some(t => t.outcome && t.outcome !== t.originalOutcome);
+          // A day is 'modified' if ANY trade on that day (any pair) has a user-changed outcome
+          const isModified = dayTrades.some(t => t.outcome !== t.originalOutcome);
           
           if (isModified) {
               results[dateKey] = 'modified';
               continue;
           }
       
-          // If not modified, determine win/loss. A single win makes the day a 'win'.
-          const hasWin = dayTrades.some(t => {
-              const finalOutcome = t.outcome || (t.maxR >= 2 ? 'Win' : 'Loss');
-              return finalOutcome === 'Win';
-          });
+          // A day is a 'win' if ANY trade on that day was a win
+          const hasWin = dayTrades.some(t => t.outcome === 'Win');
           results[dateKey] = hasWin ? 'win' : 'loss';
       }
       setDayResults(results);
@@ -997,13 +1059,13 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
 
   
   useEffect(() => {
-    // Re-process when trades are updated (e.g. status change, pair change)
-    if (journalTrades.length > 0) {
-        processJournalTrades(journalTrades);
+    // Re-process when trades are updated (e.g. status change, outcome change, or new file import)
+    if (allJournalTrades.length > 0) {
+        processJournalTrades(allJournalTrades);
     } else {
-        setDayResults({}); // Clear results if no trades for selected pair
+        setDayResults({}); // Clear results if no trades
     }
-  }, [journalTrades]);
+  }, [allJournalTrades]);
 
   const updateTradeStatus = (status: 'traded' | 'not traded') => {
     if (!selectedDate) {
@@ -1066,11 +1128,18 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         return;
     }
 
-    const outcomeIndex = journalHeader.indexOf("Trade Outcome");
+    let outcomeIndex = journalHeader.indexOf("Trade Outcome");
     let statusIndex = journalHeader.indexOf("Status");
     
     let finalHeader = [...journalHeader];
-    // Add "Status" header only if it doesn't exist
+    
+    // Add "Trade Outcome" header if it doesn't exist
+    if (outcomeIndex === -1) {
+        finalHeader.push("Trade Outcome");
+        outcomeIndex = finalHeader.length - 1;
+    }
+    
+    // Add "Status" header if it doesn't exist
     if (statusIndex === -1) {
         finalHeader.push("Status");
         statusIndex = finalHeader.length - 1;
@@ -1084,20 +1153,16 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
             newColumns.push('');
         }
 
-        // Determine the final outcome, defaulting to original, then calculated
-        if (outcomeIndex !== -1) {
-            const finalOutcome = trade.outcome || trade.originalOutcome;
-            newColumns[outcomeIndex] = finalOutcome;
-        }
-
+        // --- Outcome Update Logic ---
+        // Always write the current state of 'outcome' (whether it was from file, derived from MFE, or set by user)
+        newColumns[outcomeIndex] = trade.outcome;
 
         // --- Status Update Logic ---
-        // If the status was modified by the user, use the new status.
+        // If the status was modified by the user, or it was 'default' (meaning not in file), use the new status.
         if (trade.status !== 'default') {
             newColumns[statusIndex] = trade.status;
         } else {
-            // If the user didn't modify it, check if a status existed in the original file.
-            // If the original row didn't have a status column (i.e. we added it), default to 'traded'.
+            // If the status was 'default' and the original file didn't have a status column, default to 'traded'.
             if (trade.originalRow.length <= statusIndex) {
                  newColumns[statusIndex] = 'traded';
             }
@@ -1105,7 +1170,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
             else if (!newColumns[statusIndex]) {
                  newColumns[statusIndex] = 'traded';
             }
-            // Otherwise, the original value (which might be 'traded', 'not traded', or something else) is preserved because it's already in newColumns.
+            // Otherwise, the original value (e.g. 'traded', 'not traded') is preserved because it's already in newColumns.
         }
         
         return newColumns.map(field => {
@@ -1192,7 +1257,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         id: `journal-${i}`,
         entryDate: t.dateTaken,
         entryPrice: 0, // Placeholder, will be read from priceData
-        type: t.maxR >= 2 ? 'win' : 'loss' as 'win' | 'loss'
+        type: t.outcome === 'Win' ? 'win' : 'loss' as 'win' | 'loss'
     })) 
     : [];
 
