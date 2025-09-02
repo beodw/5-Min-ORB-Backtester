@@ -38,6 +38,7 @@ type TradeReportRow = {
     stopLossPips: string;
     maxRTaken: string;
     maxAdverseExcursionR: string;
+    comments?: string;
 };
 
 type DrawingState = {
@@ -86,6 +87,7 @@ const simulateTrade = (
     const stopLossPips = pipValue > 0 ? (riskAmountPrice / pipValue).toFixed(2) : '0.00';
     
     let dateClosed: Date | null = null;
+    let comments: string | undefined = undefined;
     let highSinceEntry = tool.entryPrice;
     let lowSinceEntry = tool.entryPrice;
     let dateOfHigh: Date = dateTaken;
@@ -131,22 +133,19 @@ const simulateTrade = (
             dateOfLow = candle.date;
         }
         
-        // Check for stop loss hit
+        // Check for stop loss hit, which is the only exit condition for MFE
         if (!dateClosed && ((tool.position === 'long' && candle.low <= tool.stopLoss) || (tool.position === 'short' && candle.high >= tool.stopLoss))) {
             dateClosed = candle.date;
         }
         
-        // Only check for take profit if trade is not already closed by SL
-        if (!dateClosed && ((tool.position === 'long' && candle.high >= tool.takeProfit) || (tool.position === 'short' && candle.low <= tool.takeProfit))) {
-            dateClosed = candle.date;
-        }
-
-        // If trade is closed, we can break the loop
+        // If trade is closed by SL, we can break the loop
         if (dateClosed) break;
     }
     
+    // If the loop finished without the SL being hit, the trade is a "runner"
     if (!dateClosed) {
         dateClosed = priceData[priceData.length - 1].date;
+        comments = "Runner";
     }
     
     let maxProfitPrice = 0;
@@ -172,6 +171,7 @@ const simulateTrade = (
         stopLossPips,
         maxRTaken: formatDateForCsv(dateOfMaxR),
         maxAdverseExcursionR: maxAdverseExcursionR.toFixed(2),
+        comments,
     };
 };
 
@@ -764,15 +764,15 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         toast({ variant: "destructive", title: "Cannot Export", description: "Please import data and place at least one trade tool to generate a report." });
         return;
     }
-    const headers = ["Pair", "Date Taken", "Date Closed", "Max R", "Stop Loss In Pips", "Max R Timestamp", "Maximum Adverse Excursion (R)"].join(',');
+    const headers = ["Pair", "Date Taken", "Date Closed", "Max R", "Stop Loss In Pips", "Max R Timestamp", "Maximum Adverse Excursion (R)", "Comments"].join(',');
     const sortedTools = [...rrTools].sort((a, b) => a.entryDate.getTime() - b.entryDate.getTime());
     const rows = sortedTools.map(tool => {
         const reportRow = simulateTrade(tool, priceData, pipValue);
         if (!reportRow) return null;
         const pair = fileName ? fileName.split('-')[0].trim() : 'N/A';
         reportRow.pair = pair;
-        const sanitize = (val: any) => `"${String(val).replace(/"/g, '""')}"`;
-        return [reportRow.pair, reportRow.dateTaken, reportRow.dateClosed, reportRow.maxR, reportRow.stopLossPips, reportRow.maxRTaken, reportRow.maxAdverseExcursionR].map(sanitize).join(',');
+        const sanitize = (val: any) => `"${String(val ?? '').replace(/"/g, '""')}"`;
+        return [reportRow.pair, reportRow.dateTaken, reportRow.dateClosed, reportRow.maxR, reportRow.stopLossPips, reportRow.maxRTaken, reportRow.maxAdverseExcursionR, reportRow.comments].map(sanitize).join(',');
     }).filter(row => row !== null).join('\n');
     const csvContent = `${headers}\n${rows}`;
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -1555,4 +1555,5 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     </div>
   );
 }
+
 
