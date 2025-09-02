@@ -38,6 +38,7 @@ type TradeReportRow = {
     stopLossPips: string;
     maxRTaken: string;
     maxAdverseExcursionR: string;
+    maxAdverseExcursionTimestamp: string;
     comments?: string;
 };
 
@@ -95,6 +96,7 @@ const simulateTrade = (
 
     // MAE Calculation variables
     let maxAdversePointer = tool.entryPrice;
+    let maxAdversePointerDate = dateTaken;
     let maeIsFinal = false;
     
     for (let i = entryIndex + 1; i < priceData.length; i++) {
@@ -105,19 +107,23 @@ const simulateTrade = (
             if (tool.position === 'long') {
                 if (candle.low < maxAdversePointer) {
                     maxAdversePointer = candle.low;
+                    maxAdversePointerDate = candle.date;
                 }
                 // Check if SL was hit to lock MAE at 1R
                 if (maxAdversePointer <= tool.stopLoss) {
                     maxAdversePointer = tool.stopLoss;
+                    maxAdversePointerDate = candle.date;
                     maeIsFinal = true;
                 }
             } else { // Short position
                 if (candle.high > maxAdversePointer) {
                     maxAdversePointer = candle.high;
+                    maxAdversePointerDate = candle.date;
                 }
                 // Check if SL was hit to lock MAE at 1R
                 if (maxAdversePointer >= tool.stopLoss) {
                     maxAdversePointer = tool.stopLoss;
+                    maxAdversePointerDate = candle.date;
                     maeIsFinal = true;
                 }
             }
@@ -171,6 +177,7 @@ const simulateTrade = (
         stopLossPips,
         maxRTaken: formatDateForCsv(dateOfMaxR),
         maxAdverseExcursionR: maxAdverseExcursionR.toFixed(2),
+        maxAdverseExcursionTimestamp: formatDateForCsv(maxAdversePointerDate),
         comments,
     };
 };
@@ -764,7 +771,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         toast({ variant: "destructive", title: "Cannot Export", description: "Please import data and place at least one trade tool to generate a report." });
         return;
     }
-    const headers = ["Pair", "Date Taken (Timestamp)", "Date Closed (Timestamp)", "Maximum Favourable Excursion (R)", "Stop Loss In Pips", "Maximum Favourable Excursion Timestamp", "Maximum Adverse Excursion (R)", "Comments"].join(',');
+    const headers = ["Pair", "Date Taken (Timestamp)", "Date Closed (Timestamp)", "Maximum Favourable Excursion (R)", "Stop Loss In Pips", "Maximum Favourable Excursion Timestamp", "Maximum Adverse Excursion (R)", "Maximum Adverse Excursion (Timestamp)", "Comments"].join(',');
     const sortedTools = [...rrTools].sort((a, b) => a.entryDate.getTime() - b.entryDate.getTime());
     const rows = sortedTools.map(tool => {
         const reportRow = simulateTrade(tool, priceData, pipValue);
@@ -772,7 +779,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         const pair = fileName ? fileName.split('-')[0].trim() : 'N/A';
         reportRow.pair = pair;
         const sanitize = (val: any) => `"${String(val ?? '').replace(/"/g, '""')}"`;
-        return [reportRow.pair, reportRow.dateTaken, reportRow.dateClosed, reportRow.maxR, reportRow.stopLossPips, reportRow.maxRTaken, reportRow.maxAdverseExcursionR, reportRow.comments].map(sanitize).join(',');
+        return [reportRow.pair, reportRow.dateTaken, reportRow.dateClosed, reportRow.maxR, reportRow.stopLossPips, reportRow.maxRTaken, reportRow.maxAdverseExcursionR, reportRow.maxAdverseExcursionTimestamp, reportRow.comments].map(sanitize).join(',');
     }).filter(row => row !== null).join('\n');
     const csvContent = `${headers}\n${rows}`;
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -946,7 +953,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
             };
             
             for (const [key, index] of Object.entries(headerIndices)) {
-                 if (index === -1 && ['tradeOutcome', 'status'].indexOf(key) === -1) {
+                 if (index === -1 && !['tradeOutcome', 'status'].includes(key)) {
                     throw new Error(`Missing required column: "${(requiredHeaders as any)[key]}"`);
                 }
             }
