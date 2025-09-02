@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, useRef } from "react";
@@ -30,16 +31,17 @@ import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 
-type TradeReportRow = {
-    pair: string;
-    dateTaken: string;
-    dateClosed: string;
-    maxR: string;
-    stopLossPips: string;
-    maxRTaken: string;
-    reversalPoints: string;
-    comments?: string;
+type TradeLogEntry = {
+    TradeID: string;
+    Timestamp: string;
+    CandleNumber: number;
+    CurrentPrice_Close: number;
+    MFE_R: number;
+    MAE_R: number;
+    DrawdownFromMFE_R: number;
+    TerminationReason: 'Active' | 'StopLoss' | 'EndOfData';
 };
+
 
 type DrawingState = {
     rrTools: RRToolType[];
@@ -58,116 +60,75 @@ type SessionState = {
 
 type DayResult = 'win' | 'loss' | 'modified';
 
-const formatDateForCsv = (date: Date | null): string => {
+const formatDateForCsvTimestamp = (date: Date): string => {
     if (!date) return '';
-    const day = String(date.getUTCDate()).padStart(2, '0');
-    const month = String(date.getUTCMonth() + 1).padStart(2, '0'); // Month is 0-indexed
-    const year = date.getUTCFullYear();
-    
-    const hours = String(date.getUTCHours()).padStart(2, '0');
-    const minutes = String(date.getUTCMinutes()).padStart(2, '0');
-    const seconds = String(date.getUTCSeconds()).padStart(2, '0');
-
-    return `${month}/${day}/${year} ${hours}:${minutes}:${seconds}`;
+    return date.toISOString();
 };
 
-const simulateTrade = (
+
+const generateTradeLog = (
     tool: RRToolType,
     priceData: PriceData[],
-    pipValue: number
-): TradeReportRow | null => {
+): TradeLogEntry[] => {
+    const log: TradeLogEntry[] = [];
     const entryIndex = priceData.findIndex(p => p.date.getTime() >= tool.entryDate.getTime());
 
-    if (entryIndex === -1) return null;
-
-    const dateTaken = priceData[entryIndex].date;
-    const riskAmountPrice = Math.abs(tool.entryPrice - tool.stopLoss);
-    if (riskAmountPrice <= 0) return null;
-
-    const stopLossPips = pipValue > 0 ? (riskAmountPrice / pipValue).toFixed(2) : '0.00';
+    if (entryIndex === -1) return [];
     
-    let dateClosed: Date | null = null;
-    let comments: string | undefined = undefined;
-
-    // MFE Tracking
+    const tradeID = formatDateForCsvTimestamp(tool.entryDate);
+    const riskInPrice = Math.abs(tool.entryPrice - tool.stopLoss);
+    if (riskInPrice <= 0) return [];
+    
     let mfePointer = tool.entryPrice;
-    let dateOfMfe = dateTaken;
+    let maePointer = tool.entryPrice;
 
-    // Reversal Points (Local MAE) Tracking
-    const reversalPoints: Record<number, number> = {};
-    let nextRMilestone = 1;
-    let localMaePointer = tool.entryPrice;
-    
-    for (let i = entryIndex + 1; i < priceData.length; i++) {
+    for (let i = entryIndex; i < priceData.length; i++) {
         const candle = priceData[i];
+        let terminationReason: 'Active' | 'StopLoss' | 'EndOfData' = 'Active';
 
-        // --- Check for Stop Loss Hit (Terminating Condition) ---
+        // Check for stop loss hit (terminating condition)
         if ((tool.position === 'long' && candle.low <= tool.stopLoss) || (tool.position === 'short' && candle.high >= tool.stopLoss)) {
-            dateClosed = candle.date;
-            break; // Exit loop immediately if SL is hit
+            terminationReason = 'StopLoss';
+        } else if (i === priceData.length - 1) {
+             terminationReason = 'EndOfData';
+        }
+
+        // Update MFE and MAE pointers
+        if (tool.position === 'long') {
+            mfePointer = Math.max(mfePointer, candle.high);
+            maePointer = Math.min(maePointer, candle.low);
+        } else { // Short position
+            mfePointer = Math.min(mfePointer, candle.low);
+            maePointer = Math.max(maePointer, candle.high);
         }
         
-        // --- MFE Calculation ---
-        if (tool.position === 'long') {
-            if (candle.high > mfePointer) {
-                mfePointer = candle.high;
-                dateOfMfe = candle.date;
-            }
-        } else { // Short position
-            if (candle.low < mfePointer) {
-                mfePointer = candle.low;
-                dateOfMfe = candle.date;
-            }
-        }
+        // Calculate metrics in R-multiples
+        const mfePriceMove = Math.abs(mfePointer - tool.entryPrice);
+        const mfeR = mfePriceMove / riskInPrice;
 
-        // --- Local MAE (Reversal Point) Calculation ---
-        if (tool.position === 'long') {
-            if (candle.low < localMaePointer) {
-                localMaePointer = candle.low;
-            }
-        } else { // Short position
-            if (candle.high > localMaePointer) {
-                localMaePointer = candle.high;
-            }
-        }
+        const maePriceMove = Math.abs(maePointer - tool.entryPrice);
+        const maeR = maePriceMove / riskInPrice;
+        
+        const drawdownPriceMove = Math.abs(mfePointer - candle.close);
+        const drawdownFromMfeR = drawdownPriceMove / riskInPrice;
 
-        // --- Check for R-Milestone Achievement ---
-        const currentMfePriceMove = Math.abs(mfePointer - tool.entryPrice);
-        const currentMfeR = riskAmountPrice > 0 ? currentMfePriceMove / riskAmountPrice : 0;
+        log.push({
+            TradeID: tradeID,
+            Timestamp: formatDateForCsvTimestamp(candle.date),
+            CandleNumber: i - entryIndex + 1,
+            CurrentPrice_Close: candle.close,
+            MFE_R: parseFloat(mfeR.toFixed(4)),
+            MAE_R: parseFloat(maeR.toFixed(4)),
+            DrawdownFromMFE_R: parseFloat(drawdownFromMfeR.toFixed(4)),
+            TerminationReason: terminationReason,
+        });
 
-        while (currentMfeR >= nextRMilestone) {
-            // Calculate drawdown for the phase that just completed
-            const localMaePriceMove = Math.abs(localMaePointer - (tool.entryPrice + (nextRMilestone - 1) * riskAmountPrice * (tool.position === 'long' ? 1 : -1)));
-            const localMaeR = riskAmountPrice > 0 ? localMaePriceMove / riskAmountPrice : 0;
-            
-            reversalPoints[nextRMilestone] = parseFloat(localMaeR.toFixed(2));
-            
-            // Reset for the next phase
-            nextRMilestone++;
-            // The new local MAE pointer starts from the R-level we just crossed
-            localMaePointer = tool.entryPrice + (nextRMilestone - 1) * riskAmountPrice * (tool.position === 'long' ? 1 : -1);
+        if (terminationReason !== 'Active') {
+            break; // Exit loop if trade is terminated
         }
     }
-    
-    // --- Finalize Trade Outcome ---
-    if (!dateClosed) {
-        dateClosed = priceData[priceData.length - 1].date;
-        comments = "Runner";
-    }
-    
-    const maxProfitPrice = Math.abs(mfePointer - tool.entryPrice);
-    let maxR = riskAmountPrice > 0 ? maxProfitPrice / riskAmountPrice : 0;
-    
-    return {
-        pair: '',
-        dateTaken: formatDateForCsv(dateTaken),
-        dateClosed: formatDateForCsv(dateClosed),
-        maxR: maxR.toFixed(2),
-        stopLossPips,
-        maxRTaken: formatDateForCsv(dateOfMfe),
-        reversalPoints: JSON.stringify(reversalPoints),
-        comments,
-    };
+
+    return log;
 };
 
 
@@ -755,30 +716,44 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
 
 
   const handleExportCsv = () => {
-    if (rrTools.length === 0 || !isDataImported) {
-        toast({ variant: "destructive", title: "Cannot Export", description: "Please import data and place at least one trade tool to generate a report." });
-        return;
-    }
-    const headers = ["Pair", "Date Taken (Timestamp)", "Date Closed (Timestamp)", "Maximum Favourable Excursion (R)", "Stop Loss In Pips", "Maximum Favourable Excursion Timestamp", "ReversalPoints", "Comments"].join(',');
-    const sortedTools = [...rrTools].sort((a, b) => a.entryDate.getTime() - b.entryDate.getTime());
-    const rows = sortedTools.map(tool => {
-        const reportRow = simulateTrade(tool, priceData, pipValue);
-        if (!reportRow) return null;
-        const pair = fileName ? fileName.split('-')[0].trim() : 'N/A';
-        reportRow.pair = pair;
-        const sanitize = (val: any) => `"${String(val ?? '').replace(/"/g, '""')}"`;
-        return [reportRow.pair, reportRow.dateTaken, reportRow.dateClosed, reportRow.maxR, reportRow.stopLossPips, reportRow.maxRTaken, reportRow.reversalPoints, reportRow.comments].map(sanitize).join(',');
-    }).filter(row => row !== null).join('\n');
-    const csvContent = `${headers}\n${rows}`;
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", "strategy_report.csv");
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+      if (rrTools.length === 0 || !isDataImported) {
+          toast({ variant: "destructive", title: "Cannot Export", description: "Please import data and place at least one trade tool to generate a report." });
+          return;
+      }
+      
+      const headers = ["TradeID", "Timestamp", "CandleNumber", "CurrentPrice_Close", "MFE_R", "MAE_R", "DrawdownFromMFE_R", "TerminationReason"].join(',');
+      
+      toast({ title: "Generating Report...", description: `Processing ${rrTools.length} trades. This may take a moment.` });
+
+      // Use a timeout to allow the toast to render before the main thread is blocked
+      setTimeout(() => {
+          try {
+              const allLogs = rrTools.flatMap(tool => generateTradeLog(tool, priceData));
+              
+              if (allLogs.length === 0) {
+                  toast({ variant: "destructive", title: "Export Failed", description: "No valid trade data could be generated." });
+                  return;
+              }
+
+              const rows = allLogs.map(logEntry => 
+                  [logEntry.TradeID, logEntry.Timestamp, logEntry.CandleNumber, logEntry.CurrentPrice_Close, logEntry.MFE_R, logEntry.MAE_R, logEntry.DrawdownFromMFE_R, logEntry.TerminationReason].join(',')
+              ).join('\n');
+
+              const csvContent = `${headers}\n${rows}`;
+              const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+              const link = document.createElement("a");
+              const url = URL.createObjectURL(blob);
+              link.setAttribute("href", url);
+              link.setAttribute("download", "trade_log_report.csv");
+              link.style.visibility = 'hidden';
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              toast({ variant: "default", title: "Export Complete", description: "Your detailed trade log has been downloaded." });
+          } catch(error: any) {
+               toast({ variant: "destructive", title: "Export Error", description: `An unexpected error occurred: ${error.message}` });
+          }
+      }, 50); // 50ms delay
   };
   
     const handlePlaceLong = () => {
