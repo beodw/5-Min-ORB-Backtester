@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect, useRef } from "react";
@@ -35,6 +34,8 @@ type TradeLogEntry = {
     TradeID: string;
     Timestamp: string;
     CandleNumber: number;
+    EntryPrice: number;
+    StopLossPrice: number;
     CurrentPrice_Close: number;
     MFE_R: number;
     MAE_R: number;
@@ -117,6 +118,8 @@ const generateTradeLog = (
             TradeID: tradeID,
             Timestamp: formatDateForCsvTimestamp(candle.date),
             CandleNumber: i - entryIndex + 1,
+            EntryPrice: tool.entryPrice,
+            StopLossPrice: tool.stopLoss,
             CurrentPrice_Close: candle.close,
             MFE_R: parseFloat(mfeR.toFixed(4)),
             MAE_R: parseFloat(maeR.toFixed(4)),
@@ -286,7 +289,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     const [startHour, startMinute] = sessionStartTime.split(':').map(Number);
     
     const sessionStart = new Date(selectedDate);
-    sessionStart.setUTCFullYear(selectedDate.getUTCFullYear(), selectedDate.getUTCMonth(), selectedDate.getUTCDate());
+    sessionStart.setUTCFullYear(selectedDate.getUTCFullYear(), selectedDate.getUTCFullMonth(), selectedDate.getUTCDate());
     sessionStart.setUTCHours(startHour, startMinute, 0, 0);
     
     const sessionEnd = new Date(sessionStart.getTime() + 5 * 60 * 1000);
@@ -722,7 +725,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
           return;
       }
       
-      const headers = ["TradeID", "Timestamp", "CandleNumber", "CurrentPrice_Close", "MFE_R", "MAE_R", "DrawdownFromMFE_R", "Trade Status"].join(',');
+      const headers = ["TradeID", "Timestamp", "CandleNumber", "EntryPrice", "StopLossPrice", "CurrentPrice_Close", "MFE_R", "MAE_R", "DrawdownFromMFE_R", "Trade Status"].join(',');
       
       toast({ title: "Generating Report...", description: `Processing ${rrTools.length} trades. This may take a moment.` });
 
@@ -737,7 +740,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
               }
 
               const rows = allLogs.map(logEntry => 
-                  [logEntry.TradeID, logEntry.Timestamp, logEntry.CandleNumber, logEntry.CurrentPrice_Close, logEntry.MFE_R, logEntry.MAE_R, logEntry.DrawdownFromMFE_R, logEntry['Trade Status']].join(',')
+                  [logEntry.TradeID, logEntry.Timestamp, logEntry.CandleNumber, logEntry.EntryPrice, logEntry.StopLossPrice, logEntry.CurrentPrice_Close, logEntry.MFE_R, logEntry.MAE_R, logEntry.DrawdownFromMFE_R, logEntry['Trade Status']].join(',')
               ).join('\n');
 
               const csvContent = `${headers}\n${rows}`;
@@ -1190,7 +1193,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
 
         const [startHour, startMinute] = sessionStartTime.split(':').map(Number);
         const sessionStart = new Date(adjustedDate);
-        sessionStart.setUTCFullYear(adjustedDate.getUTCFullYear(), adjustedDate.getUTCMonth(), adjustedDate.getUTCDate());
+        sessionStart.setUTCFullYear(adjustedDate.getUTCFullYear(), adjustedDate.getUTCFullMonth(), adjustedDate.getUTCDate());
         sessionStart.setUTCHours(startHour, startMinute, 0, 0);
 
         // Set the end of the visible range to be 25 minutes after session start (5 for range + 20 for context)
@@ -1527,9 +1530,4 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
   );
 }
 
-
-
     
-
-    
-
