@@ -288,8 +288,10 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
 
     const [startHour, startMinute] = sessionStartTime.split(':').map(Number);
     
-    const sessionStart = new Date(selectedDate);
-    sessionStart.setUTCFullYear(selectedDate.getUTCFullYear(), selectedDate.getUTCFullMonth(), selectedDate.getUTCDate());
+    // Ensure selectedDate is a Date object before using its methods
+    const dateObj = new Date(selectedDate);
+    const sessionStart = new Date(dateObj);
+    sessionStart.setUTCFullYear(dateObj.getUTCFullYear(), dateObj.getUTCFullMonth(), dateObj.getUTCDate());
     sessionStart.setUTCHours(startHour, startMinute, 0, 0);
     
     const sessionEnd = new Date(sessionStart.getTime() + 5 * 60 * 1000);
