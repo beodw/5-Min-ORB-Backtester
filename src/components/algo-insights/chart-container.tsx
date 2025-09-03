@@ -30,7 +30,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { db } from "@/lib/firebase";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, Timestamp } from "firebase/firestore";
 
 
 type TradeLogEntry = {
@@ -756,7 +756,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                       entryPrice: tool.entryPrice,
                       stopLoss: tool.stopLoss,
                       takeProfit: tool.takeProfit,
-                      entryDate: tool.entryDate,
+                      entryDate: Timestamp.fromDate(tool.entryDate),
                       log: tradeLog,
                       createdAt: serverTimestamp()
                   };
