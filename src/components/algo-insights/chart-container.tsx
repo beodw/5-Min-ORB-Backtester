@@ -461,7 +461,13 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
             setDrawingState(restoredDrawingState);
             setAllJournalTrades(restoredJournalTrades);
 
-            setSelectedDate(new Date(savedSession.selectedDate));
+            if (savedSession.selectedDate) {
+                const date = new Date(savedSession.selectedDate);
+                if (!isNaN(date.getTime())) {
+                    setSelectedDate(date);
+                }
+            }
+            
             setFileName(savedSession.fileName);
             setJournalFileName(savedSession.journalFileName || '');
             if (savedSession.selectedPair) setSelectedPair(savedSession.selectedPair);
@@ -1536,3 +1542,5 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     </div>
   );
 }
+
+    
