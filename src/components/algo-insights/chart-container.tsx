@@ -39,7 +39,7 @@ type TradeLogEntry = {
     MFE_R: number;
     MAE_R: number;
     DrawdownFromMFE_R: number;
-    TerminationReason: 'Active' | 'StopLoss' | 'EndOfData';
+    'Trade Status': 'Active' | 'StopLoss' | 'EndOfData';
 };
 
 
@@ -81,35 +81,36 @@ const generateTradeLog = (
     
     let mfePointer = tool.entryPrice;
     let maePointer = tool.entryPrice;
+    let mfePrice = tool.entryPrice;
 
     for (let i = entryIndex; i < priceData.length; i++) {
         const candle = priceData[i];
-        let terminationReason: 'Active' | 'StopLoss' | 'EndOfData' = 'Active';
+        let tradeStatus: 'Active' | 'StopLoss' | 'EndOfData' = 'Active';
 
         // Check for stop loss hit (terminating condition)
         if ((tool.position === 'long' && candle.low <= tool.stopLoss) || (tool.position === 'short' && candle.high >= tool.stopLoss)) {
-            terminationReason = 'StopLoss';
+            tradeStatus = 'StopLoss';
         } else if (i === priceData.length - 1) {
-             terminationReason = 'EndOfData';
+             tradeStatus = 'EndOfData';
         }
 
         // Update MFE and MAE pointers
         if (tool.position === 'long') {
-            mfePointer = Math.max(mfePointer, candle.high);
+            mfePrice = Math.max(mfePrice, candle.high);
             maePointer = Math.min(maePointer, candle.low);
         } else { // Short position
-            mfePointer = Math.min(mfePointer, candle.low);
+            mfePrice = Math.min(mfePrice, candle.low);
             maePointer = Math.max(maePointer, candle.high);
         }
         
         // Calculate metrics in R-multiples
-        const mfePriceMove = Math.abs(mfePointer - tool.entryPrice);
+        const mfePriceMove = Math.abs(mfePrice - tool.entryPrice);
         const mfeR = mfePriceMove / riskInPrice;
 
         const maePriceMove = Math.abs(maePointer - tool.entryPrice);
         const maeR = maePriceMove / riskInPrice;
         
-        const drawdownPriceMove = Math.abs(mfePointer - candle.close);
+        const drawdownPriceMove = Math.abs(mfePrice - candle.close);
         const drawdownFromMfeR = drawdownPriceMove / riskInPrice;
 
         log.push({
@@ -120,10 +121,10 @@ const generateTradeLog = (
             MFE_R: parseFloat(mfeR.toFixed(4)),
             MAE_R: parseFloat(maeR.toFixed(4)),
             DrawdownFromMFE_R: parseFloat(drawdownFromMfeR.toFixed(4)),
-            TerminationReason: terminationReason,
+            'Trade Status': tradeStatus,
         });
 
-        if (terminationReason !== 'Active') {
+        if (tradeStatus !== 'Active') {
             break; // Exit loop if trade is terminated
         }
     }
@@ -721,7 +722,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
           return;
       }
       
-      const headers = ["TradeID", "Timestamp", "CandleNumber", "CurrentPrice_Close", "MFE_R", "MAE_R", "DrawdownFromMFE_R", "TerminationReason"].join(',');
+      const headers = ["TradeID", "Timestamp", "CandleNumber", "CurrentPrice_Close", "MFE_R", "MAE_R", "DrawdownFromMFE_R", "Trade Status"].join(',');
       
       toast({ title: "Generating Report...", description: `Processing ${rrTools.length} trades. This may take a moment.` });
 
@@ -736,7 +737,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
               }
 
               const rows = allLogs.map(logEntry => 
-                  [logEntry.TradeID, logEntry.Timestamp, logEntry.CandleNumber, logEntry.CurrentPrice_Close, logEntry.MFE_R, logEntry.MAE_R, logEntry.DrawdownFromMFE_R, logEntry.TerminationReason].join(',')
+                  [logEntry.TradeID, logEntry.Timestamp, logEntry.CandleNumber, logEntry.CurrentPrice_Close, logEntry.MFE_R, logEntry.MAE_R, logEntry.DrawdownFromMFE_R, logEntry['Trade Status']].join(',')
               ).join('\n');
 
               const csvContent = `${headers}\n${rows}`;
@@ -1531,3 +1532,4 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     
 
     
+
