@@ -285,11 +285,16 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         setOpeningRange(null);
         return;
     }
+  
+    const dateObj = new Date(selectedDate);
+    // Check if the created date is valid
+    if (isNaN(dateObj.getTime())) {
+        setOpeningRange(null);
+        return;
+    }
 
     const [startHour, startMinute] = sessionStartTime.split(':').map(Number);
     
-    // Ensure selectedDate is a Date object before using its methods
-    const dateObj = new Date(selectedDate);
     const sessionStart = new Date(dateObj);
     sessionStart.setUTCFullYear(dateObj.getUTCFullYear(), dateObj.getUTCFullMonth(), dateObj.getUTCDate());
     sessionStart.setUTCHours(startHour, startMinute, 0, 0);
@@ -1531,5 +1536,3 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     </div>
   );
 }
-
-    
