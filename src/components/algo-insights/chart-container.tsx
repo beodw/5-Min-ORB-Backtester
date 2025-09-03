@@ -296,7 +296,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     const [startHour, startMinute] = sessionStartTime.split(':').map(Number);
     
     const sessionStart = new Date(dateObj);
-    sessionStart.setUTCFullYear(dateObj.getUTCFullYear(), dateObj.getUTCFullMonth(), dateObj.getUTCDate());
+    sessionStart.setUTCFullYear(dateObj.getUTCFullYear(), dateObj.getUTCMonth(), dateObj.getUTCDate());
     sessionStart.setUTCHours(startHour, startMinute, 0, 0);
     
     const sessionEnd = new Date(sessionStart.getTime() + 5 * 60 * 1000);
@@ -1208,7 +1208,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
 
         const [startHour, startMinute] = sessionStartTime.split(':').map(Number);
         const sessionStart = new Date(adjustedDate);
-        sessionStart.setUTCFullYear(adjustedDate.getUTCFullYear(), adjustedDate.getUTCFullMonth(), adjustedDate.getUTCDate());
+        sessionStart.setUTCFullYear(adjustedDate.getUTCFullYear(), adjustedDate.getUTCMonth(), adjustedDate.getUTCDate());
         sessionStart.setUTCHours(startHour, startMinute, 0, 0);
 
         // Set the end of the visible range to be 25 minutes after session start (5 for range + 20 for context)
