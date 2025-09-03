@@ -3,7 +3,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, ChevronRight, ChevronsRight, Target, Trash2, FileUp, Lock, Unlock, Ruler, FileBarChart, Undo, Redo, GripVertical, BookOpen, ThumbsUp, ThumbsDown, FileDown, Forward, FastForward } from "lucide-react";
+import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, ChevronRight, ChevronsRight, Target, Trash2, FileUp, Lock, Unlock, Ruler, FileBarChart, Undo, Redo, GripVertical, BookOpen, ThumbsUp, ThumbsDown, FileDown, Forward, FastForward, UploadCloud } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InteractiveChart, type ChartClickData } from "@/components/algo-insights/interactive-chart";
 import { mockPriceData } from "@/lib/mock-data";
@@ -29,6 +29,8 @@ import {
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { db } from "@/lib/firebase";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 
 
 type TradeLogEntry = {
@@ -734,46 +736,42 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     if(fileInputRef.current) fileInputRef.current.value = "";
   };
 
-
-  const handleExportCsv = () => {
+  const handleLogToFirestore = async () => {
       if (rrTools.length === 0 || !isDataImported) {
-          toast({ variant: "destructive", title: "Cannot Export", description: "Please import data and place at least one trade tool to generate a report." });
+          toast({ variant: "destructive", title: "Cannot Log Trades", description: "Please import data and place at least one trade tool." });
           return;
       }
       
-      const headers = ["TradeID", "Timestamp", "CandleNumber", "EntryPrice", "StopLossPrice", "CurrentPrice_Close", "MFE_R", "MAE_R", "DrawdownFromMFE_R", "Trade Status"].join(',');
-      
-      toast({ title: "Generating Report...", description: `Processing ${rrTools.length} trades. This may take a moment.` });
+      toast({ title: "Logging to Firestore...", description: `Processing ${rrTools.length} trades. This may take a moment.` });
 
-      // Use a timeout to allow the toast to render before the main thread is blocked
-      setTimeout(() => {
-          try {
-              const allLogs = rrTools.flatMap(tool => generateTradeLog(tool, priceData));
-              
-              if (allLogs.length === 0) {
-                  toast({ variant: "destructive", title: "Export Failed", description: "No valid trade data could be generated." });
-                  return;
+      try {
+          let successfulLogs = 0;
+          for (const tool of rrTools) {
+              const tradeLog = generateTradeLog(tool, priceData);
+              if (tradeLog.length > 0) {
+                  const tradeDoc = {
+                      tradeId: tradeLog[0].TradeID,
+                      pair: fileName.split('_')[0] || 'UNKNOWN', // Extract pair from filename
+                      position: tool.position,
+                      entryPrice: tool.entryPrice,
+                      stopLoss: tool.stopLoss,
+                      takeProfit: tool.takeProfit,
+                      entryDate: tool.entryDate,
+                      log: tradeLog,
+                      createdAt: serverTimestamp()
+                  };
+                  await addDoc(collection(db, "trades"), tradeDoc);
+                  successfulLogs++;
               }
-
-              const rows = allLogs.map(logEntry => 
-                  [logEntry.TradeID, logEntry.Timestamp, logEntry.CandleNumber, logEntry.EntryPrice, logEntry.StopLossPrice, logEntry.CurrentPrice_Close, logEntry.MFE_R, logEntry.MAE_R, logEntry.DrawdownFromMFE_R, logEntry['Trade Status']].join(',')
-              ).join('\n');
-
-              const csvContent = `${headers}\n${rows}`;
-              const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-              const link = document.createElement("a");
-              const url = URL.createObjectURL(blob);
-              link.setAttribute("href", url);
-              link.setAttribute("download", "trade_log_report.csv");
-              link.style.visibility = 'hidden';
-              document.body.appendChild(link);
-              link.click();
-              document.body.removeChild(link);
-              toast({ variant: "default", title: "Export Complete", description: "Your detailed trade log has been downloaded." });
-          } catch(error: any) {
-               toast({ variant: "destructive", title: "Export Error", description: `An unexpected error occurred: ${error.message}` });
           }
-      }, 50); // 50ms delay
+          if (successfulLogs > 0) {
+              toast({ variant: "default", title: "Logging Complete", description: `${successfulLogs} trades successfully logged to Firestore.` });
+          } else {
+              toast({ variant: "destructive", title: "Logging Failed", description: "No valid trade data could be generated to log." });
+          }
+      } catch (error: any) {
+          toast({ variant: "destructive", title: "Firestore Error", description: `An unexpected error occurred: ${error.message}` });
+      }
   };
   
     const handlePlaceLong = () => {
@@ -1308,9 +1306,9 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                     <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".csv" className="hidden" />
 
                     {tab === 'backtester' ? (
-                         <Button variant="ghost" onClick={handleExportCsv} disabled={rrTools.length === 0 || !isDataImported} className="text-foreground">
-                            <Download className="mr-2 h-4 w-4" />
-                            Download Report
+                         <Button variant="ghost" onClick={handleLogToFirestore} disabled={rrTools.length === 0 || !isDataImported} className="text-foreground">
+                            <UploadCloud className="mr-2 h-4 w-4" />
+                            Log to Firebase
                         </Button>
                     ) : (
                         <>
@@ -1545,7 +1543,3 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     </div>
   );
 }
-
-    
-
-    
