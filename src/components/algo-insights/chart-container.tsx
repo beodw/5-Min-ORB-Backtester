@@ -465,6 +465,8 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                 const date = new Date(savedSession.selectedDate);
                 if (!isNaN(date.getTime())) {
                     setSelectedDate(date);
+                } else {
+                    setSelectedDate(new Date());
                 }
             }
             
