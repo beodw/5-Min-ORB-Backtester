@@ -37,28 +37,61 @@ The `log` field is an array that contains a chronological record of the trade's 
 | `DrawdownFromMFE_R`  | `number`  | The drawdown from the peak profit (MFE), measured in R-multiples. This is crucial for analyzing trail-stop strategies. |
 | `Trade Status`       | `string`  | The status of the trade at this candle. It will be `"Active"`, `"StopLoss"` (if the SL was hit), or `"EndOfData"` (if the trade was still active when the data ran out). |
 
-### Nuances for Analysis
+## Analytical Nuances and Practical Applications
 
 To get the most out of this data, consider the following:
 
-1.  **Risk (R) Is the Unit of Measurement**: The key performance metrics (`MFE_R`, `MAE_R`, `DrawdownFromMFE_R`) are normalized by risk. **Risk (R)** is defined as the absolute difference between the `entryPrice` and the `stopLossPrice`. This is a powerful concept because it allows you to compare the performance of different trades on an equal footing, regardless of the instrument's volatility or the trade's size.
+### 1. Risk (R) Is the Unit of Measurement
+The key performance metrics (`MFE_R`, `MAE_R`, `DrawdownFromMFE_R`) are normalized by risk. **Risk (R)** is defined as the absolute difference between the `entryPrice` and the `stopLossPrice`. This is a powerful concept because it allows you to compare the performance of different trades on an equal footing, regardless of the instrument's volatility or the trade's size.
 
-2.  **Analyzing MFE (Maximum Favorable Excursion)**: By analyzing the distribution of `MFE_R` across all your trades, you can answer questions like, "What is the most profit my strategy typically generates?" or "Is my take-profit target of 3R realistic, or do most of my trades only reach 1.5R?" This is invaluable for optimizing profit targets.
+### 2. Analyzing MFE (Maximum Favorable Excursion)
+By analyzing the distribution of `MFE_R` across all your trades, you can answer questions like, "What is the most profit my strategy typically generates?" or "Is my take-profit target of 3R realistic, or do most of my trades only reach 1.5R?" This is invaluable for optimizing profit targets.
 
-3.  **Analyzing MAE (Maximum Adverse Excursion)**: MAE tells you how much "pain" you had to endure for a winning trade. If you find that your winning trades consistently have a high MAE (e.g., 0.8R), it might indicate your stop loss is too tight. Conversely, if MAE is always very low, your stop loss might be too wide, and you could be giving up profit.
+### 3. Analyzing MAE (Maximum Adverse Excursion)
+MAE tells you how much "pain" you had to endure for a winning trade. If you find that your winning trades consistently have a high MAE (e.g., 0.8R), it might indicate your stop loss is too tight. Conversely, if MAE is always very low, your stop loss might be too wide, and you could be giving up profit.
 
-4.  **Analyzing Drawdown from MFE (A Deep Dive)**: This is a sophisticated metric for testing trailing stop strategies. It measures how much profit a trade gives back *after* it has reached its peak profit.
-    *   **How it's Calculated**: At every candle, the system knows the highest price the trade has reached so far (the `mfePrice`). It then calculates the difference between that peak price and the current candle's closing price. This difference is then divided by the initial risk to normalize it into an R-multiple.
-    *   **Example**: Your long trade enters at $100 with a stop at $98 (1R = $2). The price rises to a high of $105 (MFE = 2.5R). On the next candle, it pulls back and closes at $103. The drawdown from the peak is $2 ($105 - $103). The `DrawdownFromMFE_R` for this candle is **1.0R** ($2 drawdown / $2 risk).
-    *   **Why it's Crucial**: By analyzing the `DrawdownFromMFE_R` for all your winning trades, you can find the optimal distance for a trailing stop. If you see that your best trades often pull back 0.7R before continuing higher, setting a 0.5R trailing stop is likely cutting your winners short. This metric allows you to quantify your strategy's "breathing room" and tailor your exit logic to its specific behavior.
+### 4. Deep Dive: `DrawdownFromMFE_R`
 
-### Practical Application: Simulating a Trailing Stop
+This is a sophisticated metric for testing trailing stop and other dynamic exit strategies. It measures how much profit a trade gives back *after* it has reached its peak profit.
+
+-   **How it's Calculated**: At every candle, the system knows the highest price the trade has reached so far (the `mfePrice`). It then calculates the difference between that peak price and the current candle's closing price. This difference is then divided by the initial risk to normalize it into an R-multiple.
+-   **Example**: Your long trade enters at $100 with a stop at $98 (1R = $2). The price rises to a high of $105 (MFE = 2.5R). On the next candle, it pulls back and closes at $103. The drawdown from the peak is $2 ($105 - $103). The `DrawdownFromMFE_R` for this candle is **1.0R** ($2 drawdown / $2 risk).
+-   **Why it's Crucial**: By analyzing the `DrawdownFromMFE_R` for all your winning trades, you can find the optimal distance for a trailing stop. If you see that your best trades often pull back 0.7R before continuing higher, setting a 0.5R trailing stop is likely cutting your winners short. This metric allows you to quantify your strategy's "breathing room" and tailor your exit logic to its specific behavior.
+
+---
+
+## How to Simulate Exit Strategies with Journal Data
+
+### A) Simulating a Trailing Stop
 
 You can use the `DrawdownFromMFE_R` value to write code that simulates a trailing stop strategy.
 
-1.  **Define Your Threshold:** Choose the trailing stop distance you want to test, in R-multiples (e.g., `trailingStopThreshold = 1.0R`).
+1.  **Define Your Threshold:** Choose the trailing stop distance you want to test, in R-multiples (e.g., `trailingStopThreshold = 1.0`).
 2.  **Iterate the Log:** Loop through the `log` array of a trade, candle by candle.
 3.  **Check the Condition:** On each candle, check if `logEntry.DrawdownFromMFE_R >= trailingStopThreshold`.
 4.  **Trigger the Exit:** If the condition is true, the simulated trailing stop has been hit. Your simulation would exit the trade on that candle.
 
-By running this simulation with various threshold values, you can determine which trailing stop distance would have yielded the best results for your historical trades.
+### B) Simulating a Manual Stop Loss Adjustment
+
+You can also simulate more complex, conditional stop adjustments, such as moving your stop to breakeven after the trade reaches a certain profit level.
+
+**Scenario:** "When my trade reaches 2R in profit, I move my stop loss to breakeven."
+
+**Simulation Logic:**
+
+1.  **Define Parameters:**
+    *   `adjustmentTriggerR_Value = 2.0` (The MFE that must be reached)
+    *   `newStopLossR_Value = 0.0` (The new stop position, where 0.0R is breakeven)
+
+2.  **Iterate the Log:** Loop through the `log` array, candle by candle.
+
+3.  **Check the Conditions inside the loop:**
+    *   **First, check if the adjustment has been triggered:** `if (currentCandle.MFE_R >= adjustmentTriggerR_Value)`.
+    *   **If it has, calculate the required drawdown to hit the new stop:**
+        `const pullbackToHitNewStop_R = currentCandle.MFE_R - newStopLossR_Value;`
+        (For our example, if MFE is 2.5R, the pullback needed to hit breakeven is 2.5R).
+    *   **Finally, check if the actual drawdown hits the new stop:**
+        `if (currentCandle.DrawdownFromMFE_R >= pullbackToHitNewStop_R)`
+        If this is true, the adjusted stop has been hit, and the simulation for this trade ends.
+
+This advanced technique allows you to transform your raw trade data into a powerful backtesting engine for sophisticated exit strategies.
