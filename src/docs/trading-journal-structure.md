@@ -51,4 +51,14 @@ To get the most out of this data, consider the following:
     *   **How it's Calculated**: At every candle, the system knows the highest price the trade has reached so far (the `mfePrice`). It then calculates the difference between that peak price and the current candle's closing price. This difference is then divided by the initial risk to normalize it into an R-multiple.
     *   **Example**: Your long trade enters at $100 with a stop at $98 (1R = $2). The price rises to a high of $105 (MFE = 2.5R). On the next candle, it pulls back and closes at $103. The drawdown from the peak is $2 ($105 - $103). The `DrawdownFromMFE_R` for this candle is **1.0R** ($2 drawdown / $2 risk).
     *   **Why it's Crucial**: By analyzing the `DrawdownFromMFE_R` for all your winning trades, you can find the optimal distance for a trailing stop. If you see that your best trades often pull back 0.7R before continuing higher, setting a 0.5R trailing stop is likely cutting your winners short. This metric allows you to quantify your strategy's "breathing room" and tailor your exit logic to its specific behavior.
-```
+
+### Practical Application: Simulating a Trailing Stop
+
+You can use the `DrawdownFromMFE_R` value to write code that simulates a trailing stop strategy.
+
+1.  **Define Your Threshold:** Choose the trailing stop distance you want to test, in R-multiples (e.g., `trailingStopThreshold = 1.0R`).
+2.  **Iterate the Log:** Loop through the `log` array of a trade, candle by candle.
+3.  **Check the Condition:** On each candle, check if `logEntry.DrawdownFromMFE_R >= trailingStopThreshold`.
+4.  **Trigger the Exit:** If the condition is true, the simulated trailing stop has been hit. Your simulation would exit the trade on that candle.
+
+By running this simulation with various threshold values, you can determine which trailing stop distance would have yielded the best results for your historical trades.
