@@ -37,6 +37,44 @@ The `log` field is an array that contains a chronological record of the trade's 
 | `DrawdownFromMFE_R`  | `number`  | The drawdown from the peak profit (MFE), measured in R-multiples. This is crucial for analyzing trail-stop strategies. |
 | `Trade Status`       | `string`  | The status of the trade at this candle. It will be `"Active"`, `"StopLoss"` (if the SL was hit), or `"EndOfData"` (if the trade was still active when the data ran out). |
 
+## How the Report Download Works (Legacy CSV Method)
+
+This section describes how the report generation in the Backtester section functions. This process transforms the visual trades you place on the chart into a detailed, candle-by-candle dataset that is perfect for deep analysis. It is all handled by the `generateTradeLog` function within the application.
+
+1.  **Initiation**: When you have placed one or more Risk/Reward tools on the chart in the "Backtester" tab, you would click the button for downloading the report.
+
+2.  **Trade Simulation**: The application then iterates through each Risk/Reward tool you've placed. For each tool, it runs a full simulation:
+    *   It finds the exact candle on the chart where your trade entry was placed.
+    *   It then proceeds forward, one candle at a time, until the end of the imported price data or until the trade is stopped out.
+
+3.  **Data Calculation (Per Candle)**: For every single candle in the trade's life, the application calculates and records a snapshot of the trade's state. This is where it computes the critical analytical metrics:
+    *   **Maximum Favorable Excursion (MFE_R)**: It checks if the current candle's high (for longs) or low (for shorts) has made a new peak profit for the trade.
+    *   **Maximum Adverse Excursion (MAE_R)**: It checks if the current candle has created a new maximum drawdown.
+    *   **Drawdown from MFE (DrawdownFromMFE_R)**: It calculates how far the current closing price has pulled back from the absolute peak profit.
+    *   **Trade Status**: It determines if the trade is still 'Active', has hit its 'StopLoss', or has reached the 'EndOfData'.
+
+4.  **CSV Generation**: Once all tools have been simulated, the application compiles all the per-candle log entries from all trades into a single CSV file and triggers a download in your browser.
+
+### Structure of the Report
+
+The generated CSV file has a clear, structured format, with each row representing a single candle in the life of a trade. This "long format" data is ideal for use in analytical tools like Python's pandas, R, or even Excel Pivot Tables.
+
+Here are the columns in the report and what they mean:
+
+| Column Name | Description |
+| :--- | :--- |
+| **TradeID** | A unique identifier for the trade, based on its entry timestamp. All rows belonging to the same trade will share this ID. |
+| **Timestamp** | The specific timestamp for that individual candle in the log. |
+| **CandleNumber** | The sequence number of the candle since the trade was entered (e.g., 1, 2, 3...). |
+| **EntryPrice** | The price at which the trade was initiated. This is constant for all rows of a given trade. |
+| **StopLossPrice** | The original stop loss price set for the trade. Also constant for all rows of a trade. |
+| **CurrentPrice_Close** | The closing price of the instrument at the end of this specific candle. |
+| **MFE_R** | **Maximum Favorable Excursion (R-multiple)**. The *peak* profit the trade had reached up to this point in time, measured in multiples of the initial risk. |
+| **MAE_R** | **Maximum Adverse Excursion (R-multiple)**. The *maximum* drawdown the trade had experienced up to this point, measured in R-multiples. Capped at 1.0. |
+| **DrawdownFromMFE_R**| **Drawdown from MFE (R-multiple)**. How far the current close has pulled back from the trade's peak profit (MFE), measured in R-multiples. |
+| **Trade Status** | The status of the trade at this candle: `Active`, `StopLoss`, or `EndOfData`. |
+
+---
 ## Analytical Nuances and Practical Applications
 
 To get the most out of this data, consider the following:
@@ -87,7 +125,7 @@ You can also simulate more complex, conditional stop adjustments, such as moving
 
 3.  **Check the Conditions inside the loop:**
     *   **First, check if the adjustment has been triggered:** `if (currentCandle.MFE_R >= adjustmentTriggerR_Value)`.
-    *   **If it has, calculate the required drawdown to hit the new stop:**
+    *   **If it has, calculate the required pullback to hit the new stop:**
         `const pullbackToHitNewStop_R = currentCandle.MFE_R - newStopLossR_Value;`
         (For our example, if MFE is 2.5R, the pullback needed to hit breakeven is 2.5R).
     *   **Finally, check if the actual drawdown hits the new stop:**
@@ -95,3 +133,4 @@ You can also simulate more complex, conditional stop adjustments, such as moving
         If this is true, the adjusted stop has been hit, and the simulation for this trade ends.
 
 This advanced technique allows you to transform your raw trade data into a powerful backtesting engine for sophisticated exit strategies.
+```
