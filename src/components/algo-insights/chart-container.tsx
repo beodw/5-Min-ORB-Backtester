@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, useRef } from "react";
@@ -1310,7 +1311,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                             loss: 'bg-red-200 text-red-900 rounded-full font-bold',
                             modified: 'bg-orange-200 text-orange-900 rounded-full font-bold',
                         }}
-                        disabled={tab === 'journal'}
+                        disabled={!isDataImported && rrTools.length === 0}
                     />
                 </PopoverContent>
             </Popover>
@@ -1350,5 +1351,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     </div>
   );
 }
+
+    
 
     
