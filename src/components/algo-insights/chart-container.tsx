@@ -88,28 +88,36 @@ const generateTradeLog = (
         const candle = priceData[i];
         let tradeStatus: 'Active' | 'StopLoss' | 'EndOfData' = 'Active';
 
-        // Check for stop loss hit (terminating condition)
         if ((tool.position === 'long' && candle.low <= tool.stopLoss) || (tool.position === 'short' && candle.high >= tool.stopLoss)) {
             tradeStatus = 'StopLoss';
         } else if (i === priceData.length - 1) {
              tradeStatus = 'EndOfData';
         }
 
-        // Update MFE and MAE pointers
         if (tool.position === 'long') {
             mfePrice = Math.max(mfePrice, candle.high);
-            maePointer = Math.min(maePointer, candle.low);
         } else { // Short position
             mfePrice = Math.min(mfePrice, candle.low);
-            maePointer = Math.max(maePointer, candle.high);
         }
         
-        // Calculate metrics in R-multiples
+        let currentMaePointer = maePointer;
+        if (tradeStatus === 'StopLoss') {
+            // Cap MAE at stop loss price
+            currentMaePointer = tool.stopLoss;
+        } else {
+            if (tool.position === 'long') {
+                currentMaePointer = Math.min(maePointer, candle.low);
+            } else {
+                currentMaePointer = Math.max(maePointer, candle.high);
+            }
+        }
+        maePointer = currentMaePointer;
+        
         const mfePriceMove = Math.abs(mfePrice - tool.entryPrice);
         const mfeR = mfePriceMove / riskInPrice;
 
         const maePriceMove = Math.abs(maePointer - tool.entryPrice);
-        const maeR = maePriceMove / riskInPrice;
+        const maeR = Math.min(1, maePriceMove / riskInPrice); // Cap MAE_R at 1
         
         const drawdownPriceMove = Math.abs(mfePrice - candle.close);
         const drawdownFromMfeR = drawdownPriceMove / riskInPrice;
@@ -128,7 +136,7 @@ const generateTradeLog = (
         });
 
         if (tradeStatus !== 'Active') {
-            break; // Exit loop if trade is terminated
+            break; 
         }
     }
 
@@ -430,9 +438,12 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
   }, [drawingState, selectedDate, fileName, isDataImported, sessionKey, allJournalTrades, journalFileName, selectedPair]);
   
   useEffect(() => {
-    const filtered = allJournalTrades.filter(t => t.pair === selectedPair);
-    setJournalTrades(filtered);
-  }, [allJournalTrades, selectedPair]);
+    // This effect is for the old journal format, which is no longer the primary use case for the Journal tab, but is kept for session restoration.
+    if(tab === 'journal') {
+      const filtered = allJournalTrades.filter(t => t.pair === selectedPair);
+      setJournalTrades(filtered);
+    }
+  }, [allJournalTrades, selectedPair, tab]);
 
 
   const handleRestoreSession = () => {
@@ -475,7 +486,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
             if (savedSession.selectedPair) setSelectedPair(savedSession.selectedPair);
             
             // This will trigger the filtering useEffect
-            if (restoredJournalTrades.length > 0) {
+            if (tab === 'journal' && restoredJournalTrades.length > 0) {
                 const firstValidPair = restoredJournalTrades.find(t => t.pair)?.pair || JOURNAL_PAIRS[0];
                 const restoredPair = savedSession.selectedPair || firstValidPair;
                 const filtered = restoredJournalTrades.filter(t => t.pair === restoredPair);
@@ -835,39 +846,20 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     journalFileInputRef.current?.click();
   };
 
-  const parseDateFromJournal = (dateString: string, rowNum: number): Date => {
-    const cleanString = dateString.trim();
-    // Expected format: MM/DD/YYYY
-    const parts = cleanString.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-    if (!parts) {
-        throw new Error(`Invalid date format on row ${rowNum}. Expected 'MM/DD/YYYY', found '${dateString}'.`);
-    }
-    const [, month, day, year] = parts.map(Number);
-    // Month is 0-indexed in JavaScript Date
-    const date = new Date(Date.UTC(year, month - 1, day));
-    if (isNaN(date.getTime())) {
-        throw new Error(`Invalid date values on row ${rowNum}. Could not parse: '${dateString}'`);
-    }
-    return date;
-  };
-
   const parseCsvWithMultiline = (text: string): string[][] => {
       const rows: string[][] = [];
       let currentRow: string[] = [];
       let currentField = '';
       let inQuotedField = false;
-      // Normalize line endings to \n
       const normalizedText = text.replace(/(\r\n|\r)/g, '\n');
 
       for (let i = 0; i < normalizedText.length; i++) {
           const char = normalizedText[i];
-          
           if (inQuotedField) {
               if (char === '"') {
-                  // Check for escaped double quote
                   if (i + 1 < normalizedText.length && normalizedText[i+1] === '"') {
                       currentField += '"';
-                      i++; // Skip the next quote
+                      i++;
                   } else {
                       inQuotedField = false;
                   }
@@ -890,14 +882,10 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
               }
           }
       }
-
-      // Add the last row if file doesn't end with a newline
       if (currentField || currentRow.length > 0) {
         currentRow.push(currentField);
         rows.push(currentRow);
       }
-      
-      // Filter out any completely empty rows that might result from trailing newlines
       return rows.filter(row => row.length > 1 || (row.length === 1 && row[0].trim() !== ''));
   };
   
@@ -915,98 +903,76 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
             if (allRows.length <= 1) throw new Error("Journal CSV is empty or has only a header.");
             
             const headerLine = allRows[0].map(h => h.trim());
-            setJournalHeader(headerLine);
-            
-            const requiredHeaders = {
-                pair: "Pair",
-                dateTaken: "Date Taken (Timestamp)",
-                dateClosed: "Date Closed (Timestamp)",
-                maxR: "Maximum Favourable Excursion (R)",
-            };
+            const requiredHeaders = ["TradeID", "EntryPrice", "StopLossPrice"];
+            const headerIndices: Record<string, number> = {};
 
-            const headerIndices = {
-                pair: headerLine.indexOf(requiredHeaders.pair),
-                dateTaken: headerLine.indexOf(requiredHeaders.dateTaken),
-                dateClosed: headerLine.indexOf(requiredHeaders.dateClosed),
-                maxR: headerLine.indexOf(requiredHeaders.maxR),
-                // Optional columns
-                tradeOutcome: headerLine.indexOf("Trade Outcome"),
-                status: headerLine.indexOf("Status"),
-            };
-            
-            for (const [key, index] of Object.entries(headerIndices)) {
-                 if (index === -1 && !['tradeOutcome', 'status'].includes(key)) {
-                    throw new Error(`Missing required column: "${(requiredHeaders as any)[key]}"`);
+            requiredHeaders.forEach(h => {
+                const index = headerLine.indexOf(h);
+                if (index === -1) {
+                    throw new Error(`Missing required column in journal file: "${h}"`);
                 }
-            }
+                headerIndices[h] = index;
+            });
             
             const dataRows = allRows.slice(1);
-            const parsedTrades: JournalTrade[] = dataRows
-                .map((columns, i) => {
-                    const rowNum = i + 2;
+            
+            // Group rows by TradeID
+            const tradesMap = new Map<string, any>();
+            dataRows.forEach(row => {
+                const tradeId = row[headerIndices["TradeID"]];
+                if (!tradesMap.has(tradeId)) {
+                    tradesMap.set(tradeId, {
+                        entryPrice: parseFloat(row[headerIndices["EntryPrice"]]),
+                        stopLossPrice: parseFloat(row[headerIndices["StopLossPrice"]]),
+                    });
+                }
+            });
 
-                    if (columns.length < headerLine.length) {
-                       console.warn(`Row ${rowNum} has incorrect number of columns. Expected ${headerLine.length}, got ${columns.length}. Skipping.`);
-                       return null;
-                    }
-                    
-                    const pairValue = columns[headerIndices.pair]?.trim();
+            // Reconstruct RR Tools from the map
+            const reconstructedTools: RRToolType[] = [];
+            tradesMap.forEach((tradeInfo, tradeId) => {
+                const entryDate = new Date(tradeId);
+                if (isNaN(entryDate.getTime())) {
+                    console.warn(`Skipping trade with invalid TradeID (date): ${tradeId}`);
+                    return;
+                }
 
-                    if (!JOURNAL_PAIRS.includes(pairValue)) {
-                        return null;
-                    }
+                const { entryPrice, stopLossPrice } = tradeInfo;
+                if (isNaN(entryPrice) || isNaN(stopLossPrice)) {
+                    console.warn(`Skipping trade with invalid price data: ${tradeId}`);
+                    return;
+                }
 
-                    const pair = columns[headerIndices.pair]?.trim();
-                    const dateTaken = parseDateFromJournal(columns[headerIndices.dateTaken], rowNum);
-                    const dateClosed = parseDateFromJournal(columns[headerIndices.dateClosed], rowNum);
-                    
-                    const maxRString = columns[headerIndices.maxR];
-                    const maxR = parseFloat(maxRString);
-                    if (isNaN(maxR)) {
-                        throw new Error(`Invalid 'Maximum Favourable Excursion (R)' value on row ${rowNum}: '${maxRString}'. Must be a number.`);
-                    }
+                const position = stopLossPrice < entryPrice ? 'long' : 'short';
+                const risk = Math.abs(entryPrice - stopLossPrice);
+                const takeProfit = position === 'long' ? entryPrice + (risk * 2) : entryPrice - (risk * 2);
 
-                    const originalOutcome: 'Win' | 'Loss' = maxR >= 2 ? 'Win' : 'Loss';
-                    
-                    // User-set outcome from the file, if present. Otherwise, it will be same as originalOutcome
-                    let fileOutcome = originalOutcome;
-                    if(headerIndices.tradeOutcome !== -1) {
-                       const outcomeFromFile = columns[headerIndices.tradeOutcome]?.trim();
-                       if(outcomeFromFile === 'Win' || outcomeFromFile === 'Loss') {
-                          fileOutcome = outcomeFromFile;
-                       }
-                    }
+                reconstructedTools.push({
+                    id: `rr-recon-${tradeId}`,
+                    entryDate,
+                    entryPrice,
+                    stopLoss: stopLossPrice,
+                    takeProfit,
+                    position,
+                    widthInPoints: 100, // Default width
+                });
+            });
 
-                    // User-set status from the file
-                    let fileStatus: JournalTrade['status'] = 'default';
-                     if(headerIndices.status !== -1) {
-                       const statusFromFile = columns[headerIndices.status]?.trim();
-                       if(statusFromFile === 'traded' || statusFromFile === 'not traded') {
-                          fileStatus = statusFromFile as JournalTrade['status'];
-                       }
-                    }
-
-                    return {
-                        pair: pair,
-                        dateTaken,
-                        dateClosed,
-                        maxR,
-                        status: fileStatus,
-                        originalRow: columns,
-                        originalOutcome,
-                        outcome: fileOutcome,
-                    };
-                })
-                .filter((trade): trade is JournalTrade => trade !== null);
-
-            if (parsedTrades.length === 0) {
-              throw new Error(`No valid trade rows could be parsed for the supported pairs (${JOURNAL_PAIRS.join(', ')}). Check data and column headers.`);
+            if (reconstructedTools.length === 0) {
+              throw new Error(`No valid trades could be reconstructed from the file. Please check the file format and data.`);
             }
+            
+            // Set the new tools, clearing old drawings
+            setDrawingState({
+                rrTools: reconstructedTools,
+                priceMarkers: [],
+                measurementTools: []
+            });
+            setHistory([]);
+            setRedoStack([]);
 
-            setAllJournalTrades(parsedTrades);
-            const firstValidPair = parsedTrades.find(t => t.pair)?.pair || selectedPair;
-            setSelectedPair(firstValidPair);
-            toast({ title: "Journal Imported", description: `${parsedTrades.length} trades loaded.` });
+            toast({ title: "Journal Reconstructed", description: `${reconstructedTools.length} trades loaded onto the chart.` });
+
         } catch (error: any) {
             toast({ variant: "destructive", title: "Journal Import Failed", description: error.message, duration: 9000 });
         }
@@ -1015,11 +981,12 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     if(journalFileInputRef.current) journalFileInputRef.current.value = "";
   };
 
-    const processJournalTrades = (trades: JournalTrade[]) => {
+  const processJournalTrades = (trades: JournalTrade[]) => {
+      // This function is for the old journal format and calendar styling.
+      // It's kept for session restoration but is not used by the new reconstruction logic.
       const results: Record<string, DayResult> = {};
       const groupedByDay: Record<string, JournalTrade[]> = {};
 
-      // Group all trades by day, regardless of selected pair, for the calendar
       allJournalTrades.forEach(trade => {
           const dateKey = trade.dateTaken.toISOString().split('T')[0];
           if (!groupedByDay[dateKey]) {
@@ -1028,10 +995,8 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
           groupedByDay[dateKey].push(trade);
       });
       
-      // Process each day
       for (const dateKey in groupedByDay) {
           const dayTrades = groupedByDay[dateKey];
-          // A day is 'modified' if ANY trade on that day (any pair) has a user-changed outcome
           const isModified = dayTrades.some(t => t.outcome !== t.originalOutcome);
           
           if (isModified) {
@@ -1039,150 +1004,20 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
               continue;
           }
       
-          // A day is a 'win' if ANY trade on that day was a win
           const hasWin = dayTrades.some(t => t.outcome === 'Win');
           results[dateKey] = hasWin ? 'win' : 'loss';
       }
       setDayResults(results);
   };
-
   
   useEffect(() => {
     // Re-process when trades are updated (e.g. status change, outcome change, or new file import)
-    if (allJournalTrades.length > 0) {
+    if (allJournalTrades.length > 0 && tab === 'journal') { // Only process for old journal format view
         processJournalTrades(allJournalTrades);
     } else {
         setDayResults({}); // Clear results if no trades
     }
-  }, [allJournalTrades]);
-
-  const updateTradeStatus = (status: 'traded' | 'not traded') => {
-    if (!selectedDate) {
-        toast({ variant: "destructive", title: "No Date Selected", description: "Please select a date on the calendar first."});
-        return;
-    }
-    const selectedDateKey = selectedDate.toISOString().split('T')[0];
-    
-    let tradeUpdated = false;
-    const updatedAllTrades = allJournalTrades.map(trade => {
-        const tradeDateKey = trade.dateTaken.toISOString().split('T')[0];
-        if (tradeDateKey === selectedDateKey && trade.pair === selectedPair) {
-            tradeUpdated = true;
-            return { ...trade, status };
-        }
-        return trade;
-    });
-
-    if (tradeUpdated) {
-        setAllJournalTrades(updatedAllTrades);
-        toast({ title: "Trade Status Updated", description: `Trades on ${selectedDateKey} for ${selectedPair} marked as '${status}'.` });
-    } else {
-        toast({ variant: "destructive", title: "No Trade Found", description: `No trade found on ${selectedDateKey} for ${selectedPair}.` });
-    }
-  };
-
-  const updateTradeOutcome = (outcome: 'Win' | 'Loss') => {
-    if (!selectedDate) {
-        toast({ variant: "destructive", title: "No Date Selected", description: "Please select a date on the calendar first." });
-        return;
-    }
-    const selectedDateKey = selectedDate.toISOString().split('T')[0];
-
-    let tradeUpdated = false;
-    const updatedAllTrades = allJournalTrades.map(trade => {
-        const tradeDateKey = trade.dateTaken.toISOString().split('T')[0];
-        if (tradeDateKey === selectedDateKey && trade.pair === selectedPair) {
-            tradeUpdated = true;
-            return { ...trade, outcome };
-        }
-        return trade;
-    });
-
-    if (tradeUpdated) {
-        setAllJournalTrades(updatedAllTrades);
-        toast({ title: "Trade Outcome Updated", description: `Trades on ${selectedDateKey} for ${selectedPair} marked as '${outcome}'.` });
-    } else {
-        toast({ variant: "destructive", title: "No Trade Found", description: `No trade found on ${selectedDateKey} for ${selectedPair}.` });
-    }
-  };
-  
-  const handleDownloadJournal = () => {
-    if (allJournalTrades.length === 0) {
-        toast({ variant: "destructive", title: "No Journal Data", description: "Please import a journal file first." });
-        return;
-    }
-
-    if (journalHeader.length === 0) {
-        toast({variant: "destructive", title: "Download Failed", description: "Could not determine original CSV header. Please re-import the file."});
-        return;
-    }
-
-    let outcomeIndex = journalHeader.indexOf("Trade Outcome");
-    let statusIndex = journalHeader.indexOf("Status");
-    
-    let finalHeader = [...journalHeader];
-    
-    // Add "Trade Outcome" header if it doesn't exist
-    if (outcomeIndex === -1) {
-        finalHeader.push("Trade Outcome");
-        outcomeIndex = finalHeader.length - 1;
-    }
-    
-    // Add "Status" header if it doesn't exist
-    if (statusIndex === -1) {
-        finalHeader.push("Status");
-        statusIndex = finalHeader.length - 1;
-    }
-
-    const rows = allJournalTrades.map(trade => {
-        let newColumns = [...trade.originalRow];
-
-        // Ensure the array is long enough to hold all headers
-        while (newColumns.length < finalHeader.length) {
-            newColumns.push('');
-        }
-
-        // --- Outcome Update Logic ---
-        // Always write the current state of 'outcome' (whether it was from file, derived from MFE, or set by user)
-        newColumns[outcomeIndex] = trade.outcome;
-
-        // --- Status Update Logic ---
-        // If the status was modified by the user, or it was 'default' (meaning not in file), use the new status.
-        if (trade.status !== 'default') {
-            newColumns[statusIndex] = trade.status;
-        } else {
-            // If the status was 'default' and the original file didn't have a status column, default to 'traded'.
-            if (trade.originalRow.length <= statusIndex) {
-                 newColumns[statusIndex] = 'traded';
-            }
-            // If it existed but was empty, also default to 'traded'
-            else if (!newColumns[statusIndex]) {
-                 newColumns[statusIndex] = 'traded';
-            }
-            // Otherwise, the original value (e.g. 'traded', 'not traded') is preserved because it's already in newColumns.
-        }
-        
-        return newColumns.map(field => {
-            const fieldStr = String(field ?? '').trim();
-            if (fieldStr.includes(',') || fieldStr.includes('"') || fieldStr.includes('\n')) {
-                const sanitizedField = fieldStr.replace(/"/g, '""');
-                return `"${sanitizedField}"`;
-            }
-            return fieldStr;
-        }).join(',');
-    }).join('\n');
-
-    const csvContent = finalHeader.join(',') + '\n' + rows;
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.href = url;
-    link.download = `updated_${journalFileName || 'journal'}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
+  }, [allJournalTrades, tab]);
   
     const handleNextDay = () => {
         if (!isDataImported || !selectedDate) {
@@ -1224,7 +1059,6 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
 
         const nextCandleDate = new Date(backtestEndDate.getTime() + 1 * 60 * 1000);
 
-        // Simple check to prevent going too far into the future if there's no more data
         const lastDataPointDate = priceData[priceData.length - 1].date;
         if (nextCandleDate > lastDataPointDate) {
              toast({ title: "End of Data", description: "Reached the end of the available price data." });
@@ -1242,10 +1076,10 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
 
 
   const journalTradesOnChart = tab === 'journal' 
-    ? journalTrades.map((t, i) => ({
+    ? allJournalTrades.map((t, i) => ({
         id: `journal-${i}`,
         entryDate: t.dateTaken,
-        entryPrice: 0, // Placeholder, will be read from priceData
+        entryPrice: 0, 
         type: t.outcome === 'Win' ? 'win' : 'loss' as 'win' | 'loss'
     })) 
     : [];
@@ -1278,19 +1112,6 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                             <SelectItem value="1D">1 Day</SelectItem>
                         </SelectContent>
                     </Select>
-                    
-                    {tab === 'journal' && (
-                        <Select value={selectedPair} onValueChange={setSelectedPair}>
-                            <SelectTrigger className="w-[120px]">
-                                <SelectValue placeholder="Pair" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {JOURNAL_PAIRS.map(pair => (
-                                    <SelectItem key={pair} value={pair}>{pair}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    )}
 
                     <div className="h-6 border-l border-border/50"></div>
                 
@@ -1317,10 +1138,10 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                                 <Tooltip>
                                     <TooltipTrigger asChild>
                                         <Button variant="ghost" size="icon" onClick={handleImportJournalClick}>
-                                            <BookOpen className={cn("h-5 w-5", allJournalTrades.length > 0 ? "text-chart-2" : "text-muted-foreground")} />
+                                            <BookOpen className={cn("h-5 w-5", rrTools.length > 0 ? "text-chart-2" : "text-muted-foreground")} />
                                         </Button>
                                     </TooltipTrigger>
-                                    <TooltipContent><p>Import Journal CSV</p></TooltipContent>
+                                    <TooltipContent><p>Import Trade Log for Reconstruction</p></TooltipContent>
                                 </Tooltip>
                             </TooltipProvider>
                             <input type="file" ref={journalFileInputRef} onChange={handleJournalFileChange} accept=".csv" className="hidden" />
@@ -1335,7 +1156,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
             )}
             {tab === 'journal' && journalFileName && (
                  <div className="bg-card/70 backdrop-blur-sm rounded-md px-2 py-1 shadow-md ml-8">
-                    <p className="text-xs text-muted-foreground/80">Journal: <span className="font-medium text-foreground/90">{journalFileName}</span></p>
+                    <p className="text-xs text-muted-foreground/80">Reconstructing: <span className="font-medium text-foreground/90">{journalFileName}</span></p>
                 </div>
             )}
         </div>
@@ -1383,22 +1204,6 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                     <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceMeasurement} disabled={isPlacingAnything || !isDataImported}><Ruler className="w-5 h-5 text-foreground"/></Button></TooltipTrigger><TooltipContent><p>Measure Distance</p></TooltipContent></Tooltip>
                 </TooltipProvider>
 
-                {tab === 'journal' && (
-                  <>
-                    <div className="h-6 border-l border-border/50"></div>
-                    <TooltipProvider>
-                        <Tooltip><TooltipTrigger asChild><Button variant="ghost" onClick={() => updateTradeOutcome('Win')} disabled={!selectedDate || journalTrades.length === 0} className="text-accent">Win</Button></TooltipTrigger><TooltipContent><p>Mark Day as Win</p></TooltipContent></Tooltip>
-                        <Tooltip><TooltipTrigger asChild><Button variant="ghost" onClick={() => updateTradeOutcome('Loss')} disabled={!selectedDate || journalTrades.length === 0} className="text-destructive">Loss</Button></TooltipTrigger><TooltipContent><p>Mark Day as Loss</p></TooltipContent></Tooltip>
-                    </TooltipProvider>
-                    <div className="h-6 border-l border-border/50"></div>
-                    <TooltipProvider>
-                       <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => updateTradeStatus('traded')} disabled={!selectedDate || journalTrades.length === 0}><ThumbsUp className="w-5 h-5 text-accent"/></Button></TooltipTrigger><TooltipContent><p>Mark Day as Traded</p></TooltipContent></Tooltip>
-                       <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={() => updateTradeStatus('not traded')} disabled={!selectedDate || journalTrades.length === 0}><ThumbsDown className="w-5 h-5 text-destructive"/></Button></TooltipTrigger><TooltipContent><p>Mark Day as Not Traded</p></TooltipContent></Tooltip>
-                       <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handleDownloadJournal} disabled={allJournalTrades.length === 0}><FileDown className="w-5 h-5 text-foreground"/></Button></TooltipTrigger><TooltipContent><p>Download Updated Journal</p></TooltipContent></Tooltip>
-                    </TooltipProvider>
-                  </>
-                )}
-
                  <AlertDialog>
                     <TooltipProvider>
                         <Tooltip>
@@ -1443,7 +1248,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         <div className="absolute inset-0">
             <InteractiveChart
                 data={priceData}
-                trades={journalTradesOnChart}
+                trades={tab === 'journal' ? [] : journalTradesOnChart}
                 onChartClick={handleChartClick}
                 onChartMouseMove={handleChartMouseMove}
                 rrTools={rrTools}
@@ -1505,6 +1310,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                             loss: 'bg-red-200 text-red-900 rounded-full font-bold',
                             modified: 'bg-orange-200 text-orange-900 rounded-full font-bold',
                         }}
+                        disabled={tab === 'journal'}
                     />
                 </PopoverContent>
             </Popover>
