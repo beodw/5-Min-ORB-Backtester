@@ -1096,16 +1096,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         const userTimezoneOffset = nextDate.getTimezoneOffset() * 60000;
         const adjustedDate = new Date(nextDate.getTime() + userTimezoneOffset);
         
-        setSelectedDate(adjustedDate);
-
-        const [startHour, startMinute] = sessionStartTime.split(':').map(Number);
-        const sessionStart = new Date(adjustedDate);
-        sessionStart.setUTCFullYear(adjustedDate.getUTCFullYear(), adjustedDate.getUTCMonth(), adjustedDate.getUTCDate());
-        sessionStart.setUTCHours(startHour, startMinute, 0, 0);
-
-        // Set the end of the visible range to be 25 minutes after session start (5 for range + 20 for context)
-        const initialVisibleEndDate = new Date(sessionStart.getTime() + 25 * 60 * 1000);
-        setBacktestEndDate(initialVisibleEndDate);
+        handleDateSelect(adjustedDate);
     };
 
     const handleNextCandle = () => {
@@ -1141,7 +1132,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
 
   const isPlacingAnything = !!placingToolType || isPlacingPriceMarker || isPlacingMeasurement;
   
-  const chartEndDate = backtestEndDate || selectedDate;
+  const chartEndDate = tab === 'journal' ? selectedDate : backtestEndDate || selectedDate;
 
 
   const journalTradesOnChart = tab === 'journal' 
@@ -1453,3 +1444,6 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
 
       
 
+
+
+    
