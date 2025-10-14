@@ -82,9 +82,9 @@ const generateTradeLog = (
     const riskInPrice = Math.abs(tool.entryPrice - tool.stopLoss);
     if (riskInPrice <= 0) return [];
     
-    let mfePointer = tool.entryPrice;
-    let maePointer = tool.entryPrice;
     let mfePrice = tool.entryPrice;
+    let maePointer = tool.entryPrice;
+    let maxDrawdownFromMFEPrice = 0;
 
     for (let i = entryIndex; i < priceData.length; i++) {
         const candle = priceData[i];
@@ -96,6 +96,7 @@ const generateTradeLog = (
              tradeStatus = 'EndOfData';
         }
 
+        // Update MFE based on wicks
         if (tool.position === 'long') {
             mfePrice = Math.max(mfePrice, candle.high);
         } else { // Short position
@@ -104,7 +105,6 @@ const generateTradeLog = (
         
         let currentMaePointer = maePointer;
         if (tradeStatus === 'StopLoss') {
-            // Cap MAE at stop loss price
             currentMaePointer = tool.stopLoss;
         } else {
             if (tool.position === 'long') {
@@ -115,14 +115,23 @@ const generateTradeLog = (
         }
         maePointer = currentMaePointer;
         
+        // Calculate MFE in R
         const mfePriceMove = Math.abs(mfePrice - tool.entryPrice);
         const mfeR = mfePriceMove / riskInPrice;
 
+        // Calculate MAE in R
         const maePriceMove = Math.abs(maePointer - tool.entryPrice);
         const maeR = Math.min(1, maePriceMove / riskInPrice); // Cap MAE_R at 1
         
-        const drawdownPriceMove = Math.abs(mfePrice - candle.close);
-        const drawdownFromMfeR = drawdownPriceMove / riskInPrice;
+        // Update the maximum drawdown from MFE based on wicks
+        let currentDrawdownPrice = 0;
+        if (tool.position === 'long') {
+            currentDrawdownPrice = mfePrice - candle.low;
+        } else { // short
+            currentDrawdownPrice = candle.high - mfePrice;
+        }
+        maxDrawdownFromMFEPrice = Math.max(maxDrawdownFromMFEPrice, currentDrawdownPrice);
+        const drawdownFromMfeR = maxDrawdownFromMFEPrice / riskInPrice;
 
         log.push({
             TradeID: tradeID,
@@ -1204,6 +1213,16 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                                     <TooltipContent><p>Import Trade Log for Reconstruction</p></TooltipContent>
                                 </Tooltip>
                             </TooltipProvider>
+                             <TooltipProvider>
+                                <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button variant="ghost" size="icon" onClick={() => handleImportClick('bid')}>
+                                    <FileUp className={cn("h-5 w-5", isDataImported ? "text-chart-2" : "text-muted-foreground")} />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent><p>{isDataImported ? `Bid: ${fileName}`: "Import Bid Data"}</p></TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                             <input type="file" ref={journalFileInputRef} onChange={handleJournalFileChange} accept=".csv" className="hidden" />
                         </>
                     )}
@@ -1376,7 +1395,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                             loss: 'bg-red-200 text-red-900 rounded-full font-bold',
                             modified: 'bg-orange-200 text-orange-900 rounded-full font-bold',
                         }}
-                        disabled={!isDataImported && rrTools.length === 0}
+                        disabled={tab === 'journal' ? !isDataImported : !isDataImported && rrTools.length === 0}
                     />
                 </PopoverContent>
             </Popover>
