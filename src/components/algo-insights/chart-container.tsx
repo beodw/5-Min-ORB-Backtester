@@ -309,7 +309,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         setOpeningRange(null);
         return;
     }
-  
+
     if (isNaN(dateObj.getTime())) {
         setOpeningRange(null);
         return;
@@ -1381,7 +1381,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                     <Calendar
                         mode="single"
                         selected={selectedDate}
-                        onSelect={handleDateSelect}
+                        onSelect={(date) => handleDateSelect(date)}
                         defaultMonth={selectedDate}
                         modifiers={{ 
                             win: (date) => dayResults[date.toISOString().split('T')[0]] === 'win',
@@ -1393,7 +1393,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                             loss: 'bg-red-200 text-red-900 rounded-full font-bold',
                             modified: 'bg-orange-200 text-orange-900 rounded-full font-bold',
                         }}
-                        disabled={tab === 'journal' ? !isDataImported : !isDataImported && rrTools.length === 0}
+                        disabled={!isDataImported}
                     />
                 </PopoverContent>
             </Popover>
@@ -1433,7 +1433,5 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     </div>
   );
 }
-
-    
 
     
