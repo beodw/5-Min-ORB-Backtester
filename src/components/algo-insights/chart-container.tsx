@@ -667,128 +667,140 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     });
   };
 
-  const handleImportClick = (type: 'bid' | 'ask') => {
+  const handleImportClick = (type: 'bid' | 'ask' | 'journal') => {
       if (type === 'bid') {
           fileInputRef.current?.click();
-      } else {
+      } else if (type === 'ask') {
           askFileInputRef.current?.click();
+      } else {
+          journalFileInputRef.current?.click();
       }
   };
   
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>, type: 'bid' | 'ask') => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    
-    if (type === 'bid') {
-        setFileName(file.name);
-    } else {
-        setAskFileName(file.name);
-    }
+    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>, type: 'bid' | 'ask' | 'journal') => {
+        const file = event.target.files?.[0];
+        if (!file) return;
 
-    const reader = new FileReader();
+        if (type === 'journal') {
+            handleJournalFileChange(event);
+            return;
+        }
 
-    reader.onload = (e) => {
-        try {
-            const text = e.target?.result;
-            if (typeof text !== 'string') throw new Error("Could not read file contents.");
+        if (type === 'bid') {
+            setFileName(file.name);
+        } else {
+            setAskFileName(file.name);
+        }
 
-            const lines = text.split('\n').filter(line => line.trim() !== '');
-            if (lines.length <= 1) throw new Error("CSV is empty or has only a header.");
+        const reader = new FileReader();
 
-            const dataRows = lines.slice(1);
+        reader.onload = (e) => {
+            try {
+                const text = e.target?.result;
+                if (typeof text !== 'string') throw new Error("Could not read file contents.");
 
-            const parsedData: PriceData[] = dataRows.map((row, index) => {
-                const columns = row.split(',');
-                if (columns.length < 5) {
-                    // Skip rows that don't have enough columns, but don't throw an error for the whole file
-                    console.warn(`Skipping row ${index + 2}: Not enough columns.`);
-                    return null;
-                }
-                const [localTime, openStr, highStr, lowStr, closeStr] = columns;
-                
-                if (!localTime || !openStr || !highStr || !lowStr || !closeStr) {
-                    console.warn(`Row ${index + 2} has missing columns. Expected at least 5.`);
-                    return null;
-                }
+                const lines = text.split('\n').filter(line => line.trim() !== '');
+                if (lines.length <= 1) throw new Error("CSV is empty or has only a header.");
 
-                const dateTimeString = localTime.trim().replace(' GMT', '');
-                const [datePart, timePart] = dateTimeString.split(' ');
-                
-                if (!datePart || !timePart) {
-                    console.warn(`Invalid date format on row ${index + 2}. Found '${localTime}'.`);
-                    return null;
-                }
-                
-                const [day, month, year] = datePart.split('.').map(Number);
-                const [hour, minute, second] = timePart.split(':').map(Number);
-                
-                if (isNaN(day) || isNaN(month) || isNaN(year) || isNaN(hour) || isNaN(minute) || isNaN(second || 0)) {
-                    console.warn(`Invalid date values on row ${index + 2}. Could not parse: '${localTime}'`);
-                    return null;
-                }
-                const date = new Date(Date.UTC(year, month - 1, day, hour, minute, Math.floor(second || 0)));
-                if (isNaN(date.getTime())) {
-                    console.warn(`Invalid date on row ${index + 2}. Parsed to an invalid Date object from: '${localTime}'`);
-                    return null;
-                }
+                const dataRows = lines.slice(1);
 
-                const open = parseFloat(openStr);
-                const high = parseFloat(highStr);
-                const low = parseFloat(lowStr);
-                const close = parseFloat(closeStr);
-                
-                if (isNaN(open) || isNaN(high) || isNaN(low) || isNaN(close)) {
-                    console.warn(`Invalid price data on row ${index + 2}. Check for non-numeric values.`);
-                    return null;
-                }
+                const parsedData: PriceData[] = dataRows.map((row, index) => {
+                    const columns = row.split(',');
+                    if (columns.length < 5) {
+                        console.warn(`Skipping row ${index + 2}: Not enough columns.`);
+                        return null;
+                    }
+                    const [localTime, openStr, highStr, lowStr, closeStr] = columns;
+                    
+                    if (!localTime || !openStr || !highStr || !lowStr || !closeStr) {
+                        console.warn(`Row ${index + 2} has missing columns. Expected at least 5.`);
+                        return null;
+                    }
 
-                return { date, open, high, low, close, wick: [low, high] };
-            }).filter((p): p is PriceData => p !== null);
+                    const dateTimeString = localTime.trim().replace(' GMT', '');
+                    const [datePart, timePart] = dateTimeString.split(' ');
+                    
+                    if (!datePart || !timePart) {
+                        console.warn(`Invalid date format on row ${index + 2}. Found '${localTime}'.`);
+                        return null;
+                    }
+                    
+                    const [day, month, year] = datePart.split('.').map(Number);
+                    const [hour, minute, second] = timePart.split(':').map(Number);
+                    
+                    if (isNaN(day) || isNaN(month) || isNaN(year) || isNaN(hour) || isNaN(minute) || isNaN(second || 0)) {
+                        console.warn(`Invalid date values on row ${index + 2}. Could not parse: '${localTime}'`);
+                        return null;
+                    }
+                    const date = new Date(Date.UTC(year, month - 1, day, hour, minute, Math.floor(second || 0)));
+                    if (isNaN(date.getTime())) {
+                        console.warn(`Invalid date on row ${index + 2}. Parsed to an invalid Date object from: '${localTime}'`);
+                        return null;
+                    }
 
-            if (parsedData.length > 0) {
-                parsedData.sort((a, b) => a.date.getTime() - b.date.getTime());
-                const processedData = fillGapsInData(parsedData);
-                
-                if (type === 'bid') {
-                    setPriceData(processedData);
-                    setIsDataImported(true);
-                    if (!selectedDate) {
-                        setSelectedDate(processedData[processedData.length - 1].date);
+                    const open = parseFloat(openStr);
+                    const high = parseFloat(highStr);
+                    const low = parseFloat(lowStr);
+                    const close = parseFloat(closeStr);
+                    
+                    if (isNaN(open) || isNaN(high) || isNaN(low) || isNaN(close)) {
+                        console.warn(`Invalid price data on row ${index + 2}. Check for non-numeric values.`);
+                        return null;
+                    }
+
+                    return { date, open, high, low, close, wick: [low, high] };
+                }).filter((p): p is PriceData => p !== null);
+
+                if (parsedData.length > 0) {
+                    parsedData.sort((a, b) => a.date.getTime() - b.date.getTime());
+                    const processedData = fillGapsInData(parsedData);
+                    
+                    if (type === 'bid') {
+                        setPriceData(processedData);
+                        setIsDataImported(true);
+                        const lastDate = processedData[processedData.length - 1].date;
+                        if (lastDate) {
+                            handleDateSelect(lastDate);
+                        }
+                    } else {
+                        setAskPriceData(processedData);
+                        setIsAskDataImported(true);
                     }
                 } else {
-                    setAskPriceData(processedData);
-                    setIsAskDataImported(true);
+                    throw new Error("No valid data rows were parsed from the file.");
                 }
-            } else {
-                throw new Error("No valid data rows were parsed from the file.");
+            } catch (error: any) {
+                toast({
+                    variant: "destructive",
+                    title: "CSV Import Failed",
+                    description: `Please check the file format. Error: ${error.message}`,
+                    duration: 9000,
+                });
+                if (type === 'bid') setIsDataImported(false);
+                else setIsAskDataImported(false);
             }
-        } catch (error: any) {
-            toast({
-                variant: "destructive",
-                title: "CSV Import Failed",
-                description: `Please check the file format. Error: ${error.message}`,
-                duration: 9000,
-            });
+        };
+
+        reader.onerror = () => {
+            toast({ variant: "destructive", title: "File Read Error", description: "An error occurred while reading the file." });
             if (type === 'bid') setIsDataImported(false);
             else setIsAskDataImported(false);
-        }
-    };
+        };
 
-    reader.onerror = () => {
-        toast({ variant: "destructive", title: "File Read Error", description: "An error occurred while reading the file." });
-        if (type === 'bid') setIsDataImported(false);
-        else setIsAskDataImported(false);
+        reader.readAsText(file);
+        if(fileInputRef.current) fileInputRef.current.value = "";
+        if(askFileInputRef.current) askFileInputRef.current.value = "";
     };
-
-    reader.readAsText(file);
-    if(type === 'bid' && fileInputRef.current) fileInputRef.current.value = "";
-    if(type === 'ask' && askFileInputRef.current) askFileInputRef.current.value = "";
-  };
 
 
   const handleExportCsv = () => {
-      if (rrTools.length === 0 || !isDataImported || !isAskDataImported) {
-          toast({ variant: "destructive", title: "Cannot Export", description: "Please import both Bid and Ask data and place at least one trade tool to generate a report." });
+      if (rrTools.length === 0 || !isDataImported) {
+          toast({ variant: "destructive", title: "Cannot Export", description: "Please import Bid data and place at least one trade tool to generate a report." });
+          return;
+      }
+
+      if (rrTools.some(t => t.position === 'short') && !isAskDataImported) {
+          toast({ variant: "destructive", title: "Cannot Export", description: "Short positions were found. Please import Ask data as well to generate an accurate report." });
           return;
       }
       
@@ -804,11 +816,9 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                   } else { // short position
                       const shortLog = generateTradeLog(tool, askPriceData);
                       
-                      // Create a map of timestamps to bid close prices for efficient lookup
                       const bidCloseMap = new Map<string, number>();
                       priceData.forEach(p => bidCloseMap.set(formatDateForCsvTimestamp(p.date), p.close));
                       
-                      // Override CurrentPrice_Close with bid prices
                       return shortLog.map(logEntry => ({
                           ...logEntry,
                           CurrentPrice_Close: bidCloseMap.get(logEntry.Timestamp) || logEntry.CurrentPrice_Close
@@ -898,6 +908,71 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
   };
 
   // --- JOURNAL FUNCTIONS ---
+
+    const handleJournalFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        setJournalFileName(file.name);
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const text = e.target?.result as string;
+                const lines = text.split('\n').filter(line => line.trim() !== '');
+                if (lines.length <= 1) throw new Error("Journal file is empty or has only a header.");
+
+                const header = lines[0].split(',').map(h => h.trim());
+                setJournalHeader(header);
+                
+                // Find required columns
+                const pairIndex = header.indexOf('pair');
+                const dateTakenIndex = header.indexOf('date_taken');
+                const dateClosedIndex = header.indexOf('date_closed');
+                const maxRIndex = header.indexOf('max_R');
+                const outcomeIndex = header.indexOf('outcome');
+                const statusIndex = header.indexOf('status');
+
+                if ([pairIndex, dateTakenIndex, dateClosedIndex, maxRIndex, outcomeIndex, statusIndex].includes(-1)) {
+                    throw new Error(`Missing one or more required columns: pair, date_taken, date_closed, max_R, outcome, status.`);
+                }
+
+                const trades: JournalTrade[] = lines.slice(1).map(line => {
+                    const columns = line.split(',');
+                    const outcome = columns[outcomeIndex].trim() as 'Win' | 'Loss';
+                    return {
+                        pair: columns[pairIndex].trim(),
+                        dateTaken: new Date(columns[dateTakenIndex].trim()),
+                        dateClosed: new Date(columns[dateClosedIndex].trim()),
+                        maxR: parseFloat(columns[maxRIndex]),
+                        status: columns[statusIndex].trim() as any,
+                        originalRow: columns,
+                        originalOutcome: outcome,
+                        outcome: outcome
+                    };
+                }).filter(t => !isNaN(t.dateTaken.getTime()));
+
+                setAllJournalTrades(trades);
+                
+                const uniquePairs = Array.from(new Set(trades.map(t => t.pair)));
+                const firstPair = uniquePairs[0] || JOURNAL_PAIRS[0];
+                setSelectedPair(firstPair);
+                
+                const firstTradeDate = trades[0]?.dateTaken;
+                if(firstTradeDate) handleDateSelect(firstTradeDate);
+                
+                processJournalTrades(trades);
+                
+                toast({ title: "Journal Imported", description: `${trades.length} trades loaded.` });
+
+            } catch (error: any) {
+                toast({ variant: "destructive", title: "Journal Import Failed", description: error.message });
+            }
+        };
+
+        reader.readAsText(file);
+        if (journalFileInputRef.current) journalFileInputRef.current.value = "";
+    };
   
   const processJournalTrades = (trades: JournalTrade[]) => {
       const results: Record<string, DayResult> = {};
@@ -959,7 +1034,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
 
     const handleNextCandle = () => {
         if (!backtestEndDate) {
-            toast({ variant: "destructive", title: "Cannot Proceed", description: "This feature is only available after selecting a day with the 'Next Day' button." });
+            toast({ variant: "destructive", title: "Cannot Proceed", description: "This feature is only available after selecting a day with the 'Next Day' button or from the calendar." });
             return;
         }
 
@@ -1035,6 +1110,16 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                     <div className="h-6 border-l border-border/50"></div>
                 
                     <TooltipProvider>
+                        {tab === 'journal' && (
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button variant="ghost" size="icon" onClick={() => handleImportClick('journal')}>
+                                        <BookOpen className={cn("h-5 w-5", allJournalTrades.length > 0 ? "text-primary" : "text-muted-foreground")} />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent><p>Import Journal</p></TooltipContent>
+                            </Tooltip>
+                        )}
                         <Tooltip>
                         <TooltipTrigger asChild>
                           <Button variant="ghost" size="icon" onClick={() => handleImportClick('bid')}>
@@ -1054,10 +1139,11 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                         <TooltipContent><p>{isAskDataImported ? `Ask: ${askFileName}` : "Import Ask Data"}</p></TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
+                    <input type="file" ref={journalFileInputRef} onChange={(e) => handleFileChange(e, 'journal')} accept=".csv" className="hidden" />
                     <input type="file" ref={askFileInputRef} onChange={(e) => handleFileChange(e, 'ask')} accept=".csv" className="hidden" />
                     <input type="file" ref={fileInputRef} onChange={(e) => handleFileChange(e, 'bid')} accept=".csv" className="hidden" />
 
-                     <Button variant="ghost" onClick={handleExportCsv} disabled={rrTools.length === 0 || !isDataImported || !isAskDataImported} className="text-foreground">
+                     <Button variant="ghost" onClick={handleExportCsv} disabled={rrTools.length === 0 || !isDataImported} className="text-foreground">
                         <Download className="mr-2 h-4 w-4" />
                         Download Report
                     </Button>
@@ -1079,7 +1165,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                 </div>
             )}
         </div>
-        <div
+        <div 
           className="absolute z-10"
           style={{ top: `${toolbarPositions.secondary.y}px`, left: `${toolbarPositions.secondary.x}px` }}
         >
@@ -1163,7 +1249,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         <div className="absolute inset-0">
             <InteractiveChart
                 data={priceData}
-                trades={tab === 'journal' ? [] : journalTradesOnChart}
+                trades={journalTradesOnChart}
                 onChartClick={handleChartClick}
                 onChartMouseMove={handleChartMouseMove}
                 rrTools={rrTools}
@@ -1208,7 +1294,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                     <Calendar
                         mode="single"
                         selected={selectedDate}
-                        onSelect={(date) => handleDateSelect(date)}
+                        onSelect={handleDateSelect}
                         defaultMonth={selectedDate}
                         modifiers={{ 
                             win: (date) => dayResults[date.toISOString().split('T')[0]] === 'win',
@@ -1260,3 +1346,5 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     </div>
   );
 }
+
+    
