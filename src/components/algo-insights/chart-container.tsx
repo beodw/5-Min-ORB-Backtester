@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect, useRef } from "react";
@@ -319,7 +318,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     const [startHour, startMinute] = sessionStartTime.split(':').map(Number);
     
     const sessionStart = new Date(dateObj);
-    sessionStart.setUTCFullYear(dateObj.getUTCFullYear(), dateObj.getUTCMonth(), dateObj.getUTCDate());
+    sessionStart.setUTCFullYear(dateObj.getUTCFullYear(), dateObj.getUTCFullMonth(), dateObj.getUTCDate());
     sessionStart.setUTCHours(startHour, startMinute, 0, 0);
     
     const sessionEnd = new Date(sessionStart.getTime() + 5 * 60 * 1000);
@@ -1116,12 +1115,13 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         setBacktestEndDate(nextCandleDate);
     }
 
-    const handleDateSelect = (date: Date) => {
+    const handleDateSelect = (date: Date | undefined) => {
+        if (!date) return;
         setSelectedDate(date);
-
+        
         const [startHour, startMinute] = sessionStartTime.split(':').map(Number);
         const sessionStart = new Date(date);
-        sessionStart.setUTCFullYear(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+        sessionStart.setUTCFullYear(date.getUTCFullYear(), date.getUTCFullMonth(), date.getUTCDate());
         sessionStart.setUTCHours(startHour, startMinute, 0, 0);
         
         const initialVisibleEndDate = new Date(sessionStart.getTime() + 25 * 60 * 1000);
@@ -1132,7 +1132,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
 
   const isPlacingAnything = !!placingToolType || isPlacingPriceMarker || isPlacingMeasurement;
   
-  const chartEndDate = tab === 'journal' ? selectedDate : backtestEndDate || selectedDate;
+  const chartEndDate = backtestEndDate || selectedDate;
 
 
   const journalTradesOnChart = tab === 'journal' 
@@ -1381,11 +1381,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                     <Calendar
                         mode="single"
                         selected={selectedDate}
-                        onSelect={(date) => {
-                            if (date) {
-                                handleDateSelect(date);
-                            }
-                        }}
+                        onSelect={handleDateSelect}
                         defaultMonth={selectedDate}
                         modifiers={{ 
                             win: (date) => dayResults[date.toISOString().split('T')[0]] === 'win',
@@ -1437,13 +1433,5 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     </div>
   );
 }
-
-    
-
-    
-
-      
-
-
 
     
