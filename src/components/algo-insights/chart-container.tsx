@@ -221,7 +221,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
   
   const [toolbarPositions, setToolbarPositions] = useState<ToolbarPositions>({
     main: { x: 16, y: 16 },
-    secondary: { x: 16, y: 88 }
+    secondary: { x: 16, y: 160 }
   });
   const dragInfo = useRef<{
     target: 'main' | 'secondary' | null;
@@ -304,12 +304,12 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
   const sessionKey = `${SESSION_KEY_PREFIX}${tab}`;
 
   useEffect(() => {
-    if (!selectedDate || (!isDataImported && tab === 'backtester') || !sessionStartTime) {
+    const dateObj = selectedDate;
+    if (!dateObj || (!isDataImported && tab === 'backtester') || !sessionStartTime) {
         setOpeningRange(null);
         return;
     }
   
-    const dateObj = new Date(selectedDate);
     if (isNaN(dateObj.getTime())) {
         setOpeningRange(null);
         return;
@@ -1393,7 +1393,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                             loss: 'bg-red-200 text-red-900 rounded-full font-bold',
                             modified: 'bg-orange-200 text-orange-900 rounded-full font-bold',
                         }}
-                        disabled={!isDataImported && rrTools.length === 0}
+                        disabled={tab === 'journal' ? !isDataImported : !isDataImported && rrTools.length === 0}
                     />
                 </PopoverContent>
             </Popover>
@@ -1433,5 +1433,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     </div>
   );
 }
+
+    
 
     
