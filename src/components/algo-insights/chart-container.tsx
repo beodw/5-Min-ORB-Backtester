@@ -1125,6 +1125,18 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         setBacktestEndDate(nextCandleDate);
     }
 
+    const handleDateSelect = (date: Date) => {
+        setSelectedDate(date);
+
+        const [startHour, startMinute] = sessionStartTime.split(':').map(Number);
+        const sessionStart = new Date(date);
+        sessionStart.setUTCFullYear(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+        sessionStart.setUTCHours(startHour, startMinute, 0, 0);
+        
+        const initialVisibleEndDate = new Date(sessionStart.getTime() + 25 * 60 * 1000);
+        setBacktestEndDate(initialVisibleEndDate);
+    };
+
   // --- END JOURNAL FUNCTIONS ---
 
   const isPlacingAnything = !!placingToolType || isPlacingPriceMarker || isPlacingMeasurement;
@@ -1380,8 +1392,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                         selected={selectedDate}
                         onSelect={(date) => {
                             if (date) {
-                                setSelectedDate(date);
-                                setBacktestEndDate(undefined); // Reset stepping when a new date is picked
+                                handleDateSelect(date);
                             }
                         }}
                         defaultMonth={selectedDate}
@@ -1395,7 +1406,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                             loss: 'bg-red-200 text-red-900 rounded-full font-bold',
                             modified: 'bg-orange-200 text-orange-900 rounded-full font-bold',
                         }}
-                        disabled={tab === 'journal' ? !isDataImported : !isDataImported && rrTools.length === 0}
+                        disabled={!isDataImported && rrTools.length === 0}
                     />
                 </PopoverContent>
             </Popover>
@@ -1441,3 +1452,4 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     
 
       
+
