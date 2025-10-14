@@ -305,9 +305,9 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
 
   useEffect(() => {
     const dateObj = selectedDate;
-    if (!dateObj || (!isDataImported && tab === 'backtester') || !sessionStartTime) {
-        setOpeningRange(null);
-        return;
+    if (!dateObj || !isDataImported || !sessionStartTime) {
+      setOpeningRange(null);
+      return;
     }
 
     if (isNaN(dateObj.getTime())) {
@@ -338,7 +338,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     } else {
         setOpeningRange(null);
     }
-  }, [selectedDate, priceData, sessionStartTime, isDataImported, tab]);
+  }, [selectedDate, priceData, sessionStartTime, isDataImported]);
 
 
   useEffect(() => {
@@ -830,12 +830,13 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
               const link = document.createElement("a");
               const url = URL.createObjectURL(blob);
               link.setAttribute("href", url);
-              link.setAttribute("download", "trade_log_report.csv");
+              const reportFileName = tab === 'journal' ? "journal_report.csv" : "backtest_report.csv";
+              link.setAttribute("download", reportFileName);
               link.style.visibility = 'hidden';
               document.body.appendChild(link);
               link.click();
               document.body.removeChild(link);
-              toast({ variant: "default", title: "Export Complete", description: "Your detailed trade log has been downloaded." });
+              toast({ variant: "default", title: "Export Complete", description: `Your ${tab} report has been downloaded.` });
           } catch(error: any) {
                toast({ variant: "destructive", title: "Export Error", description: `An unexpected error occurred: ${error.message}` });
           }
@@ -897,149 +898,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
   };
 
   // --- JOURNAL FUNCTIONS ---
-
-  const handleImportJournalClick = () => {
-    journalFileInputRef.current?.click();
-  };
-
-  const parseCsvWithMultiline = (text: string): string[][] => {
-      const rows: string[][] = [];
-      let currentRow: string[] = [];
-      let currentField = '';
-      let inQuotedField = false;
-      const normalizedText = text.replace(/(\r\n|\r)/g, '\n');
-
-      for (let i = 0; i < normalizedText.length; i++) {
-          const char = normalizedText[i];
-          if (inQuotedField) {
-              if (char === '"') {
-                  if (i + 1 < normalizedText.length && normalizedText[i+1] === '"') {
-                      currentField += '"';
-                      i++;
-                  } else {
-                      inQuotedField = false;
-                  }
-              } else {
-                  currentField += char;
-              }
-          } else {
-              if (char === '"') {
-                  inQuotedField = true;
-              } else if (char === ',') {
-                  currentRow.push(currentField);
-                  currentField = '';
-              } else if (char === '\n') {
-                  currentRow.push(currentField);
-                  rows.push(currentRow);
-                  currentRow = [];
-                  currentField = '';
-              } else {
-                  currentField += char;
-              }
-          }
-      }
-      if (currentField || currentRow.length > 0) {
-        currentRow.push(currentField);
-        rows.push(currentRow);
-      }
-      return rows.filter(row => row.length > 1 || (row.length === 1 && row[0].trim() !== ''));
-  };
   
-  const handleJournalFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    setJournalFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        try {
-            const text = e.target?.result as string;
-            const allRows = parseCsvWithMultiline(text);
-
-            if (allRows.length <= 1) throw new Error("Journal CSV is empty or has only a header.");
-            
-            const headerLine = allRows[0].map(h => h.trim());
-            const requiredHeaders = ["TradeID", "EntryPrice", "StopLossPrice"];
-            const headerIndices: Record<string, number> = {};
-
-            requiredHeaders.forEach(h => {
-                const index = headerLine.indexOf(h);
-                if (index === -1) {
-                    throw new Error(`Missing required column in journal file: "${h}"`);
-                }
-                headerIndices[h] = index;
-            });
-            
-            const dataRows = allRows.slice(1);
-            
-            // Group rows by TradeID
-            const tradesMap = new Map<string, any>();
-            dataRows.forEach(row => {
-                const tradeId = row[headerIndices["TradeID"]];
-                if (!tradesMap.has(tradeId)) {
-                    tradesMap.set(tradeId, {
-                        entryPrice: parseFloat(row[headerIndices["EntryPrice"]]),
-                        stopLossPrice: parseFloat(row[headerIndices["StopLossPrice"]]),
-                    });
-                }
-            });
-
-            // Reconstruct RR Tools from the map
-            const reconstructedTools: RRToolType[] = [];
-            tradesMap.forEach((tradeInfo, tradeId) => {
-                const entryDate = new Date(tradeId);
-                if (isNaN(entryDate.getTime())) {
-                    console.warn(`Skipping trade with invalid TradeID (date): ${tradeId}`);
-                    return;
-                }
-
-                const { entryPrice, stopLossPrice } = tradeInfo;
-                if (isNaN(entryPrice) || isNaN(stopLossPrice)) {
-                    console.warn(`Skipping trade with invalid price data: ${tradeId}`);
-                    return;
-                }
-
-                const position = stopLossPrice < entryPrice ? 'long' : 'short';
-                const risk = Math.abs(entryPrice - stopLossPrice);
-                const takeProfit = position === 'long' ? entryPrice + (risk * 2) : entryPrice - (risk * 2);
-
-                reconstructedTools.push({
-                    id: `rr-recon-${tradeId}`,
-                    entryDate,
-                    entryPrice,
-                    stopLoss: stopLossPrice,
-                    takeProfit,
-                    position,
-                    widthInPoints: 100, // Default width
-                });
-            });
-
-            if (reconstructedTools.length === 0) {
-              throw new Error(`No valid trades could be reconstructed from the file. Please check the file format and data.`);
-            }
-            
-            // Set the new tools, clearing old drawings
-            setDrawingState({
-                rrTools: reconstructedTools,
-                priceMarkers: [],
-                measurementTools: []
-            });
-            setHistory([]);
-            setRedoStack([]);
-
-            // Also need to import the price data file to see the chart
-            handleImportClick('bid');
-
-            toast({ title: "Journal Reconstructed", description: `${reconstructedTools.length} trades loaded. Please import the Bid price data to view them on the chart.` });
-
-        } catch (error: any) {
-            toast({ variant: "destructive", title: "Journal Import Failed", description: error.message, duration: 9000 });
-        }
-    };
-    reader.readAsText(file);
-    if(journalFileInputRef.current) journalFileInputRef.current.value = "";
-  };
-
   const processJournalTrades = (trades: JournalTrade[]) => {
       const results: Record<string, DayResult> = {};
       const groupedByDay: Record<string, JournalTrade[]> = {};
@@ -1175,61 +1034,33 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
 
                     <div className="h-6 border-l border-border/50"></div>
                 
-                    {tab === 'backtester' ? (
-                      <>
-                        <TooltipProvider>
-                            <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button variant="ghost" size="icon" onClick={() => handleImportClick('bid')}>
-                                <FileUp className={cn("h-5 w-5", isDataImported ? "text-chart-2" : "text-muted-foreground")} />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent><p>{isDataImported ? `Bid: ${fileName}`: "Import Bid Data"}</p></TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                        <TooltipProvider>
-                            <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button variant="ghost" size="icon" onClick={() => handleImportClick('ask')}>
-                                <FileUp className={cn("h-5 w-5", isAskDataImported ? "text-chart-5" : "text-muted-foreground")} />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent><p>{isAskDataImported ? `Ask: ${askFileName}` : "Import Ask Data"}</p></TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                        <input type="file" ref={askFileInputRef} onChange={(e) => handleFileChange(e, 'ask')} accept=".csv" className="hidden" />
-
-                         <Button variant="ghost" onClick={handleExportCsv} disabled={rrTools.length === 0 || !isDataImported || !isAskDataImported} className="text-foreground">
-                            <Download className="mr-2 h-4 w-4" />
-                            Download Report
-                        </Button>
-                      </>
-                    ) : (
-                        <>
-                            <TooltipProvider>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <Button variant="ghost" size="icon" onClick={handleImportJournalClick}>
-                                            <BookOpen className={cn("h-5 w-5", rrTools.length > 0 ? "text-chart-2" : "text-muted-foreground")} />
-                                        </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent><p>Import Trade Log for Reconstruction</p></TooltipContent>
-                                </Tooltip>
-                            </TooltipProvider>
-                             <TooltipProvider>
-                                <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button variant="ghost" size="icon" onClick={() => handleImportClick('bid')}>
-                                    <FileUp className={cn("h-5 w-5", isDataImported ? "text-chart-2" : "text-muted-foreground")} />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent><p>{isDataImported ? `Bid: ${fileName}`: "Import Bid Data"}</p></TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                            <input type="file" ref={journalFileInputRef} onChange={handleJournalFileChange} accept=".csv" className="hidden" />
-                        </>
-                    )}
+                    <TooltipProvider>
+                        <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button variant="ghost" size="icon" onClick={() => handleImportClick('bid')}>
+                            <FileUp className={cn("h-5 w-5", isDataImported ? "text-chart-2" : "text-muted-foreground")} />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent><p>{isDataImported ? `Bid: ${fileName}`: "Import Bid Data"}</p></TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    <TooltipProvider>
+                        <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button variant="ghost" size="icon" onClick={() => handleImportClick('ask')}>
+                            <FileUp className={cn("h-5 w-5", isAskDataImported ? "text-chart-5" : "text-muted-foreground")} />
+                          </Button>
+                        </TooltipTrigger>                        
+                        <TooltipContent><p>{isAskDataImported ? `Ask: ${askFileName}` : "Import Ask Data"}</p></TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    <input type="file" ref={askFileInputRef} onChange={(e) => handleFileChange(e, 'ask')} accept=".csv" className="hidden" />
                     <input type="file" ref={fileInputRef} onChange={(e) => handleFileChange(e, 'bid')} accept=".csv" className="hidden" />
+
+                     <Button variant="ghost" onClick={handleExportCsv} disabled={rrTools.length === 0 || !isDataImported || !isAskDataImported} className="text-foreground">
+                        <Download className="mr-2 h-4 w-4" />
+                        Download Report
+                    </Button>
                 </>
             </div>
             {fileName && (
@@ -1237,7 +1068,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                     <p className="text-xs text-muted-foreground/80">Bid Data: <span className="font-medium text-foreground/90">{fileName}</span></p>
                 </div>
             )}
-             {askFileName && tab === 'backtester' && (
+             {askFileName && (
                 <div className="bg-card/70 backdrop-blur-sm rounded-md px-2 py-1 shadow-md ml-8">
                     <p className="text-xs text-muted-foreground/80">Ask Data: <span className="font-medium text-foreground/90">{askFileName}</span></p>
                 </div>
@@ -1258,12 +1089,8 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                 </div>
                 <TooltipProvider>
                     <div className="flex justify-center gap-1">
-                        {tab === 'backtester' && (
-                            <>
-                                <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceLong} disabled={isPlacingAnything || !isDataImported}><ArrowUp className="w-5 h-5 text-accent"/></Button></TooltipTrigger><TooltipContent><p>Place Long Position</p></TooltipContent></Tooltip>
-                                <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceShort} disabled={isPlacingAnything || !isDataImported}><ArrowDown className="w-5 h-5 text-destructive"/></Button></TooltipTrigger><TooltipContent><p>Place Short Position</p></TooltipContent></Tooltip>
-                            </>
-                        )}
+                        <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceLong} disabled={isPlacingAnything || !isDataImported}><ArrowUp className="w-5 h-5 text-accent"/></Button></TooltipTrigger><TooltipContent><p>Place Long Position</p></TooltipContent></Tooltip>
+                        <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" onClick={handlePlaceShort} disabled={isPlacingAnything || !isDataImported}><ArrowDown className="w-5 h-5 text-destructive"/></Button></TooltipTrigger><TooltipContent><p>Place Short Position</p></TooltipContent></Tooltip>
                         
                         <Tooltip>
                             <TooltipTrigger asChild>
@@ -1433,7 +1260,3 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     </div>
   );
 }
-
-    
-
-    
