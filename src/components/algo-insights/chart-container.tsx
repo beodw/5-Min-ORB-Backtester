@@ -318,7 +318,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     const [startHour, startMinute] = sessionStartTime.split(':').map(Number);
     
     const sessionStart = new Date(dateObj);
-    sessionStart.setUTCFullYear(dateObj.getUTCFullYear(), dateObj.getUTCFullMonth(), dateObj.getUTCDate());
+    sessionStart.setUTCFullYear(dateObj.getUTCFullYear(), dateObj.getUTCMonth(), dateObj.getUTCDate());
     sessionStart.setUTCHours(startHour, startMinute, 0, 0);
     
     const sessionEnd = new Date(sessionStart.getTime() + 5 * 60 * 1000);
@@ -1121,7 +1121,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         
         const [startHour, startMinute] = sessionStartTime.split(':').map(Number);
         const sessionStart = new Date(date);
-        sessionStart.setUTCFullYear(date.getUTCFullYear(), date.getUTCFullMonth(), date.getUTCDate());
+        sessionStart.setUTCFullYear(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
         sessionStart.setUTCHours(startHour, startMinute, 0, 0);
         
         const initialVisibleEndDate = new Date(sessionStart.getTime() + 25 * 60 * 1000);
@@ -1249,8 +1249,8 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
             )}
         </div>
         <div
-            className="absolute z-10"
-            style={{ top: `${toolbarPositions.secondary.y}px`, left: `${toolbarPositions.secondary.x}px` }}
+          className="absolute z-10"
+          style={{ top: `${toolbarPositions.secondary.y}px`, left: `${toolbarPositions.secondary.x}px` }}
         >
             <div className="flex items-center gap-2 bg-card/80 backdrop-blur-sm p-2 rounded-lg shadow-lg">
                 <div onMouseDown={(e) => handleMouseDownOnToolbar(e, 'secondary')} className="cursor-grab active:cursor-grabbing p-1 -ml-1">
@@ -1433,5 +1433,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     </div>
   );
 }
+
+    
 
     
