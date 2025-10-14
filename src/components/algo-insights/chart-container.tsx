@@ -82,8 +82,8 @@ const generateTradeLog = (
     if (riskInPrice <= 0) return [];
     
     let mfePrice = tool.entryPrice;
-    let maePointer = tool.entryPrice;
-    let maxDrawdownFromMFEPrice = 0;
+    let maePrice = tool.entryPrice;
+    let maxDrawdownFromMFEinPrice = 0;
 
     for (let i = entryIndex; i < priceData.length; i++) {
         const candle = priceData[i];
@@ -102,35 +102,34 @@ const generateTradeLog = (
             mfePrice = Math.min(mfePrice, candle.low);
         }
         
-        let currentMaePointer = maePointer;
         if (tradeStatus === 'StopLoss') {
-            currentMaePointer = tool.stopLoss;
+             if (tool.position === 'long') {
+                maePrice = Math.min(maePrice, tool.stopLoss);
+            } else {
+                maePrice = Math.max(maePrice, tool.stopLoss);
+            }
         } else {
             if (tool.position === 'long') {
-                currentMaePointer = Math.min(maePointer, candle.low);
+                maePrice = Math.min(maePrice, candle.low);
             } else {
-                currentMaePointer = Math.max(maePointer, candle.high);
+                maePrice = Math.max(maePrice, candle.high);
             }
         }
-        maePointer = currentMaePointer;
         
-        // Calculate MFE in R
         const mfePriceMove = Math.abs(mfePrice - tool.entryPrice);
         const mfeR = mfePriceMove / riskInPrice;
 
-        // Calculate MAE in R
-        const maePriceMove = Math.abs(maePointer - tool.entryPrice);
-        const maeR = Math.min(1, maePriceMove / riskInPrice); // Cap MAE_R at 1
+        const maePriceMove = Math.abs(maePrice - tool.entryPrice);
+        const maeR = Math.min(1, maePriceMove / riskInPrice);
         
-        // Update the maximum drawdown from MFE based on wicks
-        let currentDrawdownPrice = 0;
+        let currentDrawdownInPrice = 0;
         if (tool.position === 'long') {
-            currentDrawdownPrice = mfePrice - candle.low;
+            currentDrawdownInPrice = mfePrice - candle.low;
         } else { // short
-            currentDrawdownPrice = candle.high - mfePrice;
+            currentDrawdownInPrice = candle.high - mfePrice;
         }
-        maxDrawdownFromMFEPrice = Math.max(maxDrawdownFromMFEPrice, currentDrawdownPrice);
-        const drawdownFromMfeR = maxDrawdownFromMFEPrice / riskInPrice;
+        maxDrawdownFromMFEinPrice = Math.max(maxDrawdownFromMFEinPrice, currentDrawdownInPrice);
+        const drawdownFromMfeR = maxDrawdownFromMFEinPrice / riskInPrice;
 
         log.push({
             TradeID: tradeID,
@@ -923,47 +922,51 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                 if (lines.length <= 1) throw new Error("Journal file is empty or has only a header.");
 
                 const header = lines[0].split(',').map(h => h.trim());
-                setJournalHeader(header);
                 
-                // Find required columns
-                const pairIndex = header.indexOf('pair');
-                const dateTakenIndex = header.indexOf('date_taken');
-                const dateClosedIndex = header.indexOf('date_closed');
-                const maxRIndex = header.indexOf('max_R');
-                const outcomeIndex = header.indexOf('outcome');
-                const statusIndex = header.indexOf('status');
-
-                if ([pairIndex, dateTakenIndex, dateClosedIndex, maxRIndex, outcomeIndex, statusIndex].includes(-1)) {
-                    throw new Error(`Missing one or more required columns: pair, date_taken, date_closed, max_R, outcome, status.`);
+                const requiredColumns = ["TradeID", "Timestamp", "EntryPrice", "StopLossPrice"];
+                const missingColumns = requiredColumns.filter(col => !header.includes(col));
+                if (missingColumns.length > 0) {
+                    throw new Error(`Missing required columns: ${missingColumns.join(', ')}.`);
                 }
+                
+                const tradeIdIndex = header.indexOf('TradeID');
+                const entryPriceIndex = header.indexOf('EntryPrice');
+                const stopLossPriceIndex = header.indexOf('StopLossPrice');
+                const mfeRIndex = header.indexOf('MFE_R');
 
-                const trades: JournalTrade[] = lines.slice(1).map(line => {
+                const tradesData: { [key: string]: { entryPrice: number, stopLoss: number, entryDateStr: string, maxMfeR: number } } = {};
+
+                lines.slice(1).forEach(line => {
                     const columns = line.split(',');
-                    const outcome = columns[outcomeIndex].trim() as 'Win' | 'Loss';
+                    const tradeId = columns[tradeIdIndex];
+                    if (!tradesData[tradeId]) {
+                         tradesData[tradeId] = {
+                            entryPrice: parseFloat(columns[entryPriceIndex]),
+                            stopLoss: parseFloat(columns[stopLossPriceIndex]),
+                            entryDateStr: tradeId,
+                            maxMfeR: 0,
+                        };
+                    }
+                     tradesData[tradeId].maxMfeR = Math.max(tradesData[tradeId].maxMfeR, parseFloat(columns[mfeRIndex]));
+                });
+                
+                const newRrTools: RRToolType[] = Object.values(tradesData).map(trade => {
+                    const risk = Math.abs(trade.entryPrice - trade.stopLoss);
+                    const takeProfit = trade.entryPrice + (risk * trade.maxMfeR * (trade.entryPrice > trade.stopLoss ? 1 : -1));
                     return {
-                        pair: columns[pairIndex].trim(),
-                        dateTaken: new Date(columns[dateTakenIndex].trim()),
-                        dateClosed: new Date(columns[dateClosedIndex].trim()),
-                        maxR: parseFloat(columns[maxRIndex]),
-                        status: columns[statusIndex].trim() as any,
-                        originalRow: columns,
-                        originalOutcome: outcome,
-                        outcome: outcome
+                        id: `rr-${trade.entryDateStr}-${Math.random()}`,
+                        entryPrice: trade.entryPrice,
+                        stopLoss: trade.stopLoss,
+                        takeProfit: takeProfit,
+                        entryDate: new Date(trade.entryDateStr),
+                        widthInPoints: 100, // Default width, can be adjusted
+                        position: trade.entryPrice > trade.stopLoss ? 'long' : 'short',
                     };
-                }).filter(t => !isNaN(t.dateTaken.getTime()));
-
-                setAllJournalTrades(trades);
+                });
                 
-                const uniquePairs = Array.from(new Set(trades.map(t => t.pair)));
-                const firstPair = uniquePairs[0] || JOURNAL_PAIRS[0];
-                setSelectedPair(firstPair);
+                setRrTools(prev => [...prev, ...newRrTools]);
                 
-                const firstTradeDate = trades[0]?.dateTaken;
-                if(firstTradeDate) handleDateSelect(firstTradeDate);
-                
-                processJournalTrades(trades);
-                
-                toast({ title: "Journal Imported", description: `${trades.length} trades loaded.` });
+                toast({ title: "Journal Imported", description: `${newRrTools.length} trades loaded onto the chart.` });
 
             } catch (error: any) {
                 toast({ variant: "destructive", title: "Journal Import Failed", description: error.message });
@@ -1114,7 +1117,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                             <Tooltip>
                                 <TooltipTrigger asChild>
                                     <Button variant="ghost" size="icon" onClick={() => handleImportClick('journal')}>
-                                        <BookOpen className={cn("h-5 w-5", allJournalTrades.length > 0 ? "text-primary" : "text-muted-foreground")} />
+                                        <BookOpen className={cn("h-5 w-5", journalFileName ? "text-primary" : "text-muted-foreground")} />
                                     </Button>
                                 </TooltipTrigger>
                                 <TooltipContent><p>Import Journal</p></TooltipContent>
@@ -1166,8 +1169,8 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
             )}
         </div>
         <div 
-          className="absolute z-10"
-          style={{ top: `${toolbarPositions.secondary.y}px`, left: `${toolbarPositions.secondary.x}px` }}
+            className="absolute z-10"
+            style={{ top: `${toolbarPositions.secondary.y}px`, left: `${toolbarPositions.secondary.x}px` }}
         >
             <div className="flex items-center gap-2 bg-card/80 backdrop-blur-sm p-2 rounded-lg shadow-lg">
                 <div onMouseDown={(e) => handleMouseDownOnToolbar(e, 'secondary')} className="cursor-grab active:cursor-grabbing p-1 -ml-1">
@@ -1294,7 +1297,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                     <Calendar
                         mode="single"
                         selected={selectedDate}
-                        onSelect={handleDateSelect}
+                        onSelect={(date) => handleDateSelect(date)}
                         defaultMonth={selectedDate}
                         modifiers={{ 
                             win: (date) => dayResults[date.toISOString().split('T')[0]] === 'win',
@@ -1346,5 +1349,3 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     </div>
   );
 }
-
-    
