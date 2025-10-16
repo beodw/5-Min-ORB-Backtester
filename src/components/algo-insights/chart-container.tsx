@@ -36,6 +36,9 @@ type TradeLogEntry = {
     CandleNumber: number;
     EntryPrice: number;
     StopLossPrice: number;
+    CurrentPrice_Open: number;
+    CurrentPrice_High: number;
+    CurrentPrice_Low: number;
     CurrentPrice_Close: number;
     MFE_R: number;
     MAE_R: number;
@@ -137,6 +140,9 @@ const generateTradeLog = (
             CandleNumber: i - entryIndex + 1,
             EntryPrice: tool.entryPrice,
             StopLossPrice: tool.stopLoss,
+            CurrentPrice_Open: candle.open,
+            CurrentPrice_High: candle.high,
+            CurrentPrice_Low: candle.low,
             CurrentPrice_Close: candle.close,
             MFE_R: parseFloat(mfeR.toFixed(4)),
             MAE_R: parseFloat(maeR.toFixed(4)),
@@ -803,7 +809,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
           return;
       }
       
-      const headers = ["TradeID", "Timestamp", "CandleNumber", "EntryPrice", "StopLossPrice", "CurrentPrice_Close", "MFE_R", "MAE_R", "DrawdownFromMFE_R", "Trade Status"].join(',');
+      const headers = ["TradeID", "Timestamp", "CandleNumber", "EntryPrice", "StopLossPrice", "CurrentPrice_Open", "CurrentPrice_High", "CurrentPrice_Low", "CurrentPrice_Close", "MFE_R", "MAE_R", "DrawdownFromMFE_R", "Trade Status"].join(',');
       
       toast({ title: "Generating Report...", description: `Processing ${rrTools.length} trades. This may take a moment.` });
 
@@ -813,15 +819,8 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                   if (tool.position === 'long') {
                       return generateTradeLog(tool, priceData);
                   } else { // short position
-                      const shortLog = generateTradeLog(tool, askPriceData);
-                      
-                      const bidCloseMap = new Map<string, number>();
-                      priceData.forEach(p => bidCloseMap.set(formatDateForCsvTimestamp(p.date), p.close));
-                      
-                      return shortLog.map(logEntry => ({
-                          ...logEntry,
-                          CurrentPrice_Close: bidCloseMap.get(logEntry.Timestamp) || logEntry.CurrentPrice_Close
-                      }));
+                      // For shorts, we use ask data for the simulation logic
+                      return generateTradeLog(tool, askPriceData);
                   }
               });
               
@@ -831,7 +830,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
               }
 
               const rows = allLogs.map(logEntry => 
-                  [logEntry.TradeID, logEntry.Timestamp, logEntry.CandleNumber, logEntry.EntryPrice, logEntry.StopLossPrice, logEntry.CurrentPrice_Close, logEntry.MFE_R, logEntry.MAE_R, logEntry.DrawdownFromMFE_R, logEntry['Trade Status']].join(',')
+                  [logEntry.TradeID, logEntry.Timestamp, logEntry.CandleNumber, logEntry.EntryPrice, logEntry.StopLossPrice, logEntry.CurrentPrice_Open, logEntry.CurrentPrice_High, logEntry.CurrentPrice_Low, logEntry.CurrentPrice_Close, logEntry.MFE_R, logEntry.MAE_R, logEntry.DrawdownFromMFE_R, logEntry['Trade Status']].join(',')
               ).join('\n');
 
               const csvContent = `${headers}\n${rows}`;
@@ -923,7 +922,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
 
                 const header = lines[0].split(',').map(h => h.trim());
                 
-                const requiredColumns = ["TradeID", "Timestamp", "EntryPrice", "StopLossPrice"];
+                const requiredColumns = ["TradeID", "Timestamp", "EntryPrice", "StopLossPrice", "MFE_R"];
                 const missingColumns = requiredColumns.filter(col => !header.includes(col));
                 if (missingColumns.length > 0) {
                     throw new Error(`Missing required columns: ${missingColumns.join(', ')}.`);
@@ -1169,8 +1168,8 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
             )}
         </div>
         <div 
-            className="absolute z-10"
-            style={{ top: `${toolbarPositions.secondary.y}px`, left: `${toolbarPositions.secondary.x}px` }}
+          className="absolute z-10"
+          style={{ top: `${toolbarPositions.secondary.y}px`, left: `${toolbarPositions.secondary.x}px` }}
         >
             <div className="flex items-center gap-2 bg-card/80 backdrop-blur-sm p-2 rounded-lg shadow-lg">
                 <div onMouseDown={(e) => handleMouseDownOnToolbar(e, 'secondary')} className="cursor-grab active:cursor-grabbing p-1 -ml-1">
@@ -1297,7 +1296,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                     <Calendar
                         mode="single"
                         selected={selectedDate}
-                        onSelect={(date) => handleDateSelect(date)}
+                        onSelect={handleDateSelect}
                         defaultMonth={selectedDate}
                         modifiers={{ 
                             win: (date) => dayResults[date.toISOString().split('T')[0]] === 'win',
