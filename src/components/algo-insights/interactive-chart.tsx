@@ -77,9 +77,9 @@ const getAggregationLevel = (rangeInMinutes: number) => {
 };
 
 
-export function InteractiveChart({ 
-    data, 
-    timeZone, 
+export function InteractiveChart({
+    data,
+    timeZone,
     endDate,
     rrTools,
     priceMarkers,
@@ -95,28 +95,13 @@ export function InteractiveChart({
     pipValue,
     isYAxisLocked,
     openingRange,
-    isPlacingRR,
-    isPlacingPriceMarker
 }: InteractiveChartProps) {
     const chartContainerRef = useRef<HTMLDivElement>(null);
     const chartRef = useRef<IChartApi | null>(null);
     const candlestickSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
     const [currentAggregation, setCurrentAggregation] = useState('1m');
+    const propsRef = useRef({ onChartClick, onChartMouseMove, displayData: [] as PriceData[] });
 
-    const handleVisibleTimeRangeChange = useCallback((newVisibleTimeRange: TimeRange | null) => {
-        if (!newVisibleTimeRange || !chartRef.current) return;
-
-        const from = (newVisibleTimeRange.from as UTCTimestamp) * 1000;
-        const to = (newVisibleTimeRange.to as UTCTimestamp) * 1000;
-
-        const rangeInMinutes = (to - from) / (60 * 1000);
-        const newAggregation = getAggregationLevel(rangeInMinutes);
-        
-        if (newAggregation !== currentAggregation) {
-            setCurrentAggregation(newAggregation);
-        }
-    }, [currentAggregation]);
-    
     const displayData = useMemo(() => {
         const selectedData = data[currentAggregation as keyof AggregatedPriceData] || data['1m'];
         if (endDate) {
@@ -125,67 +110,15 @@ export function InteractiveChart({
         }
         return selectedData || [];
     }, [data, currentAggregation, endDate]);
+    
+    propsRef.current.displayData = displayData;
 
     const chartData = useMemo(() => convertToCandlestickData(displayData), [displayData]);
 
-    // Handle Chart Click
-    const handleChartClickEvent = useCallback((param: MouseEventParams) => {
-        if (!param.point || !param.time || !candlestickSeriesRef.current || !chartRef.current) return;
-        
-        const price = candlestickSeriesRef.current.coordinateToPrice(param.point.y) as number;
-        const logical = param.logical;
-        if (logical === null) return;
-        
-        const matchingCandles = chartData.filter(d => d.time === param.time);
-        if (matchingCandles.length === 0) return;
-
-        const candle = matchingCandles[0];
-        const dataIndex = displayData.findIndex(d => d.date.getTime() / 1000 === candle.time);
-
-        if (dataIndex < 0) return;
-
-        const logicalRange = chartRef.current.timeScale().getVisibleLogicalRange();
-        const priceScale = chartRef.current.priceScale('right');
-        const priceRange = priceScale.getVisibleRange();
-
-        onChartClick({
-            price,
-            date: new Date((param.time as number) * 1000),
-            dataIndex,
-            closePrice: candle.close,
-            yDomain: priceRange ? [priceRange.from, priceRange.to] : [0,0],
-            xDomain: logicalRange ? [logicalRange.from, logicalRange.to] : [0,0],
-            candle: candle.original,
-        });
-
-    }, [chartData, displayData, onChartClick]);
-
-    // Handle Chart Mouse Move
-    const handleChartMouseMoveEvent = useCallback((param: MouseEventParams) => {
-         if (!param.point || !param.time || !candlestickSeriesRef.current || !chartRef.current || !chartData || chartData.length === 0) return;
-        
-        const price = candlestickSeriesRef.current.coordinateToPrice(param.point.y) as number;
-
-        const candle = chartData.find(d => d.time === param.time);
-        if (!candle) return;
-        const dataIndex = displayData.findIndex(d => d.date.getTime() / 1000 === candle.time);
-
-        if (dataIndex < 0) return;
-
-        const logicalRange = chartRef.current.timeScale().getVisibleLogicalRange();
-        const priceScale = chartRef.current.priceScale('right');
-        const priceRange = priceScale.getVisibleRange();
-
-        onChartMouseMove({
-            price,
-            date: new Date((param.time as number) * 1000),
-            dataIndex,
-            closePrice: candle.close,
-            yDomain: priceRange ? [priceRange.from, priceRange.to] : [0, 0],
-            xDomain: logicalRange ? [logicalRange.from, logicalRange.to] : [0, 0],
-            candle: candle.original,
-        });
-    }, [chartData, displayData, onChartMouseMove]);
+    useEffect(() => {
+        propsRef.current.onChartClick = onChartClick;
+        propsRef.current.onChartMouseMove = onChartMouseMove;
+    }, [onChartClick, onChartMouseMove]);
 
 
     useEffect(() => {
@@ -233,6 +166,51 @@ export function InteractiveChart({
             wickUpColor: getThemeColor('text-accent'),
         });
         candlestickSeriesRef.current = candlestickSeries;
+
+        const handleVisibleTimeRangeChange = (newVisibleTimeRange: TimeRange | null) => {
+            if (!newVisibleTimeRange || !chart) return;
+
+            const from = (newVisibleTimeRange.from as UTCTimestamp) * 1000;
+            const to = (newVisibleTimeRange.to as UTCTimestamp) * 1000;
+
+            const rangeInMinutes = (to - from) / (60 * 1000);
+            const newAggregation = getAggregationLevel(rangeInMinutes);
+            
+            if (newAggregation !== currentAggregation) {
+                setCurrentAggregation(newAggregation);
+            }
+        };
+
+        const handleEvent = (param: MouseEventParams, callback: (data: ChartClickData) => void) => {
+            if (!param.point || !param.time || !candlestickSeries || !chart) return;
+            
+            const price = candlestickSeries.coordinateToPrice(param.point.y) as number;
+            
+            const convertedData = convertToCandlestickData(propsRef.current.displayData);
+            const matchingCandles = convertedData.filter(d => d.time === param.time);
+            if (matchingCandles.length === 0) return;
+    
+            const candle = matchingCandles[0];
+            const dataIndex = propsRef.current.displayData.findIndex(d => d.date.getTime() / 1000 === candle.time);
+            if (dataIndex < 0) return;
+    
+            const logicalRange = chart.timeScale().getVisibleLogicalRange();
+            const priceScale = chart.priceScale('right');
+            const priceRange = priceScale.getVisibleRange();
+    
+            callback({
+                price,
+                date: new Date((param.time as number) * 1000),
+                dataIndex,
+                closePrice: candle.close,
+                yDomain: priceRange ? [priceRange.from, priceRange.to] : [0, 0],
+                xDomain: logicalRange ? [logicalRange.from, logicalRange.to] : [0, 0],
+                candle: candle.original,
+            });
+        };
+
+        const handleChartClickEvent = (param: MouseEventParams) => handleEvent(param, propsRef.current.onChartClick);
+        const handleChartMouseMoveEvent = (param: MouseEventParams) => handleEvent(param, propsRef.current.onChartMouseMove);
         
         chart.timeScale().fitContent();
 
@@ -251,7 +229,7 @@ export function InteractiveChart({
             chart.remove();
             chartRef.current = null;
         };
-    }, [handleVisibleTimeRangeChange, handleChartClickEvent, handleChartMouseMoveEvent]);
+    }, [currentAggregation]);
 
     useEffect(() => {
         if (candlestickSeriesRef.current) {
@@ -290,7 +268,6 @@ export function InteractiveChart({
         }
     }, [isYAxisLocked]);
     
-    // Draw RR tools, Price Markers, Measurement Tools
     const drawnObjects = useRef<{
         rrTools: { [id: string]: RiskRewardTool };
         priceMarkers: { [id: string]: PriceMarker };
@@ -316,7 +293,6 @@ export function InteractiveChart({
     useEffect(() => {
         if (!candlestickSeriesRef.current) return;
     
-        // Clear previous lines
         if (openingRangeLines.current[0]) candlestickSeriesRef.current.removePriceLine(openingRangeLines.current[0]);
         if (openingRangeLines.current[1]) candlestickSeriesRef.current.removePriceLine(openingRangeLines.current[1]);
         openingRangeLines.current = [undefined, undefined];
