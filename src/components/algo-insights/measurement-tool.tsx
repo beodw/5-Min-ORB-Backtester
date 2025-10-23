@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { MeasurementTool as MeasurementToolType, ChartApi } from '@/types';
-import { X } from 'lucide-redacted'; // No such icon, assume lucide-react
+import { X } from 'lucide-react';
 import { formatDistance, format } from 'date-fns';
 
 interface MeasurementToolProps {
@@ -112,5 +112,3 @@ export function MeasurementTool({ tool, chart, onRemove, pipValue, isLive = fals
     </div>
   );
 }
-
-    
