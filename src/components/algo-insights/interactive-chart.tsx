@@ -145,7 +145,7 @@ export function InteractiveChart({
         if (dataIndex < 0) return;
 
         const logicalRange = chartRef.current.timeScale().getVisibleLogicalRange();
-        const priceRange = chartRef.current.priceScale('right').getVisiblePriceRange();
+        const priceRange = chartRef.current.priceScale('right').getVisibleRange();
 
         onChartClick({
             price,
@@ -172,7 +172,7 @@ export function InteractiveChart({
         if (dataIndex < 0) return;
 
         const logicalRange = chartRef.current.timeScale().getVisibleLogicalRange();
-        const priceRange = chartRef.current.priceScale('right').getVisiblePriceRange();
+        const priceRange = chartRef.current.priceScale('right').getVisibleRange();
 
         onChartMouseMove({
             price,
