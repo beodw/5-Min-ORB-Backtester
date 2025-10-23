@@ -190,7 +190,10 @@ export function InteractiveChart({
         if (!chartContainerRef.current) return;
         
         const computedStyle = getComputedStyle(document.documentElement);
-        const getColor = (variable: string) => `hsl(${computedStyle.getPropertyValue(variable).trim()})`;
+        const getColor = (variable: string) => {
+            const colorValue = computedStyle.getPropertyValue(variable).trim();
+            return `hsl(${colorValue.replace(/ /g, ', ')})`;
+        };
         
         const chart = createChart(chartContainerRef.current, {
             layout: {
