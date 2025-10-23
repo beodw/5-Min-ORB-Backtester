@@ -189,50 +189,46 @@ export function InteractiveChart({
     useEffect(() => {
         if (!chartContainerRef.current) return;
         
-        const computedStyle = getComputedStyle(document.documentElement);
-        
-        const tempDiv = document.createElement('div');
-        tempDiv.style.display = 'none';
-        document.body.appendChild(tempDiv);
-        
-        const getColor = (variable: string) => {
-            tempDiv.style.color = `hsl(${computedStyle.getPropertyValue(variable).trim()})`;
-            return window.getComputedStyle(tempDiv).color;
+        const getThemeColor = (tailwindColorClass: string, property: 'color' | 'backgroundColor' = 'color'): string => {
+            const tempDiv = document.createElement('div');
+            tempDiv.className = `${tailwindColorClass} hidden`;
+            document.body.appendChild(tempDiv);
+            const color = getComputedStyle(tempDiv)[property];
+            document.body.removeChild(tempDiv);
+            return color;
         };
-        
+
         const chart = createChart(chartContainerRef.current, {
             layout: {
-                background: { color: getColor('--background') },
-                textColor: getColor('--foreground'),
+                background: { color: getThemeColor('bg-background', 'backgroundColor') },
+                textColor: getThemeColor('text-foreground'),
             },
             grid: {
-                vertLines: { color: getColor('--border') },
-                horzLines: { color: getColor('--border') },
+                vertLines: { color: getThemeColor('text-border') },
+                horzLines: { color: getThemeColor('text-border') },
             },
             timeScale: {
                 timeVisible: true,
                 secondsVisible: false,
-                borderColor: getColor('--border'),
+                borderColor: getThemeColor('text-border'),
             },
             rightPriceScale: {
-                borderColor: getColor('--border'),
+                borderColor: getThemeColor('text-border'),
             },
             crosshair: {
                 mode: 1, // Magnet mode
             },
         });
-
-        document.body.removeChild(tempDiv);
         
         chartRef.current = chart;
 
         const candlestickSeries = chart.addCandlestickSeries({
-            upColor: getColor('--accent'),
-            downColor: getColor('--destructive'),
-            borderDownColor: getColor('--destructive'),
-            borderUpColor: getColor('--accent'),
-            wickDownColor: getColor('--destructive'),
-            wickUpColor: getColor('--accent'),
+            upColor: getThemeColor('text-accent'),
+            downColor: getThemeColor('text-destructive'),
+            borderDownColor: getThemeColor('text-destructive'),
+            borderUpColor: getThemeColor('text-accent'),
+            wickDownColor: getThemeColor('text-destructive'),
+            wickUpColor: getThemeColor('text-accent'),
         });
         candlestickSeriesRef.current = candlestickSeries;
         
