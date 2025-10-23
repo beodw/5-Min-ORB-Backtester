@@ -189,22 +189,25 @@ export function InteractiveChart({
     useEffect(() => {
         if (!chartContainerRef.current) return;
         
+        const computedStyle = getComputedStyle(document.documentElement);
+        const getColor = (variable: string) => `hsl(${computedStyle.getPropertyValue(variable).trim()})`;
+        
         const chart = createChart(chartContainerRef.current, {
             layout: {
-                background: { color: 'hsl(var(--background))' },
-                textColor: 'hsl(var(--foreground))',
+                background: { color: getColor('--background') },
+                textColor: getColor('--foreground'),
             },
             grid: {
-                vertLines: { color: 'hsl(var(--border))' },
-                horzLines: { color: 'hsl(var(--border))' },
+                vertLines: { color: getColor('--border') },
+                horzLines: { color: getColor('--border') },
             },
             timeScale: {
                 timeVisible: true,
                 secondsVisible: false,
-                borderColor: 'hsl(var(--border))',
+                borderColor: getColor('--border'),
             },
             rightPriceScale: {
-                borderColor: 'hsl(var(--border))',
+                borderColor: getColor('--border'),
             },
             crosshair: {
                 mode: 1, // Magnet mode
@@ -213,12 +216,12 @@ export function InteractiveChart({
         chartRef.current = chart;
 
         const candlestickSeries = chart.addCandlestickSeries({
-            upColor: 'hsl(var(--accent))',
-            downColor: 'hsl(var(--destructive))',
-            borderDownColor: 'hsl(var(--destructive))',
-            borderUpColor: 'hsl(var(--accent))',
-            wickDownColor: 'hsl(var(--destructive))',
-            wickUpColor: 'hsl(var(--accent))',
+            upColor: getColor('--accent'),
+            downColor: getColor('--destructive'),
+            borderDownColor: getColor('--destructive'),
+            borderUpColor: getColor('--accent'),
+            wickDownColor: getColor('--destructive'),
+            wickUpColor: getColor('--accent'),
         });
         candlestickSeriesRef.current = candlestickSeries;
         
@@ -228,7 +231,11 @@ export function InteractiveChart({
         chart.subscribeClick(handleChartClickEvent);
         chart.subscribeCrosshairMove(handleChartMouseMoveEvent);
 
+        const handleResize = () => chart.applyOptions({ width: chartContainerRef.current?.clientWidth, height: chartContainerRef.current?.clientHeight });
+        window.addEventListener('resize', handleResize);
+
         return () => {
+            window.removeEventListener('resize', handleResize);
             chart.timeScale().unsubscribeVisibleTimeRangeChange(handleVisibleTimeRangeChange);
             chart.unsubscribeClick(handleChartClickEvent);
             chart.unsubscribeCrosshairMove(handleChartMouseMoveEvent);
@@ -380,5 +387,3 @@ export function InteractiveChart({
         </div>
     );
 }
-
-    
