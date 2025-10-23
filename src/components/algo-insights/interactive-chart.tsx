@@ -181,8 +181,8 @@ export function InteractiveChart({
             date: new Date((param.time as number) * 1000),
             dataIndex,
             closePrice: candle.close,
-            yDomain: priceRange ? [priceRange.from, priceRange.to] : [0,0],
-            xDomain: logicalRange ? [logicalRange.from, logicalRange.to] : [0,0],
+            yDomain: priceRange ? [priceRange.from, priceRange.to] : [0, 0],
+            xDomain: logicalRange ? [logicalRange.from, logicalRange.to] : [0, 0],
             candle: candle.original,
         });
     }, [chartData, displayData, onChartMouseMove]);
@@ -397,4 +397,5 @@ export function InteractiveChart({
     );
 }
 
+    
     
