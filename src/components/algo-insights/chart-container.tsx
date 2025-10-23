@@ -158,6 +158,7 @@ const generateTradeLog = (
     return log;
 };
 
+
 const aggregateData = (data: PriceData[], intervalMinutes: number): PriceData[] => {
     if (!data || data.length === 0 || intervalMinutes <= 1) {
         return data;
@@ -165,6 +166,12 @@ const aggregateData = (data: PriceData[], intervalMinutes: number): PriceData[] 
 
     const aggregated: PriceData[] = [];
     let currentGroup: PriceData[] = [];
+    
+    if (data.length === 0) return [];
+    
+    // Ensure data is sorted
+    data.sort((a, b) => a.date.getTime() - b.date.getTime());
+
     let groupStartTime = data[0].date.getTime();
 
     for (const point of data) {
@@ -176,9 +183,10 @@ const aggregateData = (data: PriceData[], intervalMinutes: number): PriceData[] 
                 const close = currentGroup[currentGroup.length - 1].close;
                 const high = Math.max(...currentGroup.map(p => p.high));
                 const low = Math.min(...currentGroup.map(p => p.low));
+                const firstDate = new Date(groupStartTime);
 
                 aggregated.push({
-                    date: new Date(groupStartTime),
+                    date: firstDate,
                     open,
                     high,
                     low,
@@ -186,11 +194,15 @@ const aggregateData = (data: PriceData[], intervalMinutes: number): PriceData[] 
                     wick: [low, high]
                 });
             }
-            groupStartTime = point.date.getTime();
+            // Find the start of the next interval based on the current point's time
+            const pointTime = point.date.getTime();
+            const intervalMillis = intervalMinutes * 60 * 1000;
+            groupStartTime = Math.floor(pointTime / intervalMillis) * intervalMillis;
             currentGroup = [point];
         }
     }
-
+    
+    // Add the last group
     if (currentGroup.length > 0) {
         const open = currentGroup[0].open;
         const close = currentGroup[currentGroup.length - 1].close;
@@ -207,42 +219,6 @@ const aggregateData = (data: PriceData[], intervalMinutes: number): PriceData[] 
     }
 
     return aggregated;
-};
-
-
-const fillGapsInData = (data: PriceData[]): PriceData[] => {
-    if (data.length < 2) {
-        return data;
-    }
-
-    const processedData: PriceData[] = [data[0]];
-    const oneMinute = 60 * 1000;
-
-    for (let i = 1; i < data.length; i++) {
-        const prevPoint = processedData[processedData.length - 1];
-        const currentPoint = data[i];
-
-        const timeDiff = currentPoint.date.getTime() - prevPoint.date.getTime();
-
-        if (timeDiff > oneMinute) {
-            const gapsToFill = Math.floor(timeDiff / oneMinute) - 1;
-            const fillPrice = prevPoint.close;
-
-            for (let j = 1; j <= gapsToFill; j++) {
-                const gapDate = new Date(prevPoint.date.getTime() + j * oneMinute);
-                processedData.push({
-                    date: gapDate,
-                    open: fillPrice,
-                    high: fillPrice,
-                    low: fillPrice,
-                    close: fillPrice,
-                    wick: [fillPrice, fillPrice],
-                });
-            }
-        }
-        processedData.push(currentPoint);
-    }
-    return processedData;
 };
 
 type ToolbarPositions = {
@@ -374,14 +350,13 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
 
     const [startHour, startMinute] = sessionStartTime.split(':').map(Number);
     
-    const sessionStart = new Date(dateObj);
-    sessionStart.setUTCFullYear(dateObj.getUTCFullYear(), dateObj.getUTCMonth(), dateObj.getUTCDate());
+    const sessionStart = new Date(dateObj.toISOString());
     sessionStart.setUTCHours(startHour, startMinute, 0, 0);
     
     const sessionEnd = new Date(sessionStart.getTime() + 5 * 60 * 1000);
     
     const rangeCandles = priceData.filter(p => 
-        p.date.getTime() >= sessionStart.getTime() && p.date.getTime() <= sessionEnd.getTime()
+        p.date.getTime() >= sessionStart.getTime() && p.date.getTime() < sessionEnd.getTime()
     );
 
     if (rangeCandles.length > 0) {
@@ -812,23 +787,22 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
 
                 if (parsedData.length > 0) {
                     parsedData.sort((a, b) => a.date.getTime() - b.date.getTime());
-                    const processedData = fillGapsInData(parsedData);
                     
                     if (type === 'bid') {
-                        setPriceData(processedData);
+                        setPriceData(parsedData);
                         setAggregatedPriceData({
-                            '1m': processedData,
-                            '15m': aggregateData(processedData, 15),
-                            '1h': aggregateData(processedData, 60),
-                            '1d': aggregateData(processedData, 1440),
+                            '1m': parsedData,
+                            '15m': aggregateData(parsedData, 15),
+                            '1h': aggregateData(parsedData, 60),
+                            '1d': aggregateData(parsedData, 1440),
                         });
                         setIsDataImported(true);
-                        const lastDate = processedData[processedData.length - 1].date;
+                        const lastDate = parsedData[parsedData.length - 1].date;
                         if (lastDate) {
                             handleDateSelect(lastDate);
                         }
                     } else {
-                        setAskPriceData(processedData);
+                        setAskPriceData(parsedData);
                         setIsAskDataImported(true);
                     }
                 } else {
@@ -1116,8 +1090,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         setSelectedDate(date);
         
         const [startHour, startMinute] = sessionStartTime.split(':').map(Number);
-        const sessionStart = new Date(date);
-        sessionStart.setUTCFullYear(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+        const sessionStart = new Date(date.toISOString());
         sessionStart.setUTCHours(startHour, startMinute, 0, 0);
         
         const initialVisibleEndDate = new Date(sessionStart.getTime() + 25 * 60 * 1000);
@@ -1407,3 +1380,5 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     </div>
   );
 }
+
+    

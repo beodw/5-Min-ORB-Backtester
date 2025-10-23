@@ -1,5 +1,5 @@
 
-
+import type { Time, Coordinate } from 'lightweight-charts';
 
 export interface PriceData {
   date: Date;
@@ -68,3 +68,14 @@ export interface JournalTrade {
   originalOutcome: 'Win' | 'Loss';
   outcome: 'Win' | 'Loss';
 }
+
+export interface ChartApi {
+    timeToCoordinate: ((time: Time) => Coordinate | null) | undefined;
+    coordinateToTime: ((coord: number) => Time | null) | undefined;
+    priceToCoordinate: ((price: number) => Coordinate | null) | undefined;
+    coordinateToPrice: ((coord: number) => number | null) | undefined;
+    chartElement: HTMLDivElement | null;
+    data: PriceData[];
+}
+
+    
