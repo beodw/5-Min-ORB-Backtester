@@ -190,9 +190,14 @@ export function InteractiveChart({
         if (!chartContainerRef.current) return;
         
         const computedStyle = getComputedStyle(document.documentElement);
+        
+        const tempDiv = document.createElement('div');
+        document.body.appendChild(tempDiv);
+        
         const getColor = (variable: string) => {
-            const colorValue = computedStyle.getPropertyValue(variable).trim();
-            return `hsl(${colorValue.replace(/ /g, ', ')})`;
+            tempDiv.style.color = `hsl(${computedStyle.getPropertyValue(variable).trim()})`;
+            const finalColor = getComputedStyle(tempDiv).color;
+            return finalColor;
         };
         
         const chart = createChart(chartContainerRef.current, {
@@ -216,6 +221,9 @@ export function InteractiveChart({
                 mode: 1, // Magnet mode
             },
         });
+
+        document.body.removeChild(tempDiv);
+        
         chartRef.current = chart;
 
         const candlestickSeries = chart.addCandlestickSeries({
