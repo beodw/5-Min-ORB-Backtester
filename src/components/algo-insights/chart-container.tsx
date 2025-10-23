@@ -576,11 +576,11 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
 
   const handleChartClick = (chartData: ChartClickData) => {
     if (placingToolType) {
-      const entryPrice = chartData.closePrice;
+      const entryPrice = chartData.price;
       
-      const visiblePriceRange = chartData.yDomain[1] - chartData.yDomain[0];
-      const stopLossOffset = visiblePriceRange * 0.05; // 5% of visible height for stop
-      const takeProfitOffset = visiblePriceRange * 0.10; // 10% of visible height for profit (1:2 RR)
+      const riskInPips = 10;
+      const stopLossOffset = riskInPips * pipValue;
+      const takeProfitOffset = stopLossOffset * 2; // 1:2 RR
 
       const stopLoss = placingToolType === 'long' ? entryPrice - stopLossOffset : entryPrice + stopLossOffset;
       const takeProfit = placingToolType === 'long' ? entryPrice + takeProfitOffset : entryPrice - takeProfitOffset;
@@ -1380,5 +1380,3 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     </div>
   );
 }
-
-    

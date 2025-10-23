@@ -26,7 +26,6 @@ export type ChartClickData = {
     date: Date;
     dataIndex: number;
     closePrice: number;
-    yDomain: [number, number];
     xDomain: [number, number];
     candle: PriceData;
 };
@@ -182,9 +181,9 @@ export function InteractiveChart({
         };
 
         const handleEvent = (param: MouseEventParams, callback: (data: ChartClickData) => void) => {
-            if (!param.point || !param.time || !candlestickSeries || !chart) return;
+            if (!param.point || !param.time || !candlestickSeriesRef.current || !chartRef.current) return;
             
-            const price = candlestickSeries.coordinateToPrice(param.point.y) as number;
+            const price = candlestickSeriesRef.current.coordinateToPrice(param.point.y) as number;
             
             const convertedData = convertToCandlestickData(propsRef.current.displayData);
             const matchingCandles = convertedData.filter(d => d.time === param.time);
@@ -194,16 +193,13 @@ export function InteractiveChart({
             const dataIndex = propsRef.current.displayData.findIndex(d => d.date.getTime() / 1000 === candle.time);
             if (dataIndex < 0) return;
     
-            const logicalRange = chart.timeScale().getVisibleLogicalRange();
-            const priceScale = chart.priceScale('right');
-            const priceRange = priceScale.getVisibleRange();
+            const logicalRange = chartRef.current.timeScale().getVisibleLogicalRange();
     
             callback({
                 price,
                 date: new Date((param.time as number) * 1000),
                 dataIndex,
                 closePrice: candle.close,
-                yDomain: priceRange ? [priceRange.from, priceRange.to] : [0, 0],
                 xDomain: logicalRange ? [logicalRange.from, logicalRange.to] : [0, 0],
                 candle: candle.original,
             });
@@ -372,6 +368,3 @@ export function InteractiveChart({
         </div>
     );
 }
-
-    
-    
