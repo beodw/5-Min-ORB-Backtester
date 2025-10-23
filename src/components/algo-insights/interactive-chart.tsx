@@ -130,7 +130,7 @@ export function InteractiveChart({
 
     // Handle Chart Click
     const handleChartClickEvent = useCallback((param: MouseEventParams) => {
-        if (!param.point || !param.time || !candlestickSeriesRef.current) return;
+        if (!param.point || !param.time || !candlestickSeriesRef.current || !chartRef.current) return;
         
         const price = candlestickSeriesRef.current.coordinateToPrice(param.point.y) as number;
         const logical = param.logical;
@@ -144,8 +144,8 @@ export function InteractiveChart({
 
         if (dataIndex < 0) return;
 
-        const logicalRange = chartRef.current?.timeScale().getVisibleLogicalRange();
-        const priceRange = candlestickSeriesRef.current.priceScale().getVisiblePriceRange();
+        const logicalRange = chartRef.current.timeScale().getVisibleLogicalRange();
+        const priceRange = chartRef.current.priceScale('right').getVisiblePriceRange();
 
         onChartClick({
             price,
@@ -161,7 +161,7 @@ export function InteractiveChart({
 
     // Handle Chart Mouse Move
     const handleChartMouseMoveEvent = useCallback((param: MouseEventParams) => {
-         if (!param.point || !param.time || !candlestickSeriesRef.current || !chartData || chartData.length === 0) return;
+         if (!param.point || !param.time || !candlestickSeriesRef.current || !chartRef.current || !chartData || chartData.length === 0) return;
         
         const price = candlestickSeriesRef.current.coordinateToPrice(param.point.y) as number;
 
@@ -171,8 +171,8 @@ export function InteractiveChart({
 
         if (dataIndex < 0) return;
 
-        const logicalRange = chartRef.current?.timeScale().getVisibleLogicalRange();
-        const priceRange = candlestickSeriesRef.current.priceScale().getVisiblePriceRange();
+        const logicalRange = chartRef.current.timeScale().getVisibleLogicalRange();
+        const priceRange = chartRef.current.priceScale('right').getVisiblePriceRange();
 
         onChartMouseMove({
             price,
@@ -192,12 +192,12 @@ export function InteractiveChart({
         const computedStyle = getComputedStyle(document.documentElement);
         
         const tempDiv = document.createElement('div');
+        tempDiv.style.display = 'none';
         document.body.appendChild(tempDiv);
         
         const getColor = (variable: string) => {
             tempDiv.style.color = `hsl(${computedStyle.getPropertyValue(variable).trim()})`;
-            const finalColor = getComputedStyle(tempDiv).color;
-            return finalColor;
+            return window.getComputedStyle(tempDiv).color;
         };
         
         const chart = createChart(chartContainerRef.current, {
