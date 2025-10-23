@@ -6,7 +6,7 @@ import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, Chevr
 import { Button } from "@/components/ui/button";
 import { InteractiveChart, type ChartClickData } from "@/components/algo-insights/interactive-chart";
 import { mockPriceData } from "@/lib/mock-data";
-import type { RiskRewardTool as RRToolType, PriceMarker, MeasurementTool as MeasurementToolType, MeasurementPoint, PriceData, JournalTrade, OpeningRange } from "@/types";
+import type { RiskRewardTool as RRToolType, PriceMarker, MeasurementTool as MeasurementToolType, MeasurementPoint, PriceData, JournalTrade, OpeningRange, AggregatedPriceData } from "@/types";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -158,6 +158,57 @@ const generateTradeLog = (
     return log;
 };
 
+const aggregateData = (data: PriceData[], intervalMinutes: number): PriceData[] => {
+    if (!data || data.length === 0 || intervalMinutes <= 1) {
+        return data;
+    }
+
+    const aggregated: PriceData[] = [];
+    let currentGroup: PriceData[] = [];
+    let groupStartTime = data[0].date.getTime();
+
+    for (const point of data) {
+        if (point.date.getTime() < groupStartTime + intervalMinutes * 60 * 1000) {
+            currentGroup.push(point);
+        } else {
+            if (currentGroup.length > 0) {
+                const open = currentGroup[0].open;
+                const close = currentGroup[currentGroup.length - 1].close;
+                const high = Math.max(...currentGroup.map(p => p.high));
+                const low = Math.min(...currentGroup.map(p => p.low));
+
+                aggregated.push({
+                    date: new Date(groupStartTime),
+                    open,
+                    high,
+                    low,
+                    close,
+                    wick: [low, high]
+                });
+            }
+            groupStartTime = point.date.getTime();
+            currentGroup = [point];
+        }
+    }
+
+    if (currentGroup.length > 0) {
+        const open = currentGroup[0].open;
+        const close = currentGroup[currentGroup.length - 1].close;
+        const high = Math.max(...currentGroup.map(p => p.high));
+        const low = Math.min(...currentGroup.map(p => p.low));
+        aggregated.push({
+            date: new Date(groupStartTime),
+            open,
+            high,
+            low,
+            close,
+            wick: [low, high]
+        });
+    }
+
+    return aggregated;
+};
+
 
 const fillGapsInData = (data: PriceData[]): PriceData[] => {
     if (data.length < 2) {
@@ -207,9 +258,10 @@ const TOOLBAR_POS_KEY = 'algo-insights-toolbar-positions';
 const JOURNAL_PAIRS = ["US30", "JPN225", "HKG40", "US100"];
 
 export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
-  const [priceData, setPriceData] = useState<PriceData[]>(mockPriceData);
-  const [isDataImported, setIsDataImported] = useState(false);
-  const [fileName, setFileName] = useState('');
+    const [aggregatedPriceData, setAggregatedPriceData] = useState<AggregatedPriceData>({ '1m': mockPriceData });
+    const [priceData, setPriceData] = useState<PriceData[]>(mockPriceData);
+    const [isDataImported, setIsDataImported] = useState(false);
+    const [fileName, setFileName] = useState('');
   
   const [askPriceData, setAskPriceData] = useState<PriceData[]>([]);
   const [isAskDataImported, setIsAskDataImported] = useState(false);
@@ -507,6 +559,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                 processJournalTrades(restoredJournalTrades);
             }
             
+            setAggregatedPriceData({ '1m': mockPriceData });
             setPriceData(mockPriceData);
             setIsDataImported(false);
             setAskPriceData([]);
@@ -539,6 +592,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
       setDayResults({});
       setIsDataImported(false);
       setIsAskDataImported(false);
+      setAggregatedPriceData({ '1m': mockPriceData });
       setPriceData(mockPriceData);
       setAskPriceData([]);
       setBacktestEndDate(undefined);
@@ -762,6 +816,12 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                     
                     if (type === 'bid') {
                         setPriceData(processedData);
+                        setAggregatedPriceData({
+                            '1m': processedData,
+                            '15m': aggregateData(processedData, 15),
+                            '1h': aggregateData(processedData, 60),
+                            '1d': aggregateData(processedData, 1440),
+                        });
                         setIsDataImported(true);
                         const lastDate = processedData[processedData.length - 1].date;
                         if (lastDate) {
@@ -1096,15 +1156,14 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                   <GripVertical className="h-5 w-5 text-muted-foreground/50" />
               </div>
                 <>
-                    <Select value={timeframe} onValueChange={setTimeframe}>
+                    <Select value={timeframe} onValueChange={setTimeframe} disabled={true}>
                         <SelectTrigger className="w-[120px]">
                             <SelectValue placeholder="Timeframe" />
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="1m">1 Minute</SelectItem>
-                            <SelectItem value="30m">30 Minutes</SelectItem>
+                            <SelectItem value="15m">15 Minutes</SelectItem>
                             <SelectItem value="1H">1 Hour</SelectItem>
-                            <SelectItem value="4H">4 Hours</SelectItem>
                             <SelectItem value="1D">1 Day</SelectItem>
                         </SelectContent>
                     </Select>
@@ -1250,7 +1309,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
 
         <div className="absolute inset-0">
             <InteractiveChart
-                data={priceData}
+                data={aggregatedPriceData}
                 trades={journalTradesOnChart}
                 onChartClick={handleChartClick}
                 onChartMouseMove={handleChartMouseMove}

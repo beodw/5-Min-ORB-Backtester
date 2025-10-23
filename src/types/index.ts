@@ -1,5 +1,6 @@
 
 
+
 export interface PriceData {
   date: Date;
   open: number;
@@ -8,6 +9,13 @@ export interface PriceData {
   close: number;
   wick: [number, number];
 }
+
+export type AggregatedPriceData = {
+  '1m': PriceData[];
+  '15m'?: PriceData[];
+  '1h'?: PriceData[];
+  '1d'?: PriceData[];
+};
 
 // Added to fix a type error in InteractiveChart
 export interface Trade {
