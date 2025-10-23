@@ -121,7 +121,7 @@ export function InteractiveChart({
 
 
     useEffect(() => {
-        if (!chartContainerRef.current) return;
+        if (!chartContainerRef.current || chartRef.current) return;
         
         const getThemeColor = (tailwindColorClass: string, property: 'color' | 'backgroundColor' = 'color'): string => {
             const tempDiv = document.createElement('div');
@@ -167,7 +167,7 @@ export function InteractiveChart({
         candlestickSeriesRef.current = candlestickSeries;
 
         const handleVisibleTimeRangeChange = (newVisibleTimeRange: TimeRange | null) => {
-            if (!newVisibleTimeRange || !chart) return;
+            if (!newVisibleTimeRange || !chartRef.current) return;
 
             const from = (newVisibleTimeRange.from as UTCTimestamp) * 1000;
             const to = (newVisibleTimeRange.to as UTCTimestamp) * 1000;
@@ -175,9 +175,9 @@ export function InteractiveChart({
             const rangeInMinutes = (to - from) / (60 * 1000);
             const newAggregation = getAggregationLevel(rangeInMinutes);
             
-            if (newAggregation !== currentAggregation) {
-                setCurrentAggregation(newAggregation);
-            }
+            // This is the key change: we set state, which triggers a re-render
+            // with new `chartData`, but it does NOT re-create the chart.
+            setCurrentAggregation(newAggregation);
         };
 
         const handleEvent = (param: MouseEventParams, callback: (data: ChartClickData) => void) => {
@@ -208,8 +208,6 @@ export function InteractiveChart({
         const handleChartClickEvent = (param: MouseEventParams) => handleEvent(param, propsRef.current.onChartClick);
         const handleChartMouseMoveEvent = (param: MouseEventParams) => handleEvent(param, propsRef.current.onChartMouseMove);
         
-        chart.timeScale().fitContent();
-
         chart.timeScale().subscribeVisibleTimeRangeChange(handleVisibleTimeRangeChange);
         chart.subscribeClick(handleChartClickEvent);
         chart.subscribeCrosshairMove(handleChartMouseMoveEvent);
@@ -219,25 +217,36 @@ export function InteractiveChart({
 
         return () => {
             window.removeEventListener('resize', handleResize);
-            chart.timeScale().unsubscribeVisibleTimeRangeChange(handleVisibleTimeRangeChange);
-            chart.unsubscribeClick(handleChartClickEvent);
-            chart.unsubscribeCrosshairMove(handleChartMouseMoveEvent);
-            chart.remove();
-            chartRef.current = null;
+            if (chartRef.current) {
+                chartRef.current.remove();
+                chartRef.current = null;
+            }
         };
-    }, [currentAggregation]);
+    }, []); // <-- IMPORTANT: Empty dependency array ensures this runs only once.
 
     useEffect(() => {
         if (candlestickSeriesRef.current) {
             candlestickSeriesRef.current.setData(chartData);
-            if (chartData.length > 0) {
-                 const logicalRange = chartRef.current?.timeScale().getVisibleLogicalRange();
-                 if (logicalRange === null || (logicalRange && logicalRange.from === 0 && logicalRange.to === 0)) {
-                    chartRef.current?.timeScale().fitContent();
+
+            // If this is the initial data load for a new endDate, fit the content.
+            // But if it's just an aggregation change, the user's view is preserved.
+            if(endDate && chartData.length > 0) {
+                 const timeScale = chartRef.current?.timeScale();
+                 if(timeScale) {
+                    const lastDataTime = chartData[chartData.length - 1].time;
+                    timeScale.setVisibleRange({
+                        from: lastDataTime - (60 * 60 * 3), // Show last 3 hours
+                        to: lastDataTime
+                    });
                  }
+            } else if (chartData.length > 0) {
+                const logicalRange = chartRef.current?.timeScale().getVisibleLogicalRange();
+                if (logicalRange === null || (logicalRange && logicalRange.from === 0 && logicalRange.to === 0)) {
+                    chartRef.current?.timeScale().fitContent();
+                }
             }
         }
-    }, [chartData]);
+    }, [chartData]); // This now only re-runs when data changes.
     
     useEffect(() => {
         if (chartRef.current) {
@@ -368,3 +377,5 @@ export function InteractiveChart({
         </div>
     );
 }
+
+    
