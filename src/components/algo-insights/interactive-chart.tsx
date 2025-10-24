@@ -316,7 +316,6 @@ export function InteractiveChart({
     
         const currentMarkerIds = new Set(priceMarkers.map(m => m.id));
     
-        // Remove lines that are no longer in the priceMarkers array
         priceMarkerLines.current.forEach((line, id) => {
             if (!currentMarkerIds.has(id)) {
                 series.removePriceLine(line);
@@ -324,15 +323,8 @@ export function InteractiveChart({
             }
         });
     
-        // Add or update lines
         priceMarkers.forEach(marker => {
-            const existingLine = priceMarkerLines.current.get(marker.id);
-            
-            if (existingLine) {
-                // Update existing line's price if it has changed
-                existingLine.applyOptions({ price: marker.price });
-            } else {
-                // Create a new line for a new marker
+            if (!priceMarkerLines.current.has(marker.id)) {
                 const lineOptions: PriceLineOptions = {
                     price: marker.price,
                     color: 'rgba(255, 165, 0, 0.8)',
@@ -343,9 +335,11 @@ export function InteractiveChart({
                 };
                 const newLine = series.createPriceLine(lineOptions);
                 priceMarkerLines.current.set(marker.id, newLine);
+            } else {
+                 const line = priceMarkerLines.current.get(marker.id);
+                 line?.applyOptions({ price: marker.price });
             }
         });
-    
     }, [priceMarkers]);
 
 
