@@ -94,12 +94,24 @@ export function InteractiveChart({
     pipValue,
     isYAxisLocked,
     openingRange,
+    tab,
 }: InteractiveChartProps) {
     const chartContainerRef = useRef<HTMLDivElement>(null);
     const chartRef = useRef<IChartApi | null>(null);
     const candlestickSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+    
     const [currentAggregation, setCurrentAggregation] = useState('1m');
-    const propsRef = useRef({ onChartClick, onChartMouseMove, displayData: [] as PriceData[] });
+    const propsRef = useRef({ onChartClick, onChartMouseMove, displayData: [] as PriceData[], onUpdateTool, onRemoveTool, onRemovePriceMarker, onRemoveMeasurementTool, onUpdatePriceMarker });
+
+    useEffect(() => {
+        propsRef.current.onChartClick = onChartClick;
+        propsRef.current.onChartMouseMove = onChartMouseMove;
+        propsRef.current.onUpdateTool = onUpdateTool;
+        propsRef.current.onRemoveTool = onRemoveTool;
+        propsRef.current.onRemovePriceMarker = onRemovePriceMarker;
+        propsRef.current.onRemoveMeasurementTool = onRemoveMeasurementTool;
+        propsRef.current.onUpdatePriceMarker = onUpdatePriceMarker;
+    }, [onChartClick, onChartMouseMove, onUpdateTool, onRemoveTool, onRemovePriceMarker, onRemoveMeasurementTool, onUpdatePriceMarker]);
 
     const displayData = useMemo(() => {
         const selectedData = data[currentAggregation as keyof AggregatedPriceData] || data['1m'];
@@ -113,41 +125,37 @@ export function InteractiveChart({
     propsRef.current.displayData = displayData;
 
     const chartData = useMemo(() => convertToCandlestickData(displayData), [displayData]);
-
-    useEffect(() => {
-        propsRef.current.onChartClick = onChartClick;
-        propsRef.current.onChartMouseMove = onChartMouseMove;
-    }, [onChartClick, onChartMouseMove]);
-
+    
 
     useEffect(() => {
         if (!chartContainerRef.current) return;
         
         const getThemeColor = (tailwindColorClass: string, property: 'color' | 'backgroundColor' = 'color'): string => {
             const tempDiv = document.createElement('div');
-            tempDiv.className = `${tailwindColorClass} hidden`;
+            tempDiv.className = `bg-${tailwindColorClass}`; // Always use bg- to get a solid color
+            tempDiv.style.display = 'none';
             document.body.appendChild(tempDiv);
-            const color = getComputedStyle(tempDiv)[property];
+            const color = window.getComputedStyle(tempDiv).backgroundColor;
             document.body.removeChild(tempDiv);
             return color;
         };
 
         const chart = createChart(chartContainerRef.current, {
             layout: {
-                background: { color: getThemeColor('bg-background', 'backgroundColor') },
-                textColor: getThemeColor('text-foreground'),
+                background: { color: getThemeColor('background', 'backgroundColor') },
+                textColor: getThemeColor('foreground'),
             },
             grid: {
-                vertLines: { color: getThemeColor('text-border') },
-                horzLines: { color: getThemeColor('text-border') },
+                vertLines: { color: getThemeColor('border') },
+                horzLines: { color: getThemeColor('border') },
             },
             timeScale: {
                 timeVisible: true,
                 secondsVisible: false,
-                borderColor: getThemeColor('text-border'),
+                borderColor: getThemeColor('border'),
             },
             rightPriceScale: {
-                borderColor: getThemeColor('text-border'),
+                borderColor: getThemeColor('border'),
             },
             crosshair: {
                 mode: 1, // Magnet mode
@@ -157,12 +165,12 @@ export function InteractiveChart({
         chartRef.current = chart;
 
         const candlestickSeries = chart.addCandlestickSeries({
-            upColor: getThemeColor('text-accent'),
-            downColor: getThemeColor('text-destructive'),
-            borderDownColor: getThemeColor('text-destructive'),
-            borderUpColor: getThemeColor('text-accent'),
-            wickDownColor: getThemeColor('text-destructive'),
-            wickUpColor: getThemeColor('text-accent'),
+            upColor: getThemeColor('accent'),
+            downColor: getThemeColor('destructive'),
+            borderDownColor: getThemeColor('destructive'),
+            borderUpColor: getThemeColor('accent'),
+            wickDownColor: getThemeColor('destructive'),
+            wickUpColor: getThemeColor('accent'),
         });
         candlestickSeriesRef.current = candlestickSeries;
 
@@ -200,8 +208,32 @@ export function InteractiveChart({
         const handleResize = () => chart.applyOptions({ width: chartContainerRef.current?.clientWidth, height: chartContainerRef.current?.clientHeight });
         window.addEventListener('resize', handleResize);
 
+        const handleVisibleTimeRangeChange = (newVisibleTimeRange: TimeRange | null) => {
+            if (!newVisibleTimeRange || !chartRef.current) return;
+      
+            const from = (newVisibleTimeRange.from as UTCTimestamp) * 1000;
+            const to = (newVisibleTimeRange.to as UTCTimestamp) * 1000;
+      
+            const rangeInMinutes = (to - from) / (60 * 1000);
+            const newAggregation = getAggregationLevel(rangeInMinutes);
+            
+            setCurrentAggregation(prev => {
+                if (prev === newAggregation) {
+                    return prev;
+                }
+                return newAggregation;
+            });
+        };
+      
+        const timeScale = chart.timeScale();
+        timeScale.subscribeVisibleTimeRangeChange(handleVisibleTimeRangeChange);
+
         return () => {
             window.removeEventListener('resize', handleResize);
+            timeScale.unsubscribeVisibleTimeRangeChange(handleVisibleTimeRangeChange);
+            chart.unsubscribeClick(handleChartClickEvent);
+            chart.unsubscribeCrosshairMove(handleChartMouseMoveEvent);
+
             if (chartRef.current) {
                 chartRef.current.remove();
                 chartRef.current = null;
@@ -210,38 +242,10 @@ export function InteractiveChart({
     }, []); 
 
     useEffect(() => {
-        if (!chartRef.current) return;
-    
-        const handleVisibleTimeRangeChange = (newVisibleTimeRange: TimeRange | null) => {
-          if (!newVisibleTimeRange || !chartRef.current) return;
-    
-          const from = (newVisibleTimeRange.from as UTCTimestamp) * 1000;
-          const to = (newVisibleTimeRange.to as UTCTimestamp) * 1000;
-    
-          const rangeInMinutes = (to - from) / (60 * 1000);
-          const newAggregation = getAggregationLevel(rangeInMinutes);
-          
-          setCurrentAggregation(prev => {
-              if (prev === newAggregation) {
-                  return prev; // Don't cause a re-render if the aggregation level is the same
-              }
-              return newAggregation;
-          });
-        };
-    
-        const timeScale = chartRef.current.timeScale();
-        timeScale.subscribeVisibleTimeRangeChange(handleVisibleTimeRangeChange);
-    
-        return () => {
-          timeScale.unsubscribeVisibleTimeRangeChange(handleVisibleTimeRangeChange);
-        };
-      }, []);
-
-    useEffect(() => {
         if (candlestickSeriesRef.current) {
             candlestickSeriesRef.current.setData(chartData);
 
-            if(endDate && chartData.length > 0) {
+            if(tab === 'backtester' && endDate && chartData.length > 0) {
                  const timeScale = chartRef.current?.timeScale();
                  if(timeScale) {
                     const lastDataTime = chartData[chartData.length - 1].time;
@@ -250,16 +254,22 @@ export function InteractiveChart({
                         to: lastDataTime
                     });
                  }
+            } else if (chartData.length > 0) {
+                 const timeScale = chartRef.current?.timeScale();
+                 if (timeScale) {
+                    const lastDataTime = chartData[chartData.length - 1].time;
+                     timeScale.scrollToPosition(chartData.length - 1, false);
+                 }
             }
         }
-    }, [chartData, endDate]); 
+    }, [chartData, endDate, tab]); 
     
     useEffect(() => {
         if (chartRef.current) {
             chartRef.current.applyOptions({
                 localization: {
                     timeFormatter: (timestamp: UTCTimestamp) => {
-                       return new Date(timestamp * 1000).toLocaleTimeString();
+                       return new Date(timestamp * 1000).toLocaleTimeString([], {timeZone});
                     }
                 },
                 timeScale: {
@@ -279,12 +289,6 @@ export function InteractiveChart({
         }
     }, [isYAxisLocked]);
     
-    const drawnObjects = useRef<{
-        rrTools: { [id: string]: RiskRewardTool };
-        priceMarkers: { [id: string]: PriceMarker };
-        measurementTools: { [id: string]: MeasurementTool };
-    }>({ rrTools: {}, priceMarkers: {}, measurementTools: {} }).current;
-    
     const timeToCoordinate = useCallback((time: Time) => chartRef.current?.timeScale().timeToCoordinate(time), []);
     const coordinateToTime = useCallback((coord: number) => chartRef.current?.timeScale().coordinateToTime(coord), []);
     const priceToCoordinate = useCallback((price: number) => candlestickSeriesRef.current?.priceScale().priceToCoordinate(price), []);
@@ -297,6 +301,7 @@ export function InteractiveChart({
         coordinateToPrice,
         chartElement: chartContainerRef.current,
         data: displayData,
+        chart: chartRef.current,
     }), [timeToCoordinate, coordinateToTime, priceToCoordinate, coordinateToPrice, displayData]);
 
     const openingRangeLines = useRef<[IPriceLine?, IPriceLine?]>([undefined, undefined]);
@@ -339,9 +344,9 @@ export function InteractiveChart({
                 <RiskRewardTool
                     key={tool.id}
                     tool={tool}
-                    chart={chartApi}
-                    onUpdate={onUpdateTool}
-                    onRemove={onRemoveTool}
+                    chartApi={chartApi}
+                    onUpdate={propsRef.current.onUpdateTool}
+                    onRemove={propsRef.current.onRemoveTool}
                     pipValue={pipValue}
                 />
             ))}
@@ -350,9 +355,9 @@ export function InteractiveChart({
                  <PriceMarker
                     key={marker.id}
                     marker={marker}
-                    chart={chartApi}
-                    onUpdate={onUpdatePriceMarker}
-                    onRemove={onRemovePriceMarker}
+                    chartApi={chartApi}
+                    onUpdate={propsRef.current.onUpdatePriceMarker}
+                    onRemove={propsRef.current.onRemovePriceMarker}
                  />
             ))}
             
@@ -360,8 +365,8 @@ export function InteractiveChart({
                 <MeasurementTool
                     key={tool.id}
                     tool={tool}
-                    chart={chartApi}
-                    onRemove={onRemoveMeasurementTool}
+                    chartApi={chartApi}
+                    onRemove={propsRef.current.onRemoveMeasurementTool}
                     pipValue={pipValue}
                 />
             ))}
@@ -370,7 +375,7 @@ export function InteractiveChart({
                 <MeasurementTool
                     key={liveMeasurementTool.id}
                     tool={liveMeasurementTool}
-                    chart={chartApi}
+                    chartApi={chartApi}
                     onRemove={() => {}}
                     pipValue={pipValue}
                     isLive

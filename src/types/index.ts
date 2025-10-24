@@ -1,5 +1,5 @@
 
-import type { Time, Coordinate } from 'lightweight-charts';
+import type { Time, Coordinate, IChartApi } from 'lightweight-charts';
 
 export interface PriceData {
   date: Date;
@@ -76,6 +76,7 @@ export interface ChartApi {
     coordinateToPrice: ((coord: number) => number | null) | undefined;
     chartElement: HTMLDivElement | null;
     data: PriceData[];
+    chart: IChartApi | null;
 }
 
     

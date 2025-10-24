@@ -5,28 +5,30 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { RiskRewardTool as RRToolType, ChartApi } from '@/types';
 import { cn } from '@/lib/utils';
 import { X } from 'lucide-react';
+import { findClosestIndex } from '@/lib/chart-utils';
 
 interface RiskRewardToolProps {
   tool: RRToolType;
-  chart: ChartApi;
+  chartApi: ChartApi;
   onUpdate: (tool: RRToolType) => void;
   onRemove: (id: string) => void;
   pipValue: number;
 }
 
-export function RiskRewardTool({ tool, chart, onUpdate, onRemove, pipValue }: RiskRewardToolProps) {
+export function RiskRewardTool({ tool, chartApi, onUpdate, onRemove, pipValue }: RiskRewardToolProps) {
   const [positions, setPositions] = useState({ entry: { x: 0, y: 0 }, stop: { x: 0, y: 0 }, profit: { x: 0, y: 0 } });
   const [isDragging, setIsDragging] = useState<null | 'entry' | 'stop' | 'profit' | 'body'>(null);
   const dragInfo = useRef({ startX: 0, startY: 0, startTool: tool });
 
   const getX = useCallback((date: Date) => {
+    if (!date) return undefined;
     const time = Math.floor(date.getTime() / 1000) as any;
-    return chart.timeToCoordinate?.(time);
-  }, [chart]);
+    return chartApi.timeToCoordinate?.(time);
+  }, [chartApi]);
 
   const getY = useCallback((price: number) => {
-    return chart.priceToCoordinate?.(price);
-  }, [chart]);
+    return chartApi.priceToCoordinate?.(price);
+  }, [chartApi]);
 
   const updatePositions = useCallback(() => {
     const entryX = getX(tool.entryDate);
@@ -42,11 +44,16 @@ export function RiskRewardTool({ tool, chart, onUpdate, onRemove, pipValue }: Ri
       });
     }
   }, [tool, getX, getY]);
-
+  
   useEffect(() => {
-    const interval = setInterval(updatePositions, 50); // High-frequency updates
-    return () => clearInterval(interval);
-  }, [updatePositions]);
+    updatePositions();
+    const chart = chartApi.chart;
+    if (chart) {
+      const timeScale = chart.timeScale();
+      timeScale.subscribeVisibleTimeRangeChange(updatePositions);
+      return () => timeScale.unsubscribeVisibleTimeRangeChange(updatePositions);
+    }
+  }, [chartApi, updatePositions]);
   
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>, part: 'entry' | 'stop' | 'profit' | 'body') => {
@@ -58,7 +65,7 @@ export function RiskRewardTool({ tool, chart, onUpdate, onRemove, pipValue }: Ri
   };
 
   const handleMouseMove = (e: MouseEvent) => {
-    if (!isDragging || !chart.coordinateToPrice) return;
+    if (!isDragging || !chartApi.coordinateToPrice || !chartApi.coordinateToTime) return;
 
     const dx = e.clientX - dragInfo.current.startX;
     const dy = e.clientY - dragInfo.current.startY;
@@ -66,28 +73,45 @@ export function RiskRewardTool({ tool, chart, onUpdate, onRemove, pipValue }: Ri
     let newTool = { ...dragInfo.current.startTool };
 
     if (isDragging === 'body') {
-      const newPrice = chart.coordinateToPrice(dragInfo.current.startY + dy);
-      if (newPrice === null) return;
-      const priceDiff = newTool.entryPrice - newPrice;
-      newTool.entryPrice -= priceDiff;
-      newTool.stopLoss -= priceDiff;
-      newTool.takeProfit -= priceDiff;
+        const startEntryY = getY(dragInfo.current.startTool.entryPrice);
+        if(startEntryY === undefined) return;
+        
+        const newEntryPrice = chartApi.coordinateToPrice(startEntryY + dy);
+        if (newEntryPrice === null) return;
+        
+        const priceDiff = newTool.entryPrice - newEntryPrice;
+        newTool.entryPrice -= priceDiff;
+        newTool.stopLoss -= priceDiff;
+        newTool.takeProfit -= priceDiff;
+
     } else if (isDragging === 'entry') {
-        const newPrice = chart.coordinateToPrice(dragInfo.current.startY + dy);
+        const startY = getY(dragInfo.current.startTool.entryPrice);
+        if(startY === undefined) return;
+        const newPrice = chartApi.coordinateToPrice(startY + dy);
         if (newPrice !== null) newTool.entryPrice = newPrice;
     } else if (isDragging === 'stop') {
-        const newPrice = chart.coordinateToPrice(dragInfo.current.startY + dy);
+        const startY = getY(dragInfo.current.startTool.stopLoss);
+        if(startY === undefined) return;
+        const newPrice = chartApi.coordinateToPrice(startY + dy);
         if (newPrice !== null) newTool.stopLoss = newPrice;
     } else if (isDragging === 'profit') {
-        const newPrice = chart.coordinateToPrice(dragInfo.current.startY + dy);
+        const startY = getY(dragInfo.current.startTool.takeProfit);
+        if(startY === undefined) return;
+        const newPrice = chartApi.coordinateToPrice(startY + dy);
         if (newPrice !== null) newTool.takeProfit = newPrice;
     }
     
-     const timeAtOrigin = chart.coordinateToTime?.(dragInfo.current.startX + dx);
-     if (timeAtOrigin !== null && timeAtOrigin !== undefined) {
-        const closestIndex = findClosestIndex(chart.data, timeAtOrigin * 1000);
-        const newDate = chart.data[closestIndex].date;
-        newTool.entryDate = newDate;
+     const startX = getX(dragInfo.current.startTool.entryDate);
+     if (startX === undefined) return;
+     
+     const timeAtOrigin = chartApi.coordinateToTime(startX + dx);
+
+     if (timeAtOrigin !== null && timeAtOrigin !== undefined && chartApi.data) {
+        const closestIndex = findClosestIndex(chartApi.data, timeAtOrigin * 1000);
+        if (chartApi.data[closestIndex]) {
+          const newDate = chartApi.data[closestIndex].date;
+          newTool.entryDate = newDate;
+        }
      }
 
     onUpdate(newTool);
@@ -195,5 +219,3 @@ export function RiskRewardTool({ tool, chart, onUpdate, onRemove, pipValue }: Ri
     </div>
   );
 }
-
-    

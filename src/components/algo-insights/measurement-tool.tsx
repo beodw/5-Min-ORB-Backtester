@@ -8,39 +8,44 @@ import { formatDistance, format } from 'date-fns';
 
 interface MeasurementToolProps {
   tool: MeasurementToolType;
-  chart: ChartApi;
+  chartApi: ChartApi;
   onRemove: (id: string) => void;
   pipValue: number;
   isLive?: boolean;
 }
 
-export function MeasurementTool({ tool, chart, onRemove, pipValue, isLive = false }: MeasurementToolProps) {
+export function MeasurementTool({ tool, chartApi, onRemove, pipValue, isLive = false }: MeasurementToolProps) {
   const [startPos, setStartPos] = useState<{ x: number | undefined, y: number | undefined }>({ x: undefined, y: undefined });
   const [endPos, setEndPos] = useState<{ x: number | undefined, y: number | undefined }>({ x: undefined, y: undefined });
   
   const updatePositions = useCallback(() => {
-    if (!chart.data || chart.data.length === 0) return;
+    if (!chartApi.data || chartApi.data.length === 0) return;
     
     const startIndex = tool.startPoint.index;
     const endIndex = tool.endPoint.index;
 
-    if (startIndex < 0 || startIndex >= chart.data.length || endIndex < 0 || endIndex >= chart.data.length) return;
+    if (startIndex < 0 || startIndex >= chartApi.data.length || endIndex < 0 || endIndex >= chartApi.data.length) return;
 
-    const startX = chart.timeToCoordinate?.(Math.floor(chart.data[startIndex].date.getTime() / 1000) as any);
-    const startY = chart.priceToCoordinate?.(tool.startPoint.price);
+    const startX = chartApi.timeToCoordinate?.(Math.floor(chartApi.data[startIndex].date.getTime() / 1000) as any);
+    const startY = chartApi.priceToCoordinate?.(tool.startPoint.price);
     
-    const endX = chart.timeToCoordinate?.(Math.floor(chart.data[endIndex].date.getTime() / 1000) as any);
-    const endY = chart.priceToCoordinate?.(tool.endPoint.price);
+    const endX = chartApi.timeToCoordinate?.(Math.floor(chartApi.data[endIndex].date.getTime() / 1000) as any);
+    const endY = chartApi.priceToCoordinate?.(tool.endPoint.price);
 
     setStartPos({ x: startX, y: startY });
     setEndPos({ x: endX, y: endY });
 
-  }, [chart, tool]);
+  }, [chartApi, tool]);
   
   useEffect(() => {
-    const interval = setInterval(updatePositions, 50); // High-frequency updates
-    return () => clearInterval(interval);
-  }, [updatePositions]);
+    updatePositions();
+    const chart = chartApi.chart;
+    if (chart) {
+      const timeScale = chart.timeScale();
+      timeScale.subscribeVisibleTimeRangeChange(updatePositions);
+      return () => timeScale.unsubscribeVisibleTimeRangeChange(updatePositions);
+    }
+  }, [chartApi, updatePositions]);
 
 
   if (startPos.x === undefined || startPos.y === undefined || endPos.x === undefined || endPos.y === undefined) {
@@ -60,9 +65,9 @@ export function MeasurementTool({ tool, chart, onRemove, pipValue, isLive = fals
   const endIndex = Math.max(tool.startPoint.index, tool.endPoint.index);
   const bars = endIndex - startIndex;
 
-  if (startIndex < 0 || endIndex >= chart.data.length) return null;
+  if (startIndex < 0 || endIndex >= chartApi.data.length) return null;
   
-  const timeDiffMs = chart.data[endIndex].date.getTime() - chart.data[startIndex].date.getTime();
+  const timeDiffMs = chartApi.data[endIndex].date.getTime() - chartApi.data[startIndex].date.getTime();
   const timeFormatted = formatDistance(0, timeDiffMs, { includeSeconds: true });
 
 
