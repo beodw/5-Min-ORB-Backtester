@@ -154,9 +154,12 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onRemove, pipValue }:
 
   return (
     <div className="absolute top-0 left-0 pointer-events-none">
-      {/* Stop Loss Box */}
+      {/* Stop Loss Box (Red) */}
       <div
-        className={cn("absolute pointer-events-auto cursor-grab active:cursor-grabbing", isLong ? "bg-destructive/30" : "bg-accent/30")}
+        className={cn(
+          'absolute pointer-events-auto cursor-grab active:cursor-grabbing',
+          isLong ? 'bg-destructive/30' : 'bg-accent/30'
+        )}
         style={{
           left: positions.entry.x,
           top: isLong ? positions.entry.y : positions.profit.y,
@@ -166,7 +169,7 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onRemove, pipValue }:
         onMouseDown={(e) => handleMouseDown(e, 'body')}
       >
         <div className="relative w-full h-full flex items-center justify-center">
-           <div className="text-white text-xs text-center p-1">
+          <div className="text-white text-xs text-center p-1">
             <p>Target</p>
             <p className="font-bold">{rrRatio} R</p>
             <p>{rewardPips} pips</p>
@@ -174,9 +177,12 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onRemove, pipValue }:
         </div>
       </div>
       
-      {/* Take Profit Box */}
+      {/* Take Profit Box (Green) */}
       <div
-        className={cn("absolute pointer-events-auto cursor-grab active:cursor-grabbing", isLong ? "bg-accent/30" : "bg-destructive/30")}
+        className={cn(
+          'absolute pointer-events-auto cursor-grab active:cursor-grabbing',
+          isLong ? 'bg-accent/30' : 'bg-destructive/30'
+        )}
         style={{
           left: positions.entry.x,
           top: isLong ? positions.profit.y : positions.entry.y,
@@ -186,20 +192,17 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onRemove, pipValue }:
         onMouseDown={(e) => handleMouseDown(e, 'body')}
       >
         <div className="relative w-full h-full flex items-center justify-center">
-            <div className="text-white text-xs text-center p-1">
-                <p>Stop</p>
-                <p className="font-bold">{riskPips} pips</p>
-            </div>
+          <div className="text-white text-xs text-center p-1">
+            <p>Stop</p>
+            <p className="font-bold">{riskPips} pips</p>
+          </div>
         </div>
       </div>
       
       {/* Lines */}
       <div className="absolute w-full h-full top-0 left-0">
-        {/* Entry Line */}
         <div className="absolute bg-foreground/50" style={{ left: positions.entry.x, top: positions.entry.y, width: boxWidth, height: 1 }} />
-        {/* Stop Line */}
         <div className="absolute bg-destructive" style={{ left: positions.entry.x, top: positions.stop.y, width: boxWidth, height: 1 }} />
-        {/* Profit Line */}
         <div className="absolute bg-accent" style={{ left: positions.entry.x, top: positions.profit.y, width: boxWidth, height: 1 }} />
       </div>
 
@@ -246,3 +249,5 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onRemove, pipValue }:
     </div>
   );
 }
+
+    
