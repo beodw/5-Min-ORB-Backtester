@@ -152,14 +152,9 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onRemove, pipValue }:
   const profitBoxHeight = Math.abs(positions.entry.y - positions.profit.y);
   const boxWidth = tool.widthInPoints;
 
-  // For long: entry is above stop, profit is above entry. Y coordinates are inverted on screen.
-  // So: profitY < entryY < stopY
-  // For short: stop is above entry, entry is above profit. Y coordinates are inverted.
-  // So: stopY < entryY < profitY
-
   const stopBoxTop = isLong ? positions.entry.y : positions.stop.y;
   const profitBoxTop = isLong ? positions.profit.y : positions.entry.y;
-
+  
   return (
     <div className="absolute top-0 left-0 pointer-events-none">
       {/* Stop Loss Box (Red) */}
@@ -257,5 +252,3 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onRemove, pipValue }:
     </div>
   );
 }
-
-    
