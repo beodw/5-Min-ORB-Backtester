@@ -14,6 +14,7 @@ import {
   SeriesMarker,
   MouseEventParams,
   IPriceLine,
+  Coordinate,
 } from "lightweight-charts";
 import type { PriceData, Trade, RiskRewardTool as RRToolType, PriceMarker as PriceMarkerType, MeasurementTool as MeasurementToolType, OpeningRange, MeasurementPoint } from "@/types";
 import { RiskRewardTool } from "./risk-reward-tool";
@@ -326,7 +327,6 @@ export function InteractiveChart({
 
         const currentMarkerIds = new Set(priceMarkers.map(m => m.id));
 
-        // Remove lines that are no longer in the priceMarkers array
         priceMarkerLines.current.forEach((line, id) => {
             if (!currentMarkerIds.has(id)) {
                 series.removePriceLine(line);
@@ -334,14 +334,10 @@ export function InteractiveChart({
             }
         });
 
-        // Add or update lines
         priceMarkers.forEach(marker => {
             if (priceMarkerLines.current.has(marker.id)) {
-                // Already exists, maybe update if needed (e.g., price change)
-                const existingLine = priceMarkerLines.current.get(marker.id);
-                existingLine?.applyOptions({ price: marker.price });
+                priceMarkerLines.current.get(marker.id)?.applyOptions({ price: marker.price });
             } else {
-                // Doesn't exist, create it
                 const lineOptions: PriceLineOptions = {
                     price: marker.price,
                     color: 'orange',
@@ -354,11 +350,48 @@ export function InteractiveChart({
                 priceMarkerLines.current.set(marker.id, newLine);
             }
         });
-    }, [priceMarkers]);
+    }, [priceMarkers, chartData]);
+
+    const handleContextMenu = (e: React.MouseEvent) => {
+        e.preventDefault();
+        const series = candlestickSeriesRef.current;
+        const chartElement = chartContainerRef.current;
+        if (!series || !chartElement) return;
+
+        const rect = chartElement.getBoundingClientRect();
+        const y = e.clientY - rect.top;
+        const price = series.coordinateToPrice(y as Coordinate);
+        if (price === null) return;
+
+        // Calculate visible price range to determine tolerance
+        const priceScale = chartRef.current?.priceScale('right');
+        if (!priceScale) return;
+        const visibleRange = priceScale.getVisibleRange();
+        if (!visibleRange) return;
+        const priceRange = visibleRange.to - visibleRange.from;
+
+        const chartHeight = chartElement.clientHeight;
+        const toleranceInPrice = (priceRange / chartHeight) * 10; // 10 pixels tolerance
+
+        let markerToDelete: PriceMarkerType | null = null;
+        for (const marker of priceMarkers) {
+            if (Math.abs(marker.price - price) < toleranceInPrice) {
+                markerToDelete = marker;
+                break;
+            }
+        }
+        
+        if (markerToDelete) {
+            propsRef.current.onRemovePriceMarker(markerToDelete.id);
+        }
+    };
 
 
     return (
-        <div className="w-full h-full relative">
+        <div 
+            className="w-full h-full relative"
+            onContextMenu={handleContextMenu}
+        >
             <div ref={chartContainerRef} className="w-full h-full" />
             
             {chartApi.chartElement && rrTools.map(tool => (
@@ -399,5 +432,3 @@ export function InteractiveChart({
         </div>
     );
 }
-
-    
