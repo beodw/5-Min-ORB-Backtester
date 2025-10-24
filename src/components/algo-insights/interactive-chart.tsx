@@ -362,20 +362,11 @@ export function InteractiveChart({
         const y = e.clientY - rect.top;
         const price = series.coordinateToPrice(y as Coordinate);
         if (price === null) return;
-
-        // Calculate visible price range to determine tolerance
-        const priceScale = chartRef.current?.priceScale('right');
-        if (!priceScale) return;
-        const visibleRange = priceScale.getVisibleRange();
-        if (!visibleRange) return;
-        const priceRange = visibleRange.to - visibleRange.from;
-
-        const chartHeight = chartElement.clientHeight;
-        const toleranceInPrice = (priceRange / chartHeight) * 10; // 10 pixels tolerance
-
+        
         let markerToDelete: PriceMarkerType | null = null;
         for (const marker of priceMarkers) {
-            if (Math.abs(marker.price - price) < toleranceInPrice) {
+            // Check if the click is within 0.5% of the line's price - a simple tolerance
+            if (Math.abs(marker.price - price) / marker.price < 0.005) {
                 markerToDelete = marker;
                 break;
             }
