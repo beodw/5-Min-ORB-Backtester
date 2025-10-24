@@ -29,11 +29,18 @@ export function PriceMarker({ marker, chartApi, onUpdate, onRemove }: PriceMarke
     const chart = chartApi.chart;
     if (chart) {
       const priceScale = chart.priceScale('right');
+      const timeScale = chart.timeScale();
+      
       const subscriber = () => updatePosition();
+      
       priceScale.subscribeOptionsChanged(subscriber);
+      timeScale.subscribeVisibleLogicalRangeChange(subscriber);
+      timeScale.subscribeSizeChange(subscriber);
 
       return () => {
         priceScale.unsubscribeOptionsChanged(subscriber);
+        timeScale.unsubscribeVisibleLogicalRangeChange(subscriber);
+        timeScale.unsubscribeSizeChange(subscriber);
       }
     }
   }, [chartApi, updatePosition]);
@@ -48,13 +55,14 @@ export function PriceMarker({ marker, chartApi, onUpdate, onRemove }: PriceMarke
   };
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (!isDragging || !chartApi.coordinateToPrice) return;
+    const { coordinateToPrice, priceToCoordinate } = chartApi;
+    if (!isDragging || !coordinateToPrice || !priceToCoordinate) return;
     
-    const startY = chartApi.priceToCoordinate?.(dragInfo.current.startPrice);
-    if (startY === undefined) return;
+    const startY = priceToCoordinate(dragInfo.current.startPrice);
+    if (startY === undefined || startY === null) return;
 
     const newY = startY + (e.clientY - dragInfo.current.startY);
-    const newPrice = chartApi.coordinateToPrice(newY);
+    const newPrice = coordinateToPrice(newY);
 
     if (newPrice !== null) {
       onUpdate(marker.id, newPrice);
@@ -81,16 +89,15 @@ export function PriceMarker({ marker, chartApi, onUpdate, onRemove }: PriceMarke
   
   return (
     <div
-      className="absolute top-0 left-0 flex items-center h-px bg-yellow-500/0 border-t border-dashed border-yellow-500 w-full z-10"
+      className="absolute top-0 left-0 w-full h-px border-t border-dashed border-yellow-500 z-10 pointer-events-none"
       style={{
         transform: `translateY(${position.y}px)`,
-        pointerEvents: 'none',
       }}
     >
       <div 
         className={cn(
-            "absolute right-0 flex items-center bg-background/80 p-1 rounded-md text-xs border border-border/80 mr-16",
-            marker.isDeletable ? "cursor-ns-resize pointer-events-auto" : "pointer-events-none"
+            "absolute right-0 flex items-center bg-background/80 p-1 rounded-md text-xs border border-border/80 mr-16 pointer-events-auto",
+            marker.isDeletable && "cursor-ns-resize"
         )}
         onMouseDown={handleMouseDown}
       >
@@ -102,7 +109,7 @@ export function PriceMarker({ marker, chartApi, onUpdate, onRemove }: PriceMarke
               onRemove(marker.id);
             }}
             onMouseDown={(e) => e.stopPropagation()}
-            className="ml-2 text-destructive pointer-events-auto cursor-pointer"
+            className="ml-2 text-destructive"
           >
             <X className="h-3 w-3" />
           </button>
