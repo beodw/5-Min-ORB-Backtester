@@ -30,14 +30,15 @@ export function PriceMarker({ marker, chartApi, onUpdate, onRemove }: PriceMarke
     updatePosition();
     const chart = chartApi.chart;
     if (chart) {
-      // Both of these subscriptions are needed to catch all scaling/panning events
       const timeScale = chart.timeScale();
+      const priceScale = chart.priceScale('right');
+      
       timeScale.subscribeVisibleLogicalRangeChange(updatePosition);
-      chart.priceScale('right').subscribeOptionsChanged(updatePosition);
+      priceScale.subscribeOptionsChanged(updatePosition);
 
       return () => {
         timeScale.unsubscribeVisibleLogicalRangeChange(updatePosition);
-        chart.priceScale('right').unsubscribeOptionsChanged(updatePosition);
+        priceScale.unsubscribeOptionsChanged(updatePosition);
       }
     }
   }, [chartApi, updatePosition]);
@@ -54,7 +55,6 @@ export function PriceMarker({ marker, chartApi, onUpdate, onRemove }: PriceMarke
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!isDragging || !chartApi.coordinateToPrice) return;
     
-    // Calculate the new Y position based on the initial position + mouse delta
     const startY = chartApi.priceToCoordinate?.(dragInfo.current.startPrice);
     if (startY === undefined) return;
 
@@ -73,7 +73,6 @@ export function PriceMarker({ marker, chartApi, onUpdate, onRemove }: PriceMarke
   }, [handleMouseMove]);
   
   useEffect(() => {
-    // Cleanup listeners if component unmounts while dragging
     return () => {
         window.removeEventListener('mousemove', handleMouseMove);
         window.removeEventListener('mouseup', handleMouseUp);
