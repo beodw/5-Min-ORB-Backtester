@@ -218,6 +218,19 @@ export function InteractiveChart({
         if (candlestickSeriesRef.current) {
             candlestickSeriesRef.current.setData(chartData);
 
+            if (chartData.length > 0) {
+                 const series = candlestickSeriesRef.current;
+                 const testLineOptions: PriceLineOptions = {
+                    price: 1.14,
+                    color: 'rgba(255, 165, 0, 0.8)',
+                    lineWidth: 2,
+                    lineStyle: 0, // Solid
+                    axisLabelVisible: true,
+                    title: 'Test @ 1.14',
+                };
+                series.createPriceLine(testLineOptions);
+            }
+
             if(tab === 'backtester' && endDate && chartData.length > 0) {
                  const timeScale = chartRef.current?.timeScale();
                  if(timeScale) {
@@ -312,17 +325,21 @@ export function InteractiveChart({
 
     useEffect(() => {
         const series = candlestickSeriesRef.current;
-        if (!series) return;
-    
+        if (!series) {
+            return;
+        }
+
         const currentMarkerIds = new Set(priceMarkers.map(m => m.id));
-    
+
+        // Remove lines that are no longer in the priceMarkers array
         priceMarkerLines.current.forEach((line, id) => {
             if (!currentMarkerIds.has(id)) {
                 series.removePriceLine(line);
                 priceMarkerLines.current.delete(id);
             }
         });
-    
+
+        // Add new lines for markers that don't have one yet
         priceMarkers.forEach(marker => {
             if (!priceMarkerLines.current.has(marker.id)) {
                 const lineOptions: PriceLineOptions = {
@@ -336,8 +353,9 @@ export function InteractiveChart({
                 const newLine = series.createPriceLine(lineOptions);
                 priceMarkerLines.current.set(marker.id, newLine);
             } else {
+                 // Optional: Update existing line if properties can change
                  const line = priceMarkerLines.current.get(marker.id);
-                 line?.applyOptions({ price: marker.price });
+                 line?.applyOptions({ price: marker.price, title: marker.price.toFixed(5) });
             }
         });
     }, [priceMarkers]);
@@ -385,3 +403,5 @@ export function InteractiveChart({
         </div>
     );
 }
+
+    
