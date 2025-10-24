@@ -102,8 +102,9 @@ export function InteractiveChart({
     const chartContainerRef = useRef<HTMLDivElement>(null);
     const chartRef = useRef<IChartApi | null>(null);
     const candlestickSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+    const currentAggregationRef = useRef(timeframe);
     
-    const propsRef = useRef({ onChartClick, onChartMouseMove, displayData: [] as PriceData[], onUpdateTool, onRemoveTool, onRemovePriceMarker, onRemoveMeasurementTool, onUpdatePriceMarker, timeframe, onAggregationChange });
+    const propsRef = useRef({ onChartClick, onChartMouseMove, displayData: [] as PriceData[], onUpdateTool, onRemoveTool, onRemovePriceMarker, onRemoveMeasurementTool, onUpdatePriceMarker, onAggregationChange });
 
     useEffect(() => {
         propsRef.current.onChartClick = onChartClick;
@@ -113,9 +114,8 @@ export function InteractiveChart({
         propsRef.current.onRemovePriceMarker = onRemovePriceMarker;
         propsRef.current.onRemoveMeasurementTool = onRemoveMeasurementTool;
         propsRef.current.onUpdatePriceMarker = onUpdatePriceMarker;
-        propsRef.current.timeframe = timeframe;
         propsRef.current.onAggregationChange = onAggregationChange;
-    }, [onChartClick, onChartMouseMove, onUpdateTool, onRemoveTool, onRemovePriceMarker, onRemoveMeasurementTool, onUpdatePriceMarker, timeframe, onAggregationChange]);
+    }, [onChartClick, onChartMouseMove, onUpdateTool, onRemoveTool, onRemovePriceMarker, onRemoveMeasurementTool, onUpdatePriceMarker, onAggregationChange]);
 
     const displayData = useMemo(() => {
         const selectedData = data[timeframe as keyof AggregatedPriceData] || data['1m'];
@@ -168,7 +168,7 @@ export function InteractiveChart({
         
         chartRef.current = chart;
 
-        const candlestickSeries = chart.addCandlestickSeries({
+        candlestickSeriesRef.current = chart.addCandlestickSeries({
             upColor: getThemeColor('accent'),
             downColor: getThemeColor('destructive'),
             borderDownColor: getThemeColor('destructive'),
@@ -176,7 +176,6 @@ export function InteractiveChart({
             wickDownColor: getThemeColor('destructive'),
             wickUpColor: getThemeColor('accent'),
         });
-        candlestickSeriesRef.current = candlestickSeries;
 
         const handleEvent = (param: MouseEventParams, callback: (data: ChartClickData) => void) => {
             if (!param.point || !param.time || !candlestickSeriesRef.current || !chartRef.current) return;
@@ -221,7 +220,8 @@ export function InteractiveChart({
             const rangeInMinutes = (to - from) / (60 * 1000);
             const newAggregation = getAggregationLevel(rangeInMinutes);
             
-            if (propsRef.current.timeframe !== newAggregation) {
+            if (currentAggregationRef.current !== newAggregation) {
+                currentAggregationRef.current = newAggregation;
                 propsRef.current.onAggregationChange(newAggregation);
             }
         };
@@ -242,6 +242,10 @@ export function InteractiveChart({
             }
         };
     }, []); 
+
+    useEffect(() => {
+        currentAggregationRef.current = timeframe;
+    }, [timeframe]);
 
     useEffect(() => {
         if (candlestickSeriesRef.current) {
@@ -293,8 +297,8 @@ export function InteractiveChart({
     
     const timeToCoordinate = useCallback((time: Time) => chartRef.current?.timeScale().timeToCoordinate(time), []);
     const coordinateToTime = useCallback((coord: number) => chartRef.current?.timeScale().coordinateToTime(coord), []);
-    const priceToCoordinate = useCallback((price: number) => candlestickSeriesRef.current?.priceScale().priceToCoordinate(price), []);
-    const coordinateToPrice = useCallback((coord: number) => candlestickSeriesRef.current?.priceScale().coordinateToPrice(coord), []);
+    const priceToCoordinate = useCallback((price: number) => candlestickSeriesRef.current?.priceToCoordinate(price), []);
+    const coordinateToPrice = useCallback((coord: number) => candlestickSeriesRef.current?.coordinateToPrice(coord), []);
     
     const chartApi = useMemo(() => ({
         timeToCoordinate,
