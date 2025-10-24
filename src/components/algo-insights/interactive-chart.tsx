@@ -132,11 +132,11 @@ export function InteractiveChart({
     
 
     useEffect(() => {
-        if (!chartContainerRef.current) return;
+        if (!chartContainerRef.current || chartRef.current) return;
         
-        const getThemeColor = (tailwindColorClass: string, property: 'color' | 'backgroundColor' = 'color'): string => {
+        const getThemeColor = (tailwindColorClass: string): string => {
             const tempDiv = document.createElement('div');
-            tempDiv.className = `bg-${tailwindColorClass}`;
+            tempDiv.className = tailwindColorClass;
             tempDiv.style.display = 'none';
             document.body.appendChild(tempDiv);
             const color = window.getComputedStyle(tempDiv).backgroundColor;
@@ -146,20 +146,20 @@ export function InteractiveChart({
 
         const chart = createChart(chartContainerRef.current, {
             layout: {
-                background: { color: getThemeColor('background', 'backgroundColor') },
-                textColor: getThemeColor('foreground'),
+                background: { color: getThemeColor('bg-background') },
+                textColor: getThemeColor('text-foreground'),
             },
             grid: {
-                vertLines: { color: getThemeColor('border') },
-                horzLines: { color: getThemeColor('border') },
+                vertLines: { color: getThemeColor('bg-border') },
+                horzLines: { color: getThemeColor('bg-border') },
             },
             timeScale: {
                 timeVisible: true,
                 secondsVisible: false,
-                borderColor: getThemeColor('border'),
+                borderColor: getThemeColor('bg-border'),
             },
             rightPriceScale: {
-                borderColor: getThemeColor('border'),
+                borderColor: getThemeColor('bg-border'),
             },
             crosshair: {
                 mode: 1, // Magnet mode
@@ -169,12 +169,12 @@ export function InteractiveChart({
         chartRef.current = chart;
 
         candlestickSeriesRef.current = chart.addCandlestickSeries({
-            upColor: getThemeColor('accent'),
-            downColor: getThemeColor('destructive'),
-            borderDownColor: getThemeColor('destructive'),
-            borderUpColor: getThemeColor('accent'),
-            wickDownColor: getThemeColor('destructive'),
-            wickUpColor: getThemeColor('accent'),
+            upColor: getThemeColor('bg-accent'),
+            downColor: getThemeColor('bg-destructive'),
+            borderDownColor: getThemeColor('bg-destructive'),
+            borderUpColor: getThemeColor('bg-accent'),
+            wickDownColor: getThemeColor('bg-destructive'),
+            wickUpColor: getThemeColor('bg-accent'),
         });
 
         const handleEvent = (param: MouseEventParams, callback: (data: ChartClickData) => void) => {
@@ -244,10 +244,6 @@ export function InteractiveChart({
     }, []); 
 
     useEffect(() => {
-        currentAggregationRef.current = timeframe;
-    }, [timeframe]);
-
-    useEffect(() => {
         if (candlestickSeriesRef.current) {
             candlestickSeriesRef.current.setData(chartData);
 
@@ -263,12 +259,11 @@ export function InteractiveChart({
             } else if (chartData.length > 0) {
                  const timeScale = chartRef.current?.timeScale();
                  if (timeScale) {
-                    const lastDataTime = chartData[chartData.length - 1].time;
                      timeScale.scrollToPosition(chartData.length - 1, false);
                  }
             }
         }
-    }, [chartData, endDate, tab]); 
+    }, [chartData, tab, endDate]); 
     
     useEffect(() => {
         if (chartRef.current) {

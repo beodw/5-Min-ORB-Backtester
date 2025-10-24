@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Download, ArrowUp, ArrowDown, Settings, Calendar as CalendarIcon, ChevronRight, ChevronsRight, Target, Trash2, FileUp, Lock, Unlock, Ruler, FileBarChart, Undo, Redo, GripVertical, BookOpen, ThumbsUp, ThumbsDown, FileDown, Forward, FastForward } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InteractiveChart, type ChartClickData } from "@/components/algo-insights/interactive-chart";
@@ -321,7 +321,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
   const [liveMeasurementTool, setLiveMeasurementTool] = useState<MeasurementToolType | null>(null);
 
   const [timeframe, setTimeframe] = useState('1m');
-  const [timeZone, setTimeZone] = useState<string>('UTC');
+  const [timeZone, setTimeZone] = useState<string>('');
   const [timezones, setTimezones] = useState<{ value: string; label: string }[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [sessionStartTime, setSessionStartTime] = useState('09:30');
@@ -336,42 +336,9 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
   
   const sessionKey = `${SESSION_KEY_PREFIX}${tab}`;
 
-  useEffect(() => {
-    const dateObj = selectedDate;
-    if (!dateObj || !isDataImported || !sessionStartTime) {
-      setOpeningRange(null);
-      return;
-    }
-
-    if (isNaN(dateObj.getTime())) {
-        setOpeningRange(null);
-        return;
-    }
-
-    const [startHour, startMinute] = sessionStartTime.split(':').map(Number);
-    
-    const sessionStart = new Date(dateObj.toISOString());
-    sessionStart.setUTCHours(startHour, startMinute, 0, 0);
-    
-    const sessionEnd = new Date(sessionStart.getTime() + 5 * 60 * 1000);
-    
-    const rangeCandles = priceData.filter(p => 
-        p.date.getTime() >= sessionStart.getTime() && p.date.getTime() < sessionEnd.getTime()
-    );
-
-    if (rangeCandles.length > 0) {
-        let high = -Infinity;
-        let low = Infinity;
-        rangeCandles.forEach(candle => {
-            if (candle.high > high) high = candle.high;
-            if (candle.low < low) low = candle.low;
-        });
-        setOpeningRange({ high, low });
-    } else {
-        setOpeningRange(null);
-    }
-  }, [selectedDate, priceData, sessionStartTime, isDataImported]);
-
+  const handleSetTimeframe = useCallback((newTimeframe: string) => {
+    setTimeframe(newTimeframe);
+  }, []);
 
   useEffect(() => {
     // Set user's timezone on client-side
@@ -439,6 +406,51 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     }
 
   }, [sessionKey]);
+
+
+  useEffect(() => {
+    const dateObj = selectedDate;
+    if (!dateObj || !isDataImported || !sessionStartTime) {
+      setOpeningRange(null);
+      return;
+    }
+
+    if (isNaN(dateObj.getTime())) {
+        setOpeningRange(null);
+        return;
+    }
+
+    const [startHour, startMinute] = sessionStartTime.split(':').map(Number);
+    
+    const sessionStart = new Date(dateObj.toISOString());
+    sessionStart.setUTCHours(startHour, startMinute, 0, 0);
+    
+    const sessionEnd = new Date(sessionStart.getTime() + 5 * 60 * 1000);
+    
+    const rangeCandles = priceData.filter(p => 
+        p.date.getTime() >= sessionStart.getTime() && p.date.getTime() < sessionEnd.getTime()
+    );
+
+    if (rangeCandles.length > 0) {
+        let high = -Infinity;
+        let low = Infinity;
+        rangeCandles.forEach(candle => {
+            if (candle.high > high) high = candle.high;
+            if (candle.low < low) low = candle.low;
+        });
+        setOpeningRange({ high, low });
+    } else {
+        setOpeningRange(null);
+    }
+  }, [selectedDate, priceData, sessionStartTime, isDataImported]);
+
+
+  useEffect(() => {
+    // Set user's timezone on client-side
+    if(!timeZone) {
+      setTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
+    }
+  }, [timeZone]);
 
   useEffect(() => {
     const settings = { timeZone, sessionStartTime, pipValue };
@@ -1129,15 +1141,15 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                   <GripVertical className="h-5 w-5 text-muted-foreground/50" />
               </div>
                 <>
-                    <Select value={timeframe} onValueChange={setTimeframe} disabled={true}>
+                    <Select value={timeframe} onValueChange={handleSetTimeframe}>
                         <SelectTrigger className="w-[120px]">
                             <SelectValue placeholder="Timeframe" />
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="1m">1 Minute</SelectItem>
                             <SelectItem value="15m">15 Minutes</SelectItem>
-                            <SelectItem value="1H">1 Hour</SelectItem>
-                            <SelectItem value="1D">1 Day</SelectItem>
+                            <SelectItem value="1h">1 Hour</SelectItem>
+                            <SelectItem value="1d">1 Day</SelectItem>
                         </SelectContent>
                     </Select>
 
@@ -1284,7 +1296,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
             {timeZone && (
                 <InteractiveChart
                     data={aggregatedPriceData}
-                    onAggregationChange={setTimeframe}
+                    onAggregationChange={handleSetTimeframe}
                     trades={journalTradesOnChart}
                     onChartClick={handleChartClick}
                     onChartMouseMove={handleChartMouseMove}
