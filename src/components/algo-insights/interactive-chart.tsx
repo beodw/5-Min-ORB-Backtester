@@ -79,6 +79,7 @@ const getAggregationLevel = (rangeInMinutes: number) => {
 
 export function InteractiveChart({
     data,
+    timeframe,
     timeZone,
     endDate,
     rrTools,
@@ -87,14 +88,13 @@ export function InteractiveChart({
     liveMeasurementTool,
     onChartClick,
     onChartMouseMove,
+    onAggregationChange,
     onUpdateTool,
     onRemoveTool,
     onRemovePriceMarker,
     onRemoveMeasurementTool,
     onUpdatePriceMarker,
     pipValue,
-    timeframe,
-    onAggregationChange,
     isYAxisLocked,
     openingRange,
     tab,
@@ -107,7 +107,9 @@ export function InteractiveChart({
     propsRef.current = { onChartClick, onChartMouseMove, onUpdateTool, onRemoveTool, onRemovePriceMarker, onRemoveMeasurementTool, onUpdatePriceMarker };
 
     const onAggregationChangeRef = useRef(onAggregationChange);
-    onAggregationChangeRef.current = onAggregationChange;
+    useEffect(() => {
+        onAggregationChangeRef.current = onAggregationChange;
+    });
 
     const displayData = useMemo(() => {
         if (endDate) {
@@ -123,7 +125,7 @@ export function InteractiveChart({
     useEffect(() => {
         if (!chartContainerRef.current) return;
         
-        const getThemeColor = (cssVar: string) => {
+        const getThemeColor = (cssVar: string): string => {
             const tempDiv = document.createElement('div');
             tempDiv.style.display = 'none';
             tempDiv.style.color = `hsl(var(${cssVar}))`;
@@ -133,7 +135,6 @@ export function InteractiveChart({
             return color;
         };
         
-
         const chart = createChart(chartContainerRef.current, {
             layout: {
                 background: { color: 'transparent' },
@@ -202,7 +203,6 @@ export function InteractiveChart({
         const handleResize = () => chart.applyOptions({ width: chartContainerRef.current?.clientWidth, height: chartContainerRef.current?.clientHeight });
         window.addEventListener('resize', handleResize);
 
-        let currentAggregation = timeframe;
         const handleVisibleTimeRangeChange = (newVisibleTimeRange: TimeRange | null) => {
             if (!newVisibleTimeRange || !chart) return;
       
@@ -212,8 +212,8 @@ export function InteractiveChart({
             const rangeInMinutes = (to - from) / (60 * 1000);
             const newAggregation = getAggregationLevel(rangeInMinutes);
             
-            if (currentAggregation !== newAggregation) {
-                currentAggregation = newAggregation;
+            // This condition is the critical fix to prevent the infinite loop
+            if (timeframe !== newAggregation) {
                 onAggregationChangeRef.current(newAggregation);
             }
         };
