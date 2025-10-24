@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
@@ -1392,3 +1393,4 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     
 
     
+

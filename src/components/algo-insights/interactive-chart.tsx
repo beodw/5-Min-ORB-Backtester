@@ -125,12 +125,14 @@ export function InteractiveChart({
         
         const getThemeColor = (cssVar: string) => {
             const tempDiv = document.createElement('div');
+            tempDiv.style.display = 'none';
             tempDiv.style.color = `hsl(var(${cssVar}))`;
             document.body.appendChild(tempDiv);
             const color = window.getComputedStyle(tempDiv).color;
             document.body.removeChild(tempDiv);
             return color;
         };
+        
 
         const chart = createChart(chartContainerRef.current, {
             layout: {
