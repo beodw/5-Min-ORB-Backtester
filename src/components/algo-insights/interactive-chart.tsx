@@ -103,23 +103,11 @@ export function InteractiveChart({
     const chartRef = useRef<IChartApi | null>(null);
     const candlestickSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
     
-    const propsRef = useRef({ onChartClick, onChartMouseMove, displayData: [] as PriceData[], onUpdateTool, onRemoveTool, onRemovePriceMarker, onRemoveMeasurementTool, onUpdatePriceMarker });
+    const propsRef = useRef({ onChartClick, onChartMouseMove, onUpdateTool, onRemoveTool, onRemovePriceMarker, onRemoveMeasurementTool, onUpdatePriceMarker });
+    propsRef.current = { onChartClick, onChartMouseMove, onUpdateTool, onRemoveTool, onRemovePriceMarker, onRemoveMeasurementTool, onUpdatePriceMarker };
+
     const setTimeframeRef = useRef(setTimeframe);
-
-    useEffect(() => {
-        propsRef.current.onChartClick = onChartClick;
-        propsRef.current.onChartMouseMove = onChartMouseMove;
-        propsRef.current.onUpdateTool = onUpdateTool;
-        propsRef.current.onRemoveTool = onRemoveTool;
-        propsRef.current.onRemovePriceMarker = onRemovePriceMarker;
-        propsRef.current.onRemoveMeasurementTool = onRemoveMeasurementTool;
-        propsRef.current.onUpdatePriceMarker = onUpdatePriceMarker;
-    }, [onChartClick, onChartMouseMove, onUpdateTool, onRemoveTool, onRemovePriceMarker, onRemoveMeasurementTool, onUpdatePriceMarker]);
-
-     useEffect(() => {
-        setTimeframeRef.current = setTimeframe;
-    }, [setTimeframe]);
-
+    setTimeframeRef.current = setTimeframe;
 
     const displayData = useMemo(() => {
         if (endDate) {
@@ -129,30 +117,35 @@ export function InteractiveChart({
         return data || [];
     }, [data, endDate]);
     
-    propsRef.current.displayData = displayData;
-
     const chartData = useMemo(() => convertToCandlestickData(displayData), [displayData]);
 
 
     useEffect(() => {
         if (!chartContainerRef.current) return;
         
+        const getThemeColor = (cssVar: string) => {
+            const style = getComputedStyle(chartContainerRef.current!);
+            return style.getPropertyValue(cssVar).trim();
+        }
+
+        const formatColor = (cssVar: string) => `hsl(${getThemeColor(cssVar)})`;
+
         const chart = createChart(chartContainerRef.current, {
             layout: {
                 background: { color: 'transparent' },
-                textColor: 'hsl(var(--foreground))',
+                textColor: formatColor('--foreground'),
             },
             grid: {
-                vertLines: { color: 'hsl(var(--border))' },
-                horzLines: { color: 'hsl(var(--border))' },
+                vertLines: { color: formatColor('--border') },
+                horzLines: { color: formatColor('--border') },
             },
             timeScale: {
                 timeVisible: true,
                 secondsVisible: false,
-                borderColor: 'hsl(var(--border))',
+                borderColor: formatColor('--border'),
             },
             rightPriceScale: {
-                borderColor: 'hsl(var(--border))',
+                borderColor: formatColor('--border'),
             },
             crosshair: {
                 mode: 1, // Magnet mode
@@ -162,12 +155,12 @@ export function InteractiveChart({
         chartRef.current = chart;
 
         const series = chart.addCandlestickSeries({
-            upColor: 'hsl(var(--accent))',
-            downColor: 'hsl(var(--destructive))',
-            borderDownColor: 'hsl(var(--destructive))',
-            borderUpColor: 'hsl(var(--accent))',
-            wickDownColor: 'hsl(var(--destructive))',
-            wickUpColor: 'hsl(var(--accent))',
+            upColor: formatColor('--accent'),
+            downColor: formatColor('--destructive'),
+            borderDownColor: formatColor('--destructive'),
+            borderUpColor: formatColor('--accent'),
+            wickDownColor: formatColor('--destructive'),
+            wickUpColor: formatColor('--accent'),
         });
         candlestickSeriesRef.current = series;
         
@@ -176,12 +169,12 @@ export function InteractiveChart({
             
             const price = series.coordinateToPrice(param.point.y) as number;
             
-            const convertedData = convertToCandlestickData(propsRef.current.displayData);
+            const convertedData = convertToCandlestickData(displayData);
             const matchingCandles = convertedData.filter(d => d.time === param.time);
             if (matchingCandles.length === 0) return;
     
             const candle = matchingCandles[0];
-            const dataIndex = propsRef.current.displayData.findIndex(d => d.date.getTime() / 1000 === candle.time);
+            const dataIndex = displayData.findIndex(d => d.date.getTime() / 1000 === candle.time);
             if (dataIndex < 0) return;
     
             const logicalRange = chart.timeScale().getVisibleLogicalRange();
@@ -236,7 +229,7 @@ export function InteractiveChart({
             }
             candlestickSeriesRef.current = null;
         };
-    }, []); 
+    }, [displayData]); 
 
     useEffect(() => {
         if (candlestickSeriesRef.current) {
