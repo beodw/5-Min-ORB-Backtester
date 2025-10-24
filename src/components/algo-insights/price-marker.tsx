@@ -25,7 +25,8 @@ export function PriceMarker({ marker, chartApi, onUpdate, onRemove }: PriceMarke
   }, [chartApi, marker.price]);
 
   useEffect(() => {
-    updatePosition();
+    updatePosition(); // Initial position calculation
+
     const chart = chartApi.chart;
     if (chart) {
       const priceScale = chart.priceScale('right');
@@ -58,11 +59,12 @@ export function PriceMarker({ marker, chartApi, onUpdate, onRemove }: PriceMarke
     const { coordinateToPrice, priceToCoordinate } = chartApi;
     if (!isDragging || !coordinateToPrice || !priceToCoordinate) return;
     
-    const startY = priceToCoordinate(dragInfo.current.startPrice);
-    if (startY === undefined || startY === null) return;
+    // Get the chart container's position to calculate mouse position relative to it
+    const chartRect = chartApi.chartElement?.getBoundingClientRect();
+    if (!chartRect) return;
 
-    const newY = startY + (e.clientY - dragInfo.current.startY);
-    const newPrice = coordinateToPrice(newY);
+    // We need to calculate the new price based on the mouse's Y position relative to the price scale
+    const newPrice = coordinateToPrice(e.clientY - chartRect.top);
 
     if (newPrice !== null) {
       onUpdate(marker.id, newPrice);
