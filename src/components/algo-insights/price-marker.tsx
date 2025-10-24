@@ -1,9 +1,10 @@
 
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { PriceMarker as PriceMarkerType, ChartApi } from '@/types';
 import { X } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface PriceMarkerProps {
   marker: PriceMarkerType;
@@ -21,7 +22,7 @@ export function PriceMarker({ marker, chartApi, onUpdate, onRemove }: PriceMarke
     if (!chartApi.chart) return;
     const y = chartApi.priceToCoordinate?.(marker.price);
     const timeScale = chartApi.chart.timeScale();
-    const x = timeScale.width() - 50; // Pin to the right side for now
+    const x = timeScale.width() - 100; // Position the label handle
     setPosition({ x, y });
   }, [chartApi, marker.price]);
 
@@ -29,37 +30,56 @@ export function PriceMarker({ marker, chartApi, onUpdate, onRemove }: PriceMarke
     updatePosition();
     const chart = chartApi.chart;
     if (chart) {
+      // Both of these subscriptions are needed to catch all scaling/panning events
       const timeScale = chart.timeScale();
-      timeScale.subscribeVisibleTimeRangeChange(updatePosition);
-      return () => timeScale.unsubscribeVisibleTimeRangeChange(updatePosition);
+      timeScale.subscribeVisibleLogicalRangeChange(updatePosition);
+      chart.priceScale('right').subscribeOptionsChanged(updatePosition);
+
+      return () => {
+        timeScale.unsubscribeVisibleLogicalRangeChange(updatePosition);
+        chart.priceScale('right').unsubscribeOptionsChanged(updatePosition);
+      }
     }
   }, [chartApi, updatePosition]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (!marker.isDeletable) return;
+    e.stopPropagation();
     setIsDragging(true);
     dragInfo.current = { startY: e.clientY, startPrice: marker.price };
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
   };
 
-  const handleMouseMove = (e: MouseEvent) => {
+  const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!isDragging || !chartApi.coordinateToPrice) return;
-    const currentY = position.y;
-    if(currentY === undefined) return;
+    
+    // Calculate the new Y position based on the initial position + mouse delta
+    const startY = chartApi.priceToCoordinate?.(dragInfo.current.startPrice);
+    if (startY === undefined) return;
 
-    const dy = e.clientY - dragInfo.current.startY;
-    const newPrice = chartApi.coordinateToPrice(currentY + dy);
-    if(newPrice !== null) {
+    const newY = startY + (e.clientY - dragInfo.current.startY);
+    const newPrice = chartApi.coordinateToPrice(newY);
+
+    if (newPrice !== null) {
       onUpdate(marker.id, newPrice);
     }
-  };
+  }, [isDragging, chartApi, onUpdate, marker.id]);
 
-  const handleMouseUp = () => {
+  const handleMouseUp = useCallback(() => {
     setIsDragging(false);
     window.removeEventListener('mousemove', handleMouseMove);
     window.removeEventListener('mouseup', handleMouseUp);
-  };
+  }, [handleMouseMove]);
+  
+  useEffect(() => {
+    // Cleanup listeners if component unmounts while dragging
+    return () => {
+        window.removeEventListener('mousemove', handleMouseMove);
+        window.removeEventListener('mouseup', handleMouseUp);
+    }
+  }, [handleMouseMove, handleMouseUp]);
+
 
   if (position.y === undefined) {
     return null;
@@ -67,23 +87,31 @@ export function PriceMarker({ marker, chartApi, onUpdate, onRemove }: PriceMarke
   
   return (
     <div
-      className="absolute flex items-center h-px bg-yellow-500 border-t-2 border-dashed border-yellow-500"
+      className="absolute flex items-center h-px bg-yellow-500/0 border-t border-dashed border-yellow-500 z-10"
       style={{
         top: position.y,
         left: 0,
         width: '100%',
+        pointerEvents: 'none',
       }}
     >
       <div 
-        className="absolute bg-background p-1 rounded-md text-xs cursor-ns-resize"
+        className={cn(
+            "absolute flex items-center bg-background/80 p-1 rounded-md text-xs",
+            marker.isDeletable ? "cursor-ns-resize pointer-events-auto" : "pointer-events-none"
+        )}
         style={{ left: position.x }}
         onMouseDown={handleMouseDown}
       >
         <span>{marker.price.toFixed(5)}</span>
         {marker.isDeletable && (
           <button
-            onClick={() => onRemove(marker.id)}
-            className="ml-2 text-destructive"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove(marker.id);
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="ml-2 text-destructive pointer-events-auto cursor-pointer"
           >
             <X className="h-3 w-3" />
           </button>
