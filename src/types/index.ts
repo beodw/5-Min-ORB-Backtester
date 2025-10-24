@@ -1,5 +1,6 @@
 
-import type { Time, Coordinate, IChartApi } from 'lightweight-charts';
+
+import type { Time, Coordinate, IChartApi, ISeriesApi } from 'lightweight-charts';
 
 export interface PriceData {
   date: Date;
@@ -77,6 +78,7 @@ export interface ChartApi {
     chartElement: HTMLDivElement | null;
     data: PriceData[];
     chart: IChartApi | null;
+    series: ISeriesApi<'Candlestick'> | null;
 }
 
     

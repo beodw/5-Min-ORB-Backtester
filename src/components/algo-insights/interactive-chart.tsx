@@ -54,6 +54,7 @@ interface InteractiveChartProps {
   isYAxisLocked: boolean;
   openingRange: OpeningRange | null;
   tab: 'backtester' | 'journal';
+  setChartApi: (api: any) => void;
 }
 
 const convertToCandlestickData = (priceData: PriceData[]): (CandlestickData & { original: PriceData })[] => {
@@ -98,6 +99,7 @@ export function InteractiveChart({
     isYAxisLocked,
     openingRange,
     tab,
+    setChartApi,
 }: InteractiveChartProps) {
     const chartContainerRef = useRef<HTMLDivElement>(null);
     const chartRef = useRef<IChartApi | null>(null);
@@ -275,7 +277,12 @@ export function InteractiveChart({
         chartElement: chartContainerRef.current,
         data: displayData,
         chart: chartRef.current,
+        series: candlestickSeriesRef.current,
     }), [timeToCoordinate, coordinateToTime, priceToCoordinate, coordinateToPrice, displayData]);
+    
+    useEffect(() => {
+      setChartApi(chartApi);
+    }, [chartApi, setChartApi]);
 
     const openingRangeLines = useRef<[IPriceLine?, IPriceLine?]>([undefined, undefined]);
 
@@ -392,7 +399,5 @@ export function InteractiveChart({
         </div>
     );
 }
-
-    
 
     

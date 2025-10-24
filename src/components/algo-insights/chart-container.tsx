@@ -331,6 +331,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const askFileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const chartApiRef = useRef<any>(null); // Ref to store chart API methods
 
   const [showRestoreDialog, setShowRestoreDialog] = useState(false);
   const [sessionToRestore, setSessionToRestore] = useState<string | null>(null);
@@ -1121,6 +1122,46 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     })) 
     : [];
 
+  const handleOverlayClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!isPlacingAnything || !chartApiRef.current?.chart) return;
+
+    const chart = chartApiRef.current.chart;
+    const series = chartApiRef.current.series;
+    const chartElement = chartApiRef.current.chartElement;
+
+    if (!chart || !series || !chartElement) return;
+
+    const rect = chartElement.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+
+    const price = series.coordinateToPrice(y);
+    const time = chart.timeScale().coordinateToTime(x);
+
+    if (price === null || time === null) return;
+    
+    const data = chartApiRef.current.data;
+    const matchingCandles = data.filter((d: any) => Math.floor(d.date.getTime() / 1000) === time);
+    if (matchingCandles.length === 0) return;
+    const candle = matchingCandles[0];
+    const dataIndex = data.findIndex((d: any) => d.date.getTime() === candle.date.getTime());
+
+
+    const logicalRange = chart.timeScale().getVisibleLogicalRange();
+
+    const chartClickData: ChartClickData = {
+        price: price,
+        date: new Date(time * 1000),
+        dataIndex: dataIndex,
+        closePrice: candle.close,
+        xDomain: logicalRange ? [logicalRange.from, logicalRange.to] : [0, 0],
+        candle: candle,
+    };
+    
+    handleChartClick(chartClickData);
+  };
+
+
   const renderToolbar = () => (
     <>
        <div 
@@ -1288,10 +1329,18 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
             </AlertDialogContent>
         </AlertDialog>
 
+        {isPlacingAnything && (
+          <div 
+            className="absolute inset-0 z-20 cursor-crosshair"
+            onClick={handleOverlayClick}
+          />
+        )}
+
         <div className="absolute inset-0">
             {timeZone && (
                 <InteractiveChart
                     data={activePriceData}
+                    setChartApi={(api) => chartApiRef.current = api}
                     onAggregationChange={handleSetTimeframe}
                     trades={journalTradesOnChart}
                     onChartClick={handleChartClick}
