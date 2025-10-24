@@ -203,23 +203,22 @@ export function InteractiveChart({
         const handleResize = () => chart.applyOptions({ width: chartContainerRef.current?.clientWidth, height: chartContainerRef.current?.clientHeight });
         window.addEventListener('resize', handleResize);
 
-        const handleVisibleTimeRangeChange = (newVisibleTimeRange: TimeRange | null) => {
-            if (!newVisibleTimeRange || !chart) return;
+        // const handleVisibleTimeRangeChange = (newVisibleTimeRange: TimeRange | null) => {
+        //     if (!newVisibleTimeRange || !chart) return;
       
-            const from = (newVisibleTimeRange.from as UTCTimestamp) * 1000;
-            const to = (newVisibleTimeRange.to as UTCTimestamp) * 1000;
+        //     const from = (newVisibleTimeRange.from as UTCTimestamp) * 1000;
+        //     const to = (newVisibleTimeRange.to as UTCTimestamp) * 1000;
       
-            const rangeInMinutes = (to - from) / (60 * 1000);
-            const newAggregation = getAggregationLevel(rangeInMinutes);
+        //     const rangeInMinutes = (to - from) / (60 * 1000);
+        //     const newAggregation = getAggregationLevel(rangeInMinutes);
             
-            // This condition is the critical fix to prevent the infinite loop
-            if (timeframe !== newAggregation) {
-                onAggregationChangeRef.current(newAggregation);
-            }
-        };
+        //     if (timeframe !== newAggregation) {
+        //         onAggregationChangeRef.current(newAggregation);
+        //     }
+        // };
       
         const timeScale = chart.timeScale();
-        timeScale.subscribeVisibleTimeRangeChange(handleVisibleTimeRangeChange);
+        // timeScale.subscribeVisibleTimeRangeChange(handleVisibleTimeRangeChange);
 
         return () => {
             window.removeEventListener('resize', handleResize);
@@ -227,7 +226,7 @@ export function InteractiveChart({
                 chartRef.current.unsubscribeClick(handleChartClickEvent);
                 chartRef.current.unsubscribeCrosshairMove(handleChartMouseMoveEvent);
                 const timeScale = chartRef.current.timeScale();
-                timeScale.unsubscribeVisibleTimeRangeChange(handleVisibleTimeRangeChange);
+                // timeScale.unsubscribeVisibleTimeRangeChange(handleVisibleTimeRangeChange);
                 chartRef.current.remove();
                 chartRef.current = null;
             }
