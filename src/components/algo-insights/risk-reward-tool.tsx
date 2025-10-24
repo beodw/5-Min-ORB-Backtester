@@ -241,7 +241,7 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onRemove, pipValue }:
        <button
             onClick={() => onRemove(tool.id)}
             onMouseDown={(e) => e.stopPropagation()}
-            className="absolute pointer-events-auto bg-destructive text-destructive-foreground rounded-full p-0.5"
+            className="absolute pointer-events-auto bg-destructive text-destructive-foreground rounded-full p-0.5 z-10 cursor-pointer"
             style={{
                 left: positions.entry.x + boxWidth + 5,
                 top: positions.entry.y - 8,
