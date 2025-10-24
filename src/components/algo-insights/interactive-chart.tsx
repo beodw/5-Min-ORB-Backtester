@@ -14,7 +14,7 @@ import {
   MouseEventParams,
   IPriceLine,
 } from "lightweight-charts";
-import type { PriceData, Trade, RiskRewardTool as RRToolType, PriceMarker as PriceMarkerType, MeasurementTool as MeasurementToolType, OpeningRange, AggregatedPriceData, MeasurementPoint } from "@/types";
+import type { PriceData, Trade, RiskRewardTool as RRToolType, PriceMarker as PriceMarkerType, MeasurementTool as MeasurementToolType, OpeningRange, MeasurementPoint } from "@/types";
 import { RiskRewardTool } from "./risk-reward-tool";
 import { PriceMarker } from "./price-marker";
 import { MeasurementTool } from "./measurement-tool";
@@ -31,7 +31,7 @@ export type ChartClickData = {
 };
 
 interface InteractiveChartProps {
-  data: AggregatedPriceData;
+  data: PriceData[];
   trades: Trade[];
   onChartClick: (data: ChartClickData) => void;
   onChartMouseMove: (data: ChartClickData) => void;
@@ -104,7 +104,7 @@ export function InteractiveChart({
     const candlestickSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
     const currentAggregationRef = useRef(timeframe);
     
-    const propsRef = useRef({ onChartClick, onChartMouseMove, displayData: [] as PriceData[], onUpdateTool, onRemoveTool, onRemovePriceMarker, onRemoveMeasurementTool, onUpdatePriceMarker, onAggregationChange });
+    const propsRef = useRef({ onChartClick, onChartMouseMove, displayData: [] as PriceData[], onUpdateTool, onRemoveTool, onRemovePriceMarker, onRemoveMeasurementTool, onUpdatePriceMarker });
 
     useEffect(() => {
         propsRef.current.onChartClick = onChartClick;
@@ -114,8 +114,7 @@ export function InteractiveChart({
         propsRef.current.onRemovePriceMarker = onRemovePriceMarker;
         propsRef.current.onRemoveMeasurementTool = onRemoveMeasurementTool;
         propsRef.current.onUpdatePriceMarker = onUpdatePriceMarker;
-        propsRef.current.onAggregationChange = onAggregationChange;
-    }, [onChartClick, onChartMouseMove, onUpdateTool, onRemoveTool, onRemovePriceMarker, onRemoveMeasurementTool, onUpdatePriceMarker, onAggregationChange]);
+    }, [onChartClick, onChartMouseMove, onUpdateTool, onRemoveTool, onRemovePriceMarker, onRemoveMeasurementTool, onUpdatePriceMarker]);
 
     const onAggregationChangeRef = useRef(onAggregationChange);
     useEffect(() => {
@@ -124,13 +123,12 @@ export function InteractiveChart({
 
 
     const displayData = useMemo(() => {
-        const selectedData = data[timeframe as keyof AggregatedPriceData] || data['1m'];
         if (endDate) {
             const endTimestamp = endDate.getTime();
-            return selectedData.filter(point => point.date.getTime() <= endTimestamp);
+            return data.filter(point => point.date.getTime() <= endTimestamp);
         }
-        return selectedData || [];
-    }, [data, timeframe, endDate]);
+        return data || [];
+    }, [data, endDate]);
     
     propsRef.current.displayData = displayData;
 
@@ -140,32 +138,26 @@ export function InteractiveChart({
     useEffect(() => {
         if (!chartContainerRef.current) return;
 
-        const getThemeColor = (tailwindColorClass: string): string => {
-            const tempDiv = document.createElement('div');
-            tempDiv.className = `bg-${tailwindColorClass}`;
-            tempDiv.style.display = 'none';
-            document.body.appendChild(tempDiv);
-            const color = window.getComputedStyle(tempDiv).backgroundColor;
-            document.body.removeChild(tempDiv);
-            return color;
+        const getThemeColor = (cssVar: string): string => {
+            return getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim();
         };
         
         const chart = createChart(chartContainerRef.current, {
             layout: {
-                background: { color: 'rgba(0,0,0,0)' },
-                textColor: getThemeColor('foreground'),
+                background: { color: 'transparent' },
+                textColor: `hsl(${getThemeColor('--foreground')})`,
             },
             grid: {
-                vertLines: { color: getThemeColor('border') },
-                horzLines: { color: getThemeColor('border') },
+                vertLines: { color: `hsl(${getThemeColor('--border')})` },
+                horzLines: { color: `hsl(${getThemeColor('--border')})` },
             },
             timeScale: {
                 timeVisible: true,
                 secondsVisible: false,
-                borderColor: getThemeColor('border'),
+                borderColor: `hsl(${getThemeColor('--border')})`,
             },
             rightPriceScale: {
-                borderColor: getThemeColor('border'),
+                borderColor: `hsl(${getThemeColor('--border')})`,
             },
             crosshair: {
                 mode: 1, // Magnet mode
@@ -175,12 +167,12 @@ export function InteractiveChart({
         chartRef.current = chart;
 
         const series = chart.addCandlestickSeries({
-            upColor: getThemeColor('accent'),
-            downColor: getThemeColor('destructive'),
-            borderDownColor: getThemeColor('destructive'),
-            borderUpColor: getThemeColor('accent'),
-            wickDownColor: getThemeColor('destructive'),
-            wickUpColor: getThemeColor('accent'),
+            upColor: `hsl(${getThemeColor('--accent')})`,
+            downColor: `hsl(${getThemeColor('--destructive')})`,
+            borderDownColor: `hsl(${getThemeColor('--destructive')})`,
+            borderUpColor: `hsl(${getThemeColor('--accent')})`,
+            wickDownColor: `hsl(${getThemeColor('--destructive')})`,
+            wickUpColor: `hsl(${getThemeColor('--accent')})`,
         });
         candlestickSeriesRef.current = series;
         
@@ -402,3 +394,4 @@ export function InteractiveChart({
     
 
     
+

@@ -341,7 +341,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
   }, []);
 
   useEffect(() => {
-    // Set user's timezone on client-side
+    // This now runs only on the client
     setTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
 
     const getOffsetInMinutes = (tz: string): number => {
@@ -373,7 +373,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     if (savedSettingsRaw) {
         try {
             const savedSettings = JSON.parse(savedSettingsRaw);
-            if (savedSettings.timeZone) setTimeZone(savedSettings.timeZone);
+            // Don't set timezone from here to avoid hydration issues
             if (savedSettings.sessionStartTime) setSessionStartTime(savedSettings.sessionStartTime);
             if (savedSettings.pipValue) setPipValue(savedSettings.pipValue);
         } catch (e) {
@@ -443,14 +443,6 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         setOpeningRange(null);
     }
   }, [selectedDate, priceData, sessionStartTime, isDataImported]);
-
-
-  useEffect(() => {
-    // Set user's timezone on client-side
-    if(!timeZone) {
-      setTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
-    }
-  }, [timeZone]);
 
   useEffect(() => {
     const settings = { timeZone, sessionStartTime, pipValue };
@@ -597,8 +589,8 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
       const stopLoss = placingToolType === 'long' ? entryPrice - stopLossOffset : entryPrice + stopLossOffset;
       const takeProfit = placingToolType === 'long' ? entryPrice + takeProfitOffset : entryPrice - takeProfitOffset;
       
-      const visibleIndexRange = chartData.xDomain[1] - chartData.xDomain[0];
-      const widthInPoints = Math.round(visibleIndexRange * 0.25);
+      // A default width based on a fraction of visible candles
+      const defaultWidthInCandles = 50;
 
       const newTool: RRToolType = {
         id: `rr-${Date.now()}`,
@@ -606,7 +598,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         stopLoss: stopLoss,
         takeProfit: takeProfit,
         entryDate: chartData.date,
-        widthInPoints: widthInPoints,
+        widthInPoints: defaultWidthInCandles,
         position: placingToolType,
       };
       
@@ -1115,6 +1107,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
   
   const chartEndDate = backtestEndDate || selectedDate;
 
+  const activePriceData = aggregatedPriceData[timeframe as keyof AggregatedPriceData] || aggregatedPriceData['1m'];
 
   const journalTradesOnChart = tab === 'journal' 
     ? allJournalTrades.map((t, i) => ({
@@ -1295,7 +1288,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         <div className="absolute inset-0">
             {timeZone && (
                 <InteractiveChart
-                    data={aggregatedPriceData}
+                    data={activePriceData}
                     onAggregationChange={handleSetTimeframe}
                     trades={journalTradesOnChart}
                     onChartClick={handleChartClick}
