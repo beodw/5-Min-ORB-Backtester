@@ -1377,8 +1377,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                             <Input id="session-start" type="time" value={sessionStartTime} onChange={(e) => setSessionStartTime(e.target.value)} />
                         </div>
                         <div className="grid gap-2">
-                            <Label htmlFor="pip-value">Pip / Point Value</Label>
-                            <Input id="pip-value" type="number" step="0.0001" value={pipValue} onChange={(e) => setPipValue(parseFloat(e.target.value) || 0)} />
+                            <Label htmlFor="pip-value">Pip / Point Value</Label>                            <Input id="pip-value" type="number" step="0.0001" value={pipValue} onChange={(e) => setPipValue(parseFloat(e.target.value) || 0)} />
                         </div>
                     </div>
                 </PopoverContent>
@@ -1389,9 +1388,3 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     </div>
   );
 }
-
-    
-
-    
-
-

@@ -10,11 +10,11 @@ interface PriceMarkerProps {
   marker: PriceMarkerType;
   chartApi: ChartApi;
   onUpdate: (id: string, price: number) => void;
-  onRemove: (id: string) => void;
+  onRemove: (id:string) => void;
 }
 
 export function PriceMarker({ marker, chartApi, onUpdate, onRemove }: PriceMarkerProps) {
-  const [position, setPosition] = useState<{ x: number, y: number | undefined }>({ x: 0, y: undefined });
+  const [position, setPosition] = useState<{ x: number | undefined, y: number | undefined }>({ x: undefined, y: undefined });
   const [isDragging, setIsDragging] = useState(false);
   const dragInfo = useRef({ startY: 0, startPrice: 0 });
 
@@ -22,7 +22,7 @@ export function PriceMarker({ marker, chartApi, onUpdate, onRemove }: PriceMarke
     if (!chartApi.chart) return;
     const y = chartApi.priceToCoordinate?.(marker.price);
     const timeScale = chartApi.chart.timeScale();
-    const x = timeScale.width() - 100; // Position the label handle
+    const x = Math.max(0, timeScale.width() - 150); // Position the label handle, prevent negative values
     setPosition({ x, y });
   }, [chartApi, marker.price]);
 
@@ -33,12 +33,14 @@ export function PriceMarker({ marker, chartApi, onUpdate, onRemove }: PriceMarke
       const timeScale = chart.timeScale();
       const priceScale = chart.priceScale('right');
       
-      timeScale.subscribeVisibleLogicalRangeChange(updatePosition);
-      priceScale.subscribeOptionsChanged(updatePosition);
+      const subscriber = () => updatePosition();
+      
+      timeScale.subscribeVisibleLogicalRangeChange(subscriber);
+      priceScale.subscribeOptionsChanged(subscriber);
 
       return () => {
-        timeScale.unsubscribeVisibleLogicalRangeChange(updatePosition);
-        priceScale.unsubscribeOptionsChanged(updatePosition);
+        timeScale.unsubscribeVisibleLogicalRangeChange(subscriber);
+        priceScale.unsubscribeOptionsChanged(subscriber);
       }
     }
   }, [chartApi, updatePosition]);
@@ -80,7 +82,7 @@ export function PriceMarker({ marker, chartApi, onUpdate, onRemove }: PriceMarke
   }, [handleMouseMove, handleMouseUp]);
 
 
-  if (position.y === undefined) {
+  if (position.y === undefined || position.x === undefined) {
     return null;
   }
   
@@ -96,7 +98,7 @@ export function PriceMarker({ marker, chartApi, onUpdate, onRemove }: PriceMarke
     >
       <div 
         className={cn(
-            "absolute flex items-center bg-background/80 p-1 rounded-md text-xs",
+            "absolute flex items-center bg-background/80 p-1 rounded-md text-xs border border-border/80",
             marker.isDeletable ? "cursor-ns-resize pointer-events-auto" : "pointer-events-none"
         )}
         style={{ left: position.x }}
