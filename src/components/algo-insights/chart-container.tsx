@@ -233,14 +233,6 @@ const TOOLBAR_POS_KEY = 'algo-insights-toolbar-positions';
 
 const JOURNAL_PAIRS = ["US30", "JPN225", "HKG40", "US100"];
 
-const getInitialTimeZone = () => {
-    try {
-        return Intl.DateTimeFormat().resolvedOptions().timeZone;
-    } catch (e) {
-        return "UTC"; // Fallback
-    }
-}
-
 export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     const [aggregatedPriceData, setAggregatedPriceData] = useState<AggregatedPriceData>({ '1m': mockPriceData });
     const [priceData, setPriceData] = useState<PriceData[]>(mockPriceData);
@@ -329,7 +321,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
   const [liveMeasurementTool, setLiveMeasurementTool] = useState<MeasurementToolType | null>(null);
 
   const [timeframe, setTimeframe] = useState('1m');
-  const [timeZone, setTimeZone] = useState<string>(getInitialTimeZone());
+  const [timeZone, setTimeZone] = useState<string>('UTC');
   const [timezones, setTimezones] = useState<{ value: string; label: string }[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [sessionStartTime, setSessionStartTime] = useState('09:30');
@@ -382,11 +374,14 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
 
 
   useEffect(() => {
-    const getOffsetInMinutes = (timeZone: string): number => {
+    // Set user's timezone on client-side
+    setTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
+
+    const getOffsetInMinutes = (tz: string): number => {
         try {
             const now = new Date();
             const utcDate = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }));
-            const tzDate = new Date(now.toLocaleString('en-US', { timeZone }));
+            const tzDate = new Date(now.toLocaleString('en-US', { timeZone: tz }));
             return (tzDate.getTime() - utcDate.getTime()) / 60000;
         } catch (e) {
             return NaN;
@@ -416,10 +411,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
             if (savedSettings.pipValue) setPipValue(savedSettings.pipValue);
         } catch (e) {
             console.error("Failed to parse app settings from localStorage", e);
-            setTimeZone(getInitialTimeZone());
         }
-    } else {
-        setTimeZone(getInitialTimeZone());
     }
     
     const savedSessionRaw = localStorage.getItem(sessionKey);
@@ -1391,5 +1383,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     </div>
   );
 }
+
+    
 
     
