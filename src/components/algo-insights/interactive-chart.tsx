@@ -128,7 +128,11 @@ export function InteractiveChart({
             return style.getPropertyValue(cssVar).trim();
         }
 
-        const formatColor = (cssVar: string) => `hsl(${getThemeColor(cssVar)})`;
+        const formatColor = (cssVar: string) => {
+            const colorValue = getThemeColor(cssVar);
+            // lightweight-charts expects hsl(h, s%, l%), not hsl(h s% l%)
+            return `hsl(${colorValue.replace(/\s/g, ', ')})`;
+        };
 
         const chart = createChart(chartContainerRef.current, {
             layout: {
@@ -229,7 +233,7 @@ export function InteractiveChart({
             }
             candlestickSeriesRef.current = null;
         };
-    }, [displayData]); 
+    }, []); 
 
     useEffect(() => {
         if (candlestickSeriesRef.current) {
