@@ -218,19 +218,6 @@ export function InteractiveChart({
         if (candlestickSeriesRef.current) {
             candlestickSeriesRef.current.setData(chartData);
 
-            if (chartData.length > 0) {
-                 const series = candlestickSeriesRef.current;
-                 const testLineOptions: PriceLineOptions = {
-                    price: 1.14,
-                    color: 'rgba(255, 165, 0, 0.8)',
-                    lineWidth: 2,
-                    lineStyle: 0, // Solid
-                    axisLabelVisible: true,
-                    title: 'Test @ 1.14',
-                };
-                series.createPriceLine(testLineOptions);
-            }
-
             if(tab === 'backtester' && endDate && chartData.length > 0) {
                  const timeScale = chartRef.current?.timeScale();
                  if(timeScale) {
