@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import {
@@ -326,22 +327,23 @@ export function InteractiveChart({
             }
         });
 
-        // Add new lines for markers that don't have one yet
+        // Add or update lines
         priceMarkers.forEach(marker => {
-            if (!priceMarkerLines.current.has(marker.id)) {
-                const lineOptions: PriceLineOptions = {
-                    price: marker.price,
-                    color: 'orange',
-                    lineWidth: 2,
-                    lineStyle: 1, // Dotted
-                    axisLabelVisible: true,
-                    title: marker.price.toFixed(5),
-                };
-                const newLine = series.createPriceLine(lineOptions);
-                priceMarkerLines.current.set(marker.id, newLine);
+            const lineOptions: PriceLineOptions = {
+                price: marker.price,
+                color: 'orange',
+                lineWidth: 2,
+                lineStyle: 1, // Dotted
+                axisLabelVisible: true,
+                title: marker.price.toFixed(5),
+            };
+
+            const existingLine = priceMarkerLines.current.get(marker.id);
+            if (existingLine) {
+                 existingLine.applyOptions(lineOptions);
             } else {
-                 const line = priceMarkerLines.current.get(marker.id);
-                 line?.applyOptions({ price: marker.price, title: marker.price.toFixed(5) });
+                 const newLine = series.createPriceLine(lineOptions);
+                 priceMarkerLines.current.set(marker.id, newLine);
             }
         });
     }, [priceMarkers]);

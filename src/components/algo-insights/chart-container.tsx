@@ -611,7 +611,11 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         price: chartData.price,
         isDeletable: true,
       };
-      setPriceMarkers(prev => [...prev, newMarker]);
+      pushToHistory(drawingState);
+      setDrawingState(prev => ({
+        ...prev,
+        priceMarkers: [...prev.priceMarkers, newMarker]
+      }));
       setIsPlacingPriceMarker(false);
     } else if (isPlacingMeasurement) {
         const { price, dataIndex, candle } = chartData;
@@ -679,16 +683,16 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
   };
 
   const handleRemovePriceMarker = (id: string) => {
-    setPriceMarkers(prevMarkers => prevMarkers.filter(m => m.id !== id));
+    pushToHistory(drawingState);
+    setDrawingState(prev => ({ ...prev, priceMarkers: prev.priceMarkers.filter(m => m.id !== id) }));
   };
 
   const handleUpdatePriceMarker = (id: string, price: number) => {
     pushToHistory(drawingState);
-    setPriceMarkers(prevMarkers => 
-      prevMarkers.map(m => 
-        m.id === id ? { ...m, price } : m
-      )
-    );
+    setDrawingState(prev => ({
+      ...prev,
+      priceMarkers: prev.priceMarkers.map(m => m.id === id ? { ...m, price } : m)
+    }));
   };
 
   const handleClearAllDrawings = () => {
