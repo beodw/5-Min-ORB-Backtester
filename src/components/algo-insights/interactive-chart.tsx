@@ -325,21 +325,20 @@ export function InteractiveChart({
 
         // Add or update lines
         priceMarkers.forEach(marker => {
-            const existingLine = priceMarkerLines.current.get(marker.id);
-            const lineOptions: PriceLineOptions = {
-                price: marker.price,
-                color: 'rgba(255, 165, 0, 0.8)',
-                lineWidth: 1,
-                lineStyle: 1, // Dotted
-                axisLabelVisible: true,
-                title: marker.price.toFixed(5),
-            };
-
-            if (existingLine) {
-                // If line exists, just update its options
-                existingLine.applyOptions(lineOptions);
+            if (priceMarkerLines.current.has(marker.id)) {
+                // Already exists, maybe update if needed, for now we assume they are static
+                const existingLine = priceMarkerLines.current.get(marker.id);
+                existingLine?.applyOptions({ price: marker.price });
             } else {
                 // If it's a new marker, create a new line
+                const lineOptions: PriceLineOptions = {
+                    price: marker.price,
+                    color: 'rgba(255, 165, 0, 0.8)',
+                    lineWidth: 1,
+                    lineStyle: 1, // Dotted
+                    axisLabelVisible: true,
+                    title: marker.price.toFixed(5),
+                };
                 const newLine = series.createPriceLine(lineOptions);
                 priceMarkerLines.current.set(marker.id, newLine);
             }
@@ -390,5 +389,3 @@ export function InteractiveChart({
         </div>
     );
 }
-
-    
