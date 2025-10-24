@@ -48,6 +48,7 @@ interface InteractiveChartProps {
   liveMeasurementTool: MeasurementToolType | null;
   pipValue: number;
   timeframe: string;
+  onAggregationChange: (agg: string) => void;
   timeZone: string;
   endDate?: Date;
   isYAxisLocked: boolean;
@@ -92,6 +93,8 @@ export function InteractiveChart({
     onRemoveMeasurementTool,
     onUpdatePriceMarker,
     pipValue,
+    timeframe,
+    onAggregationChange,
     isYAxisLocked,
     openingRange,
     tab,
@@ -100,8 +103,7 @@ export function InteractiveChart({
     const chartRef = useRef<IChartApi | null>(null);
     const candlestickSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
     
-    const [currentAggregation, setCurrentAggregation] = useState('1m');
-    const propsRef = useRef({ onChartClick, onChartMouseMove, displayData: [] as PriceData[], onUpdateTool, onRemoveTool, onRemovePriceMarker, onRemoveMeasurementTool, onUpdatePriceMarker });
+    const propsRef = useRef({ onChartClick, onChartMouseMove, displayData: [] as PriceData[], onUpdateTool, onRemoveTool, onRemovePriceMarker, onRemoveMeasurementTool, onUpdatePriceMarker, timeframe, onAggregationChange });
 
     useEffect(() => {
         propsRef.current.onChartClick = onChartClick;
@@ -111,16 +113,18 @@ export function InteractiveChart({
         propsRef.current.onRemovePriceMarker = onRemovePriceMarker;
         propsRef.current.onRemoveMeasurementTool = onRemoveMeasurementTool;
         propsRef.current.onUpdatePriceMarker = onUpdatePriceMarker;
-    }, [onChartClick, onChartMouseMove, onUpdateTool, onRemoveTool, onRemovePriceMarker, onRemoveMeasurementTool, onUpdatePriceMarker]);
+        propsRef.current.timeframe = timeframe;
+        propsRef.current.onAggregationChange = onAggregationChange;
+    }, [onChartClick, onChartMouseMove, onUpdateTool, onRemoveTool, onRemovePriceMarker, onRemoveMeasurementTool, onUpdatePriceMarker, timeframe, onAggregationChange]);
 
     const displayData = useMemo(() => {
-        const selectedData = data[currentAggregation as keyof AggregatedPriceData] || data['1m'];
+        const selectedData = data[timeframe as keyof AggregatedPriceData] || data['1m'];
         if (endDate) {
             const endTimestamp = endDate.getTime();
             return selectedData.filter(point => point.date.getTime() <= endTimestamp);
         }
         return selectedData || [];
-    }, [data, currentAggregation, endDate]);
+    }, [data, timeframe, endDate]);
     
     propsRef.current.displayData = displayData;
 
@@ -132,7 +136,7 @@ export function InteractiveChart({
         
         const getThemeColor = (tailwindColorClass: string, property: 'color' | 'backgroundColor' = 'color'): string => {
             const tempDiv = document.createElement('div');
-            tempDiv.className = `bg-${tailwindColorClass}`; // Always use bg- to get a solid color
+            tempDiv.className = `bg-${tailwindColorClass}`;
             tempDiv.style.display = 'none';
             document.body.appendChild(tempDiv);
             const color = window.getComputedStyle(tempDiv).backgroundColor;
@@ -217,12 +221,9 @@ export function InteractiveChart({
             const rangeInMinutes = (to - from) / (60 * 1000);
             const newAggregation = getAggregationLevel(rangeInMinutes);
             
-            setCurrentAggregation(prev => {
-                if (prev === newAggregation) {
-                    return prev;
-                }
-                return newAggregation;
-            });
+            if (propsRef.current.timeframe !== newAggregation) {
+                propsRef.current.onAggregationChange(newAggregation);
+            }
         };
       
         const timeScale = chart.timeScale();
@@ -230,11 +231,12 @@ export function InteractiveChart({
 
         return () => {
             window.removeEventListener('resize', handleResize);
-            timeScale.unsubscribeVisibleTimeRangeChange(handleVisibleTimeRangeChange);
-            chart.unsubscribeClick(handleChartClickEvent);
-            chart.unsubscribeCrosshairMove(handleChartMouseMoveEvent);
+            if(chartRef.current) {
+                const timeScale = chartRef.current.timeScale();
+                timeScale.unsubscribeVisibleTimeRangeChange(handleVisibleTimeRangeChange);
+                chartRef.current.unsubscribeClick(handleChartClickEvent);
+                chartRef.current.unsubscribeCrosshairMove(handleChartMouseMoveEvent);
 
-            if (chartRef.current) {
                 chartRef.current.remove();
                 chartRef.current = null;
             }
@@ -383,10 +385,12 @@ export function InteractiveChart({
             )}
             
              <div className="absolute top-2 left-2 text-xs text-muted-foreground bg-background/50 px-2 py-1 rounded">
-                Timeframe: {currentAggregation.toUpperCase()}
+                Timeframe: {timeframe.toUpperCase()}
             </div>
         </div>
     );
 }
+
+    
 
     

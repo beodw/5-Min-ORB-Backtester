@@ -233,6 +233,14 @@ const TOOLBAR_POS_KEY = 'algo-insights-toolbar-positions';
 
 const JOURNAL_PAIRS = ["US30", "JPN225", "HKG40", "US100"];
 
+const getInitialTimeZone = () => {
+    try {
+        return Intl.DateTimeFormat().resolvedOptions().timeZone;
+    } catch (e) {
+        return "UTC"; // Fallback
+    }
+}
+
 export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     const [aggregatedPriceData, setAggregatedPriceData] = useState<AggregatedPriceData>({ '1m': mockPriceData });
     const [priceData, setPriceData] = useState<PriceData[]>(mockPriceData);
@@ -321,7 +329,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
   const [liveMeasurementTool, setLiveMeasurementTool] = useState<MeasurementToolType | null>(null);
 
   const [timeframe, setTimeframe] = useState('1m');
-  const [timeZone, setTimeZone] = useState<string>('');
+  const [timeZone, setTimeZone] = useState<string>(getInitialTimeZone());
   const [timezones, setTimezones] = useState<{ value: string; label: string }[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [sessionStartTime, setSessionStartTime] = useState('09:30');
@@ -408,10 +416,10 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
             if (savedSettings.pipValue) setPipValue(savedSettings.pipValue);
         } catch (e) {
             console.error("Failed to parse app settings from localStorage", e);
-            setTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+            setTimeZone(getInitialTimeZone());
         }
     } else {
-        setTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+        setTimeZone(getInitialTimeZone());
     }
     
     const savedSessionRaw = localStorage.getItem(sessionKey);
@@ -1281,30 +1289,33 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         </AlertDialog>
 
         <div className="absolute inset-0">
-            <InteractiveChart
-                data={aggregatedPriceData}
-                trades={journalTradesOnChart}
-                onChartClick={handleChartClick}
-                onChartMouseMove={handleChartMouseMove}
-                rrTools={rrTools}
-                onUpdateTool={handleUpdateTool}
-                onRemoveTool={handleRemoveTool}
-                isPlacingRR={!!placingToolType}
-                isPlacingPriceMarker={isPlacingPriceMarker}
-                priceMarkers={priceMarkers}
-                onRemovePriceMarker={handleRemovePriceMarker}
-                onUpdatePriceMarker={handleUpdatePriceMarker}
-                measurementTools={measurementTools}
-                onRemoveMeasurementTool={handleRemoveMeasurementTool}
-                liveMeasurementTool={liveMeasurementTool}
-                pipValue={pipValue}
-                timeframe={timeframe}
-                timeZone={timeZone}
-                endDate={chartEndDate}
-                isYAxisLocked={isYAxisLocked}
-                openingRange={openingRange}
-                tab={tab}
-            />
+            {timeZone && (
+                <InteractiveChart
+                    data={aggregatedPriceData}
+                    onAggregationChange={setTimeframe}
+                    trades={journalTradesOnChart}
+                    onChartClick={handleChartClick}
+                    onChartMouseMove={handleChartMouseMove}
+                    rrTools={rrTools}
+                    onUpdateTool={handleUpdateTool}
+                    onRemoveTool={handleRemoveTool}
+                    isPlacingRR={!!placingToolType}
+                    isPlacingPriceMarker={isPlacingPriceMarker}
+                    priceMarkers={priceMarkers}
+                    onRemovePriceMarker={handleRemovePriceMarker}
+                    onUpdatePriceMarker={handleUpdatePriceMarker}
+                    measurementTools={measurementTools}
+                    onRemoveMeasurementTool={handleRemoveMeasurementTool}
+                    liveMeasurementTool={liveMeasurementTool}
+                    pipValue={pipValue}
+                    timeframe={timeframe}
+                    timeZone={timeZone}
+                    endDate={chartEndDate}
+                    isYAxisLocked={isYAxisLocked}
+                    openingRange={openingRange}
+                    tab={tab}
+                />
+            )}
         </div>
         <div 
           className="absolute z-20 flex items-center gap-4 top-4 right-4"
@@ -1380,3 +1391,5 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     </div>
   );
 }
+
+    
