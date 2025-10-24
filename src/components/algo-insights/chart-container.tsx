@@ -606,6 +606,10 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
       setRrTools(prevTools => [...prevTools, newTool]);
       setPlacingToolType(null);
     } else if (isPlacingPriceMarker) {
+      toast({
+        title: "Chart Click Registered",
+        description: `Attempting to place marker at price: ${chartData.price.toFixed(5)}`,
+      });
       const newMarker: PriceMarker = {
         id: `pm-${Date.now()}`,
         price: chartData.price,
