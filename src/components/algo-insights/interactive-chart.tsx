@@ -279,10 +279,11 @@ export function InteractiveChart({
     const openingRangeLines = useRef<[IPriceLine?, IPriceLine?]>([undefined, undefined]);
 
     useEffect(() => {
-        if (!candlestickSeriesRef.current) return;
+        const series = candlestickSeriesRef.current;
+        if (!series) return;
     
-        if (openingRangeLines.current[0]) candlestickSeriesRef.current.removePriceLine(openingRangeLines.current[0]);
-        if (openingRangeLines.current[1]) candlestickSeriesRef.current.removePriceLine(openingRangeLines.current[1]);
+        if (openingRangeLines.current[0]) series.removePriceLine(openingRangeLines.current[0]);
+        if (openingRangeLines.current[1]) series.removePriceLine(openingRangeLines.current[1]);
         openingRangeLines.current = [undefined, undefined];
     
         if (openingRange) {
@@ -302,35 +303,36 @@ export function InteractiveChart({
                 axisLabelVisible: true,
                 title: 'OR Low',
             };
-            openingRangeLines.current[0] = candlestickSeriesRef.current.createPriceLine(highLine);
-            openingRangeLines.current[1] = candlestickSeriesRef.current.createPriceLine(lowLine);
+            openingRangeLines.current[0] = series.createPriceLine(highLine);
+            openingRangeLines.current[1] = series.createPriceLine(lowLine);
         }
     }, [openingRange]);
 
-    const priceMarkerLines = useRef<Map<string, IPriceLine>>(new Map());
+    const priceMarkerLines = useRef(new Map<string, IPriceLine>());
 
     useEffect(() => {
         const series = candlestickSeriesRef.current;
         if (!series) return;
     
-        const currentLineIds = new Set(priceMarkers.map(m => m.id));
-        
+        const currentMarkerIds = new Set(priceMarkers.map(m => m.id));
+    
         // Remove lines that are no longer in the priceMarkers array
         priceMarkerLines.current.forEach((line, id) => {
-            if (!currentLineIds.has(id)) {
+            if (!currentMarkerIds.has(id)) {
                 series.removePriceLine(line);
                 priceMarkerLines.current.delete(id);
             }
         });
-
+    
         // Add or update lines
         priceMarkers.forEach(marker => {
-            if (priceMarkerLines.current.has(marker.id)) {
-                // Already exists, maybe update if needed, for now we assume they are static
-                const existingLine = priceMarkerLines.current.get(marker.id);
-                existingLine?.applyOptions({ price: marker.price });
+            const existingLine = priceMarkerLines.current.get(marker.id);
+            
+            if (existingLine) {
+                // Update existing line's price if it has changed
+                existingLine.applyOptions({ price: marker.price });
             } else {
-                // If it's a new marker, create a new line
+                // Create a new line for a new marker
                 const lineOptions: PriceLineOptions = {
                     price: marker.price,
                     color: 'rgba(255, 165, 0, 0.8)',
@@ -343,7 +345,7 @@ export function InteractiveChart({
                 priceMarkerLines.current.set(marker.id, newLine);
             }
         });
-
+    
     }, [priceMarkers]);
 
 
