@@ -117,6 +117,12 @@ export function InteractiveChart({
         propsRef.current.onAggregationChange = onAggregationChange;
     }, [onChartClick, onChartMouseMove, onUpdateTool, onRemoveTool, onRemovePriceMarker, onRemoveMeasurementTool, onUpdatePriceMarker, onAggregationChange]);
 
+    const onAggregationChangeRef = useRef(onAggregationChange);
+    useEffect(() => {
+        onAggregationChangeRef.current = onAggregationChange;
+    }, [onAggregationChange]);
+
+
     const displayData = useMemo(() => {
         const selectedData = data[timeframe as keyof AggregatedPriceData] || data['1m'];
         if (endDate) {
@@ -129,11 +135,6 @@ export function InteractiveChart({
     propsRef.current.displayData = displayData;
 
     const chartData = useMemo(() => convertToCandlestickData(displayData), [displayData]);
-    
-    const onAggregationChangeRef = useRef(onAggregationChange);
-    useEffect(() => {
-        onAggregationChangeRef.current = onAggregationChange;
-    }, [onAggregationChange]);
 
 
     useEffect(() => {
@@ -196,7 +197,7 @@ export function InteractiveChart({
             const dataIndex = propsRef.current.displayData.findIndex(d => d.date.getTime() / 1000 === candle.time);
             if (dataIndex < 0) return;
     
-            const logicalRange = chartRef.current.timeScale().getVisibleLogicalRange();
+            const logicalRange = chart.timeScale().getVisibleLogicalRange();
     
             callback({
                 price,
@@ -218,7 +219,7 @@ export function InteractiveChart({
         window.addEventListener('resize', handleResize);
 
         const handleVisibleTimeRangeChange = (newVisibleTimeRange: TimeRange | null) => {
-            if (!newVisibleTimeRange || !chartRef.current) return;
+            if (!newVisibleTimeRange || !chart) return;
       
             const from = (newVisibleTimeRange.from as UTCTimestamp) * 1000;
             const to = (newVisibleTimeRange.to as UTCTimestamp) * 1000;
