@@ -48,7 +48,7 @@ interface InteractiveChartProps {
   liveMeasurementTool: MeasurementToolType | null;
   pipValue: number;
   timeframe: string;
-  setTimeframe: (agg: string) => void;
+  onAggregationChange: (agg: string) => void;
   timeZone: string;
   endDate?: Date;
   isYAxisLocked: boolean;
@@ -94,7 +94,7 @@ export function InteractiveChart({
     onUpdatePriceMarker,
     pipValue,
     timeframe,
-    setTimeframe,
+    onAggregationChange,
     isYAxisLocked,
     openingRange,
     tab,
@@ -106,8 +106,8 @@ export function InteractiveChart({
     const propsRef = useRef({ onChartClick, onChartMouseMove, onUpdateTool, onRemoveTool, onRemovePriceMarker, onRemoveMeasurementTool, onUpdatePriceMarker });
     propsRef.current = { onChartClick, onChartMouseMove, onUpdateTool, onRemoveTool, onRemovePriceMarker, onRemoveMeasurementTool, onUpdatePriceMarker };
 
-    const setTimeframeRef = useRef(setTimeframe);
-    setTimeframeRef.current = setTimeframe;
+    const onAggregationChangeRef = useRef(onAggregationChange);
+    onAggregationChangeRef.current = onAggregationChange;
 
     const displayData = useMemo(() => {
         if (endDate) {
@@ -124,32 +124,30 @@ export function InteractiveChart({
         if (!chartContainerRef.current) return;
         
         const getThemeColor = (cssVar: string) => {
-            const style = getComputedStyle(chartContainerRef.current!);
-            return style.getPropertyValue(cssVar).trim();
-        }
-
-        const formatColor = (cssVar: string) => {
-            const colorValue = getThemeColor(cssVar);
-            // lightweight-charts expects hsl(h, s%, l%), not hsl(h s% l%)
-            return `hsl(${colorValue.replace(/\s/g, ', ')})`;
+            const tempDiv = document.createElement('div');
+            tempDiv.style.color = `hsl(var(${cssVar}))`;
+            document.body.appendChild(tempDiv);
+            const color = window.getComputedStyle(tempDiv).color;
+            document.body.removeChild(tempDiv);
+            return color;
         };
 
         const chart = createChart(chartContainerRef.current, {
             layout: {
                 background: { color: 'transparent' },
-                textColor: formatColor('--foreground'),
+                textColor: getThemeColor('--foreground'),
             },
             grid: {
-                vertLines: { color: formatColor('--border') },
-                horzLines: { color: formatColor('--border') },
+                vertLines: { color: getThemeColor('--border') },
+                horzLines: { color: getThemeColor('--border') },
             },
             timeScale: {
                 timeVisible: true,
                 secondsVisible: false,
-                borderColor: formatColor('--border'),
+                borderColor: getThemeColor('--border'),
             },
             rightPriceScale: {
-                borderColor: formatColor('--border'),
+                borderColor: getThemeColor('--border'),
             },
             crosshair: {
                 mode: 1, // Magnet mode
@@ -159,12 +157,12 @@ export function InteractiveChart({
         chartRef.current = chart;
 
         const series = chart.addCandlestickSeries({
-            upColor: formatColor('--accent'),
-            downColor: formatColor('--destructive'),
-            borderDownColor: formatColor('--destructive'),
-            borderUpColor: formatColor('--accent'),
-            wickDownColor: formatColor('--destructive'),
-            wickUpColor: formatColor('--accent'),
+            upColor: getThemeColor('--accent'),
+            downColor: getThemeColor('--destructive'),
+            borderDownColor: getThemeColor('--destructive'),
+            borderUpColor: getThemeColor('--accent'),
+            wickDownColor: getThemeColor('--destructive'),
+            wickUpColor: getThemeColor('--accent'),
         });
         candlestickSeriesRef.current = series;
         
@@ -214,7 +212,7 @@ export function InteractiveChart({
             
             if (currentAggregation !== newAggregation) {
                 currentAggregation = newAggregation;
-                setTimeframeRef.current(newAggregation);
+                onAggregationChangeRef.current(newAggregation);
             }
         };
       
