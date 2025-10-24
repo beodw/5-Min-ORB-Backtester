@@ -152,27 +152,34 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onRemove, pipValue }:
   const profitBoxHeight = Math.abs(positions.entry.y - positions.profit.y);
   const boxWidth = tool.widthInPoints;
 
+  // For long: entry is above stop, profit is above entry. Y coordinates are inverted on screen.
+  // So: profitY < entryY < stopY
+  // For short: stop is above entry, entry is above profit. Y coordinates are inverted.
+  // So: stopY < entryY < profitY
+
+  const stopBoxTop = isLong ? positions.entry.y : positions.stop.y;
+  const profitBoxTop = isLong ? positions.profit.y : positions.entry.y;
+
   return (
     <div className="absolute top-0 left-0 pointer-events-none">
       {/* Stop Loss Box (Red) */}
       <div
         className={cn(
           'absolute pointer-events-auto cursor-grab active:cursor-grabbing',
-          isLong ? 'bg-destructive/30' : 'bg-accent/30'
+          'bg-destructive/30'
         )}
         style={{
           left: positions.entry.x,
-          top: isLong ? positions.entry.y : positions.profit.y,
+          top: stopBoxTop,
           width: boxWidth,
-          height: isLong ? stopBoxHeight : profitBoxHeight,
+          height: stopBoxHeight,
         }}
         onMouseDown={(e) => handleMouseDown(e, 'body')}
       >
         <div className="relative w-full h-full flex items-center justify-center">
           <div className="text-white text-xs text-center p-1">
-            <p>Target</p>
-            <p className="font-bold">{rrRatio} R</p>
-            <p>{rewardPips} pips</p>
+            <p>Stop</p>
+            <p className="font-bold">{riskPips} pips</p>
           </div>
         </div>
       </div>
@@ -181,20 +188,21 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onRemove, pipValue }:
       <div
         className={cn(
           'absolute pointer-events-auto cursor-grab active:cursor-grabbing',
-          isLong ? 'bg-accent/30' : 'bg-destructive/30'
+          'bg-accent/30'
         )}
         style={{
           left: positions.entry.x,
-          top: isLong ? positions.profit.y : positions.entry.y,
+          top: profitBoxTop,
           width: boxWidth,
-          height: isLong ? profitBoxHeight : stopBoxHeight,
+          height: profitBoxHeight,
         }}
         onMouseDown={(e) => handleMouseDown(e, 'body')}
       >
         <div className="relative w-full h-full flex items-center justify-center">
           <div className="text-white text-xs text-center p-1">
-            <p>Stop</p>
-            <p className="font-bold">{riskPips} pips</p>
+            <p>Target</p>
+            <p className="font-bold">{rrRatio} R</p>
+            <p>{rewardPips} pips</p>
           </div>
         </div>
       </div>
