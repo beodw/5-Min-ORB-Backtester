@@ -130,36 +130,41 @@ export function InteractiveChart({
 
     const chartData = useMemo(() => convertToCandlestickData(displayData), [displayData]);
     
+    const onAggregationChangeRef = useRef(onAggregationChange);
+    useEffect(() => {
+        onAggregationChangeRef.current = onAggregationChange;
+    }, [onAggregationChange]);
+
 
     useEffect(() => {
-        if (!chartContainerRef.current || chartRef.current) return;
-        
+        if (!chartContainerRef.current) return;
+
         const getThemeColor = (tailwindColorClass: string): string => {
             const tempDiv = document.createElement('div');
-            tempDiv.className = tailwindColorClass;
+            tempDiv.className = `bg-${tailwindColorClass}`;
             tempDiv.style.display = 'none';
             document.body.appendChild(tempDiv);
             const color = window.getComputedStyle(tempDiv).backgroundColor;
             document.body.removeChild(tempDiv);
             return color;
         };
-
+        
         const chart = createChart(chartContainerRef.current, {
             layout: {
-                background: { color: getThemeColor('bg-background') },
-                textColor: getThemeColor('text-foreground'),
+                background: { color: 'rgba(0,0,0,0)' },
+                textColor: getThemeColor('foreground'),
             },
             grid: {
-                vertLines: { color: getThemeColor('bg-border') },
-                horzLines: { color: getThemeColor('bg-border') },
+                vertLines: { color: getThemeColor('border') },
+                horzLines: { color: getThemeColor('border') },
             },
             timeScale: {
                 timeVisible: true,
                 secondsVisible: false,
-                borderColor: getThemeColor('bg-border'),
+                borderColor: getThemeColor('border'),
             },
             rightPriceScale: {
-                borderColor: getThemeColor('bg-border'),
+                borderColor: getThemeColor('border'),
             },
             crosshair: {
                 mode: 1, // Magnet mode
@@ -168,19 +173,20 @@ export function InteractiveChart({
         
         chartRef.current = chart;
 
-        candlestickSeriesRef.current = chart.addCandlestickSeries({
-            upColor: getThemeColor('bg-accent'),
-            downColor: getThemeColor('bg-destructive'),
-            borderDownColor: getThemeColor('bg-destructive'),
-            borderUpColor: getThemeColor('bg-accent'),
-            wickDownColor: getThemeColor('bg-destructive'),
-            wickUpColor: getThemeColor('bg-accent'),
+        const series = chart.addCandlestickSeries({
+            upColor: getThemeColor('accent'),
+            downColor: getThemeColor('destructive'),
+            borderDownColor: getThemeColor('destructive'),
+            borderUpColor: getThemeColor('accent'),
+            wickDownColor: getThemeColor('destructive'),
+            wickUpColor: getThemeColor('accent'),
         });
-
+        candlestickSeriesRef.current = series;
+        
         const handleEvent = (param: MouseEventParams, callback: (data: ChartClickData) => void) => {
-            if (!param.point || !param.time || !candlestickSeriesRef.current || !chartRef.current) return;
+            if (!param.point || !param.time || !series || !chartRef.current) return;
             
-            const price = candlestickSeriesRef.current.coordinateToPrice(param.point.y) as number;
+            const price = series.coordinateToPrice(param.point.y) as number;
             
             const convertedData = convertToCandlestickData(propsRef.current.displayData);
             const matchingCandles = convertedData.filter(d => d.time === param.time);
@@ -222,7 +228,7 @@ export function InteractiveChart({
             
             if (currentAggregationRef.current !== newAggregation) {
                 currentAggregationRef.current = newAggregation;
-                propsRef.current.onAggregationChange(newAggregation);
+                onAggregationChangeRef.current(newAggregation);
             }
         };
       
@@ -232,14 +238,14 @@ export function InteractiveChart({
         return () => {
             window.removeEventListener('resize', handleResize);
             if(chartRef.current) {
-                const timeScale = chartRef.current.timeScale();
-                timeScale.unsubscribeVisibleTimeRangeChange(handleVisibleTimeRangeChange);
                 chartRef.current.unsubscribeClick(handleChartClickEvent);
                 chartRef.current.unsubscribeCrosshairMove(handleChartMouseMoveEvent);
-
+                const timeScale = chartRef.current.timeScale();
+                timeScale.unsubscribeVisibleTimeRangeChange(handleVisibleTimeRangeChange);
                 chartRef.current.remove();
                 chartRef.current = null;
             }
+            candlestickSeriesRef.current = null;
         };
     }, []); 
 
@@ -266,7 +272,7 @@ export function InteractiveChart({
     }, [chartData, tab, endDate]); 
     
     useEffect(() => {
-        if (chartRef.current) {
+        if (chartRef.current && timeZone) {
             chartRef.current.applyOptions({
                 localization: {
                     timeFormatter: (timestamp: UTCTimestamp) => {
@@ -389,6 +395,8 @@ export function InteractiveChart({
         </div>
     );
 }
+
+    
 
     
 
