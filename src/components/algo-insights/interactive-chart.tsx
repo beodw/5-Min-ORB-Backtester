@@ -16,7 +16,6 @@ import {
 } from "lightweight-charts";
 import type { PriceData, Trade, RiskRewardTool as RRToolType, PriceMarker as PriceMarkerType, MeasurementTool as MeasurementToolType, OpeningRange, MeasurementPoint } from "@/types";
 import { RiskRewardTool } from "./risk-reward-tool";
-import { PriceMarker } from "./price-marker";
 import { MeasurementTool } from "./measurement-tool";
 import { useMemo, useRef, useState, useCallback, useEffect } from "react";
 import { findClosestIndex } from "@/lib/chart-utils";
@@ -203,30 +202,11 @@ export function InteractiveChart({
         const handleResize = () => chart.applyOptions({ width: chartContainerRef.current?.clientWidth, height: chartContainerRef.current?.clientHeight });
         window.addEventListener('resize', handleResize);
 
-        // const handleVisibleTimeRangeChange = (newVisibleTimeRange: TimeRange | null) => {
-        //     if (!newVisibleTimeRange || !chart) return;
-      
-        //     const from = (newVisibleTimeRange.from as UTCTimestamp) * 1000;
-        //     const to = (newVisibleTimeRange.to as UTCTimestamp) * 1000;
-      
-        //     const rangeInMinutes = (to - from) / (60 * 1000);
-        //     const newAggregation = getAggregationLevel(rangeInMinutes);
-            
-        //     if (timeframe !== newAggregation) {
-        //         onAggregationChangeRef.current(newAggregation);
-        //     }
-        // };
-      
-        const timeScale = chart.timeScale();
-        // timeScale.subscribeVisibleTimeRangeChange(handleVisibleTimeRangeChange);
-
         return () => {
             window.removeEventListener('resize', handleResize);
             if(chartRef.current) {
                 chartRef.current.unsubscribeClick(handleChartClickEvent);
                 chartRef.current.unsubscribeCrosshairMove(handleChartMouseMoveEvent);
-                const timeScale = chartRef.current.timeScale();
-                // timeScale.unsubscribeVisibleTimeRangeChange(handleVisibleTimeRangeChange);
                 chartRef.current.remove();
                 chartRef.current = null;
             }
@@ -327,6 +307,46 @@ export function InteractiveChart({
         }
     }, [openingRange]);
 
+    const priceMarkerLines = useRef<Map<string, IPriceLine>>(new Map());
+
+    useEffect(() => {
+        const series = candlestickSeriesRef.current;
+        if (!series) return;
+    
+        const currentLineIds = new Set(priceMarkers.map(m => m.id));
+        
+        // Remove lines that are no longer in the priceMarkers array
+        priceMarkerLines.current.forEach((line, id) => {
+            if (!currentLineIds.has(id)) {
+                series.removePriceLine(line);
+                priceMarkerLines.current.delete(id);
+            }
+        });
+
+        // Add or update lines
+        priceMarkers.forEach(marker => {
+            const existingLine = priceMarkerLines.current.get(marker.id);
+            const lineOptions: PriceLineOptions = {
+                price: marker.price,
+                color: 'rgba(255, 165, 0, 0.8)',
+                lineWidth: 1,
+                lineStyle: 1, // Dotted
+                axisLabelVisible: true,
+                title: marker.price.toFixed(5),
+            };
+
+            if (existingLine) {
+                // If line exists, just update its options
+                existingLine.applyOptions(lineOptions);
+            } else {
+                // If it's a new marker, create a new line
+                const newLine = series.createPriceLine(lineOptions);
+                priceMarkerLines.current.set(marker.id, newLine);
+            }
+        });
+
+    }, [priceMarkers]);
+
 
     return (
         <div className="w-full h-full relative">
@@ -341,16 +361,6 @@ export function InteractiveChart({
                     onRemove={propsRef.current.onRemoveTool}
                     pipValue={pipValue}
                 />
-            ))}
-
-            {chartApi.chartElement && priceMarkers.map(marker => (
-                 <PriceMarker
-                    key={marker.id}
-                    marker={marker}
-                    chartApi={chartApi}
-                    onUpdate={propsRef.current.onUpdatePriceMarker}
-                    onRemove={propsRef.current.onRemovePriceMarker}
-                 />
             ))}
             
             {chartApi.chartElement && measurementTools.map(tool => (
@@ -380,3 +390,5 @@ export function InteractiveChart({
         </div>
     );
 }
+
+    
