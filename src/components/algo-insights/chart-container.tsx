@@ -679,13 +679,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
   };
 
   const handleRemovePriceMarker = (id: string) => {
-    pushToHistory(drawingState);
     setPriceMarkers(prevMarkers => prevMarkers.filter(m => m.id !== id));
-  };
-
-  const handleRemoveMeasurementTool = (id: string) => {
-    pushToHistory(drawingState);
-    setMeasurementTools(prev => prev.filter(t => t.id !== id));
   };
 
   const handleUpdatePriceMarker = (id: string, price: number) => {
@@ -1303,7 +1297,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                     onRemovePriceMarker={handleRemovePriceMarker}
                     onUpdatePriceMarker={handleUpdatePriceMarker}
                     measurementTools={measurementTools}
-                    onRemoveMeasurementTool={handleRemoveMeasurementTool}
+                    onRemoveMeasurementTool={() => {}}
                     liveMeasurementTool={liveMeasurementTool}
                     pipValue={pipValue}
                     timeframe={timeframe}
@@ -1388,3 +1382,5 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     </div>
   );
 }
+
+    

@@ -331,8 +331,8 @@ export function InteractiveChart({
             if (!priceMarkerLines.current.has(marker.id)) {
                 const lineOptions: PriceLineOptions = {
                     price: marker.price,
-                    color: 'rgba(255, 165, 0, 0.8)',
-                    lineWidth: 1,
+                    color: 'orange',
+                    lineWidth: 2,
                     lineStyle: 1, // Dotted
                     axisLabelVisible: true,
                     title: marker.price.toFixed(5),
@@ -340,7 +340,6 @@ export function InteractiveChart({
                 const newLine = series.createPriceLine(lineOptions);
                 priceMarkerLines.current.set(marker.id, newLine);
             } else {
-                 // Optional: Update existing line if properties can change
                  const line = priceMarkerLines.current.get(marker.id);
                  line?.applyOptions({ price: marker.price, title: marker.price.toFixed(5) });
             }
@@ -390,5 +389,7 @@ export function InteractiveChart({
         </div>
     );
 }
+
+    
 
     
