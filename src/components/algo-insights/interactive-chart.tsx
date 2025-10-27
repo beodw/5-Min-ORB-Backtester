@@ -437,9 +437,8 @@ export function InteractiveChart({
                 // If primitive exists, update it
                 existingPrimitive.update(tool);
             } else {
-                // Otherwise, create a new one
                 const newPrimitive = new RiskRewardPrimitive(tool);
-                // series.addPrimitive(newPrimitive);
+                series.addPrimitive(newPrimitive);
                 rrToolPrimitives.current.set(tool.id, newPrimitive);
             }
         });
