@@ -284,19 +284,9 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     setRedoStack([]); // Clear redo stack on new action
   };
 
-  const setRrTools = (updater: (prev: RRToolType[]) => RRToolType[]) => {
+  const setDrawingStateAndHistory = (updater: (prev: DrawingState) => DrawingState) => {
     pushToHistory(drawingState);
-    setDrawingState(prev => ({ ...prev, rrTools: updater(prev.rrTools) }));
-  };
-  
-  const setPriceMarkers = (updater: (prev: PriceMarker[]) => PriceMarker[]) => {
-      pushToHistory(drawingState);
-      setDrawingState(prev => ({ ...prev, priceMarkers: updater(prev.priceMarkers)}));
-  };
-
-  const setMeasurementTools = (updater: (prev: MeasurementToolType[]) => MeasurementToolType[]) => {
-    pushToHistory(drawingState);
-    setDrawingState(prev => ({ ...prev, measurementTools: updater(prev.measurementTools) }));
+    setDrawingState(updater);
   };
   
   const handleUndo = () => {
@@ -590,9 +580,6 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
 
       const stopLoss = placingToolType === 'long' ? entryPrice - stopLossOffset : entryPrice + stopLossOffset;
       const takeProfit = placingToolType === 'long' ? entryPrice + takeProfitOffset : entryPrice - takeProfitOffset;
-      
-      // A more robust initial width in pixels
-      const defaultWidthInPoints = 100;
 
       const newTool: RRToolType = {
         id: `rr-${Date.now()}`,
@@ -600,11 +587,11 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         stopLoss: stopLoss,
         takeProfit: takeProfit,
         entryDate: chartData.date,
-        widthInPoints: defaultWidthInPoints, 
+        widthInPoints: 100, 
         position: placingToolType,
       };
       
-      setRrTools(prevTools => [...prevTools, newTool]);
+      setDrawingStateAndHistory(prev => ({ ...prev, rrTools: [...prev.rrTools, newTool] }));
       setPlacingToolType(null);
     } else if (isPlacingPriceMarker) {
       const newMarker: PriceMarker = {
@@ -612,8 +599,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         price: chartData.price,
         isDeletable: true,
       };
-      pushToHistory(drawingState);
-      setDrawingState(prev => ({
+      setDrawingStateAndHistory(prev => ({
         ...prev,
         priceMarkers: [...prev.priceMarkers, newMarker]
       }));
@@ -644,7 +630,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                 startPoint: measurementStartPoint,
                 endPoint: currentPoint,
             };
-            setMeasurementTools(prev => [...prev, newTool]);
+            setDrawingStateAndHistory(prev => ({ ...prev, measurementTools: [...prev.measurementTools, newTool] }));
             setMeasurementStartPoint(null);
             setIsPlacingMeasurement(false);
             setLiveMeasurementTool(null);
@@ -674,35 +660,30 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     };
   
   const handleUpdateTool = (updatedTool: RRToolType) => {
-    pushToHistory(drawingState);
-    setRrTools(prevTools => prevTools.map(t => t.id === updatedTool.id ? updatedTool : t));
+    setDrawingStateAndHistory(prev => ({ ...prev, rrTools: prev.rrTools.map(t => t.id === updatedTool.id ? updatedTool : t) }));
   };
 
   const handleRemoveTool = (id: string) => {
-    pushToHistory(drawingState);
-    setRrTools(prevTools => prevTools.filter(t => t.id !== id));
+    setDrawingStateAndHistory(prev => ({ ...prev, rrTools: prev.rrTools.filter(t => t.id !== id) }));
   };
 
   const handleRemovePriceMarker = (id: string) => {
-    pushToHistory(drawingState);
-    setDrawingState(prev => ({ ...prev, priceMarkers: prev.priceMarkers.filter(m => m.id !== id) }));
+    setDrawingStateAndHistory(prev => ({ ...prev, priceMarkers: prev.priceMarkers.filter(m => m.id !== id) }));
   };
 
   const handleUpdatePriceMarker = (id: string, price: number) => {
-    pushToHistory(drawingState);
-    setDrawingState(prev => ({
+    setDrawingStateAndHistory(prev => ({
       ...prev,
       priceMarkers: prev.priceMarkers.map(m => m.id === id ? { ...m, price } : m)
     }));
   };
 
   const handleClearAllDrawings = () => {
-    pushToHistory(drawingState);
-    setDrawingState({
+    setDrawingStateAndHistory(prev => ({
         rrTools: [],
         priceMarkers: [],
         measurementTools: []
-    });
+    }));
   };
 
   const handleImportClick = (type: 'bid' | 'ask' | 'journal') => {
@@ -1001,7 +982,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                     };
                 });
                 
-                setRrTools(prev => [...prev, ...newRrTools]);
+                setDrawingStateAndHistory(prev => ({ ...prev, rrTools: [...prev.rrTools, ...newRrTools] }));
                 
                 toast({ title: "Journal Imported", description: `${newRrTools.length} trades loaded onto the chart.` });
 

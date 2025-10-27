@@ -107,14 +107,13 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onRemove, pipValue }:
         if (newTime !== null && newTime !== undefined && chartApi.data) {
              const closestIndex = findClosestIndex(chartApi.data, newTime * 1000);
             if (chartApi.data[closestIndex]) {
-                newTool.entryDate = chartApi.data[closestIndex].date;
-
                 const originalEntryX = getX(dragInfo.current.startTool.entryDate);
-                const newEntryX = getX(newTool.entryDate);
-
+                const newEntryX = getX(chartApi.data[closestIndex].date);
+                
                 if (originalEntryX !== undefined && newEntryX !== undefined) {
                     const widthChangeInPixels = originalEntryX - newEntryX;
-                    newTool.widthInPoints = dragInfo.current.startTool.widthInPoints + widthChangeInPixels;
+                    newTool.widthInPoints = Math.max(20, dragInfo.current.startTool.widthInPoints + widthChangeInPixels);
+                    newTool.entryDate = chartApi.data[closestIndex].date;
                 }
             }
         }
@@ -162,7 +161,7 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onRemove, pipValue }:
   const profitBoxTop = isLong ? positions.profit.y : positions.entry.y;
   
   return (
-    <div className="absolute top-0 left-0 pointer-events-none">
+    <div className="absolute top-0 left-0 pointer-events-none w-full h-full">
       {/* Stop Loss Box (Red) */}
       <div
         className={cn(
@@ -209,7 +208,7 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onRemove, pipValue }:
       </div>
       
       {/* Lines */}
-      <div className="absolute w-full h-full top-0 left-0">
+      <div className="absolute w-full h-full top-0 left-0 -z-10">
         <div className="absolute bg-foreground/50" style={{ left: positions.entry.x, top: positions.entry.y, width: boxWidth, height: 1 }} />
         <div className="absolute bg-destructive" style={{ left: positions.entry.x, top: positions.stop.y, width: boxWidth, height: 1 }} />
         <div className="absolute bg-accent" style={{ left: positions.entry.x, top: positions.profit.y, width: boxWidth, height: 1 }} />
@@ -217,27 +216,27 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onRemove, pipValue }:
 
        {/* Drag Handles */}
         <div
-            className="absolute w-2 h-full pointer-events-auto cursor-ew-resize"
-            style={{ left: positions.entry.x - 1, top: Math.min(positions.profit.y, positions.stop.y), height: profitBoxHeight + stopBoxHeight }}
+            className="absolute h-full w-4 -ml-2 pointer-events-auto cursor-ew-resize z-10"
+            style={{ left: positions.entry.x, top: Math.min(positions.profit.y, positions.stop.y), height: profitBoxHeight + stopBoxHeight }}
             onMouseDown={(e) => handleMouseDown(e, 'left-edge')}
         />
         <div
-            className="absolute w-2 h-full pointer-events-auto cursor-ew-resize"
-            style={{ left: positions.entry.x + boxWidth - 1, top: Math.min(positions.profit.y, positions.stop.y), height: profitBoxHeight + stopBoxHeight }}
+            className="absolute h-full w-4 -mr-2 pointer-events-auto cursor-ew-resize z-10"
+            style={{ left: positions.entry.x + boxWidth, top: Math.min(positions.profit.y, positions.stop.y), height: profitBoxHeight + stopBoxHeight }}
             onMouseDown={(e) => handleMouseDown(e, 'right-edge')}
         />
         <div
-            className="absolute w-4 h-4 -translate-x-1/2 -translate-y-1/2 pointer-events-auto cursor-ns-resize"
+            className="absolute w-4 h-4 -translate-x-1/2 -translate-y-1/2 pointer-events-auto cursor-ns-resize z-10"
             style={{ left: positions.entry.x + boxWidth / 2, top: positions.entry.y }}
             onMouseDown={(e) => handleMouseDown(e, 'entry')}
         />
         <div
-            className="absolute w-4 h-4 -translate-x-1/2 -translate-y-1/2 pointer-events-auto cursor-ns-resize"
+            className="absolute w-4 h-4 -translate-x-1/2 -translate-y-1/2 pointer-events-auto cursor-ns-resize z-10"
             style={{ left: positions.entry.x + boxWidth / 2, top: positions.stop.y }}
             onMouseDown={(e) => handleMouseDown(e, 'stop')}
         />
         <div
-            className="absolute w-4 h-4 -translate-x-1/2 -translate-y-1/2 pointer-events-auto cursor-ns-resize"
+            className="absolute w-4 h-4 -translate-x-1/2 -translate-y-1/2 pointer-events-auto cursor-ns-resize z-10"
             style={{ left: positions.entry.x + boxWidth / 2, top: positions.profit.y }}
             onMouseDown={(e) => handleMouseDown(e, 'profit')}
         />
