@@ -8,24 +8,18 @@ import {
   CandlestickData,
   UTCTimestamp,
   Time,
-  TimeRange,
   PriceLineOptions,
-  SeriesMarker,
   MouseEventParams,
   IPriceLine,
-  Coordinate,
-  LineStyle,
-  PriceScaleMode,
   ISeriesPrimitive,
   SeriesPrimitivePaneView,
   BitmapCoordinatesRenderingScope,
   AutoscaleInfo,
 } from "lightweight-charts";
-import type { PriceData, Trade, RiskRewardTool as RRToolType, PriceMarker as PriceMarkerType, MeasurementTool as MeasurementToolType, MeasurementPoint, OpeningRange } from "@/types";
+import type { PriceData, Trade, RiskRewardTool as RRToolType, PriceMarker as PriceMarkerType, MeasurementTool as MeasurementToolType, OpeningRange } from "@/types";
 import { RiskRewardTool } from "./risk-reward-tool";
 import { MeasurementTool } from "./measurement-tool";
-import { useMemo, useRef, useState, useCallback, useEffect } from "react";
-import { findClosestIndex } from "@/lib/chart-utils";
+import { useMemo, useRef, useCallback, useEffect } from "react";
 
 export type ChartClickData = {
     price: number;
@@ -72,14 +66,96 @@ const convertToCandlestickData = (priceData: PriceData[]): (CandlestickData & { 
         original: d
     }));
 }
+class RiskRewardPrimitive implements ISeriesPrimitive<Time> {
+    _tool: RRToolType;
+    _paneView: RiskRewardPaneView;
 
-const getAggregationLevel = (rangeInMinutes: number) => {
-    const minutesInDay = 1440;
-    if (rangeInMinutes > 60 * minutesInDay) return '1d';
-    if (rangeInMinutes > 15 * minutesInDay) return '1h';
-    if (rangeInMinutes > 3 * minutesInDay) return '15m';
-    return '1m';
-};
+    constructor(tool: RRToolType) {
+        this._tool = tool;
+        this._paneView = new RiskRewardPaneView(this);
+    }
+
+    update(tool: RRToolType) {
+        this._tool = tool;
+    }
+
+    paneViews() {
+        return [this._paneView];
+    }
+    
+    autoscaleInfo(startTimePoint: number, endTimePoint: number): AutoscaleInfo | null {
+        // Find the min/max prices of the tool
+        const minPrice = Math.min(this._tool.entryPrice, this._tool.stopLoss, this._tool.takeProfit);
+        const maxPrice = Math.max(this._tool.entryPrice, this._tool.stopLoss, this._tool.takeProfit);
+        return {
+            priceRange: {
+                minValue: minPrice,
+                maxValue: maxPrice,
+            },
+        };
+    }
+}
+
+class RiskRewardPaneView implements SeriesPrimitivePaneView {
+    _source: RiskRewardPrimitive;
+
+    constructor(source: RiskRewardPrimitive) {
+        this._source = source;
+    }
+
+    renderer() {
+        return null; // We will use the draw method for rendering
+    }
+    
+    draw(target: BitmapCoordinatesRenderingScope) {
+        target.useBitmapCoordinateSpace(scope => {
+            const series = this._source.series();
+            if (!series) return;
+            
+            const tool = this._source._tool;
+            const chart = this._source.chart();
+            if(!chart) return;
+            
+            const timeScale = chart.timeScale();
+            const seriesData = this._source.series().data();
+            
+            const entryTime = (tool.entryDate.getTime() / 1000) as UTCTimestamp;
+            const entryIndex = seriesData.findIndex(d => d.time === entryTime);
+            if(entryIndex === -1) return;
+
+            const endIndex = Math.min(seriesData.length - 1, entryIndex + tool.widthInCandles);
+            const endTime = seriesData[endIndex]?.time;
+            if(!endTime) return;
+
+            const entryX = timeScale.timeToCoordinate(entryTime);
+            const endX = timeScale.timeToCoordinate(endTime);
+            
+            const entryY = series.priceToCoordinate(tool.entryPrice);
+            const stopY = series.priceToCoordinate(tool.stopLoss);
+            const profitY = series.priceToCoordinate(tool.takeProfit);
+            
+            if (entryX === null || endX === null || entryY === null || stopY === null || profitY === null) {
+                return;
+            }
+
+            const isLong = tool.position === 'long';
+            const profitColor = isLong ? 'rgba(0, 255, 0, 0.2)' : 'rgba(255, 0, 0, 0.2)';
+            const stopColor = isLong ? 'rgba(255, 0, 0, 0.2)' : 'rgba(0, 255, 0, 0.2)';
+
+            // Draw profit box
+            const profitTop = Math.min(entryY, profitY);
+            const profitHeight = Math.abs(entryY - profitY);
+            scope.context.fillStyle = profitColor;
+            scope.context.fillRect(entryX, profitTop, endX - entryX, profitHeight);
+
+            // Draw stop box
+            const stopTop = Math.min(entryY, stopY);
+            const stopHeight = Math.abs(entryY - stopY);
+            scope.context.fillStyle = stopColor;
+            scope.context.fillRect(entryX, stopTop, endX - entryX, stopHeight);
+        });
+    }
+}
 
 
 export function InteractiveChart({
@@ -90,7 +166,7 @@ export function InteractiveChart({
     rrTools,
     priceMarkers,
     measurementTools,
-liveMeasurementTool,
+    liveMeasurementTool,
     onChartClick,
     onAggregationChange,
     onUpdateTool,
@@ -178,7 +254,7 @@ liveMeasurementTool,
         const handleChartClickEvent = (param: MouseEventParams) => {
             if (!param.point || !param.time || !series || !chartRef.current) return;
             
-            const price = series.coordinateToPrice(param.point.y) as number;
+            const price = series.coordinateToPrice(param.point.y);
             if(price === null) return;
             
             const convertedData = convertToCandlestickData(displayData);
@@ -215,7 +291,7 @@ liveMeasurementTool,
             }
             candlestickSeriesRef.current = null;
         };
-    }, []); 
+    }, [displayData]); 
 
     useEffect(() => {
         if (candlestickSeriesRef.current) {
@@ -283,6 +359,38 @@ liveMeasurementTool,
     useEffect(() => {
       setChartApi(chartApi);
     }, [chartApi, setChartApi]);
+    
+    const rrToolPrimitives = useRef<Map<string, ISeriesPrimitive<Time>>>(new Map());
+    useEffect(() => {
+        const series = candlestickSeriesRef.current;
+        if (!series || !chartRef.current) return;
+
+        const currentToolIds = new Set(rrTools.map(t => t.id));
+
+        // Remove primitives for tools that no longer exist
+        rrToolPrimitives.current.forEach((primitive, id) => {
+            if (!currentToolIds.has(id)) {
+                series.removePrimitive(primitive);
+                rrToolPrimitives.current.delete(id);
+            }
+        });
+
+        // Add or update primitives for current tools
+        rrTools.forEach(tool => {
+            if (rrToolPrimitives.current.has(tool.id)) {
+                // If primitive exists, update it
+                (rrToolPrimitives.current.get(tool.id) as RiskRewardPrimitive).update(tool);
+            } else {
+                // Otherwise, create a new one
+                const newPrimitive = new RiskRewardPrimitive(tool);
+                series.addPrimitive(newPrimitive);
+                rrToolPrimitives.current.set(tool.id, newPrimitive);
+            }
+        });
+        chartRef.current.timeScale().fitContent();
+
+    }, [rrTools, chartData]);
+
 
     const openingRangeLines = useRef<[IPriceLine?, IPriceLine?]>([undefined, undefined]);
 
@@ -358,7 +466,7 @@ liveMeasurementTool,
 
         const rect = chartElement.getBoundingClientRect();
         const y = e.clientY - rect.top;
-        const clickedPrice = series.coordinateToPrice(y as Coordinate);
+        const clickedPrice = series.coordinateToPrice(y);
         if (clickedPrice === null) return;
         
         let markerToDelete: PriceMarkerType | null = null;
@@ -430,5 +538,3 @@ liveMeasurementTool,
         </div>
     );
 }
-
-    

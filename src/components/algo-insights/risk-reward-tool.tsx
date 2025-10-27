@@ -17,10 +17,8 @@ interface RiskRewardToolProps {
 }
 
 export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, onRemove, pipValue }: RiskRewardToolProps) {
-  const [positions, setPositions] = useState({ entry: { x: 0, y: 0 }, stop: { x: 0, y: 0 }, profit: { x: 0, y: 0 } });
   const [isDragging, setIsDragging] = useState<null | 'entry' | 'stop' | 'profit' | 'body' | 'left-edge' | 'right-edge'>(null);
   const dragInfo = useRef({ startX: 0, startY: 0, startTool: tool });
-  const toolRef = useRef<HTMLDivElement>(null);
 
   const getX = useCallback((date: Date) => {
     if (!date || !chartApi.timeToCoordinate) return undefined;
@@ -31,37 +29,6 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
   const getY = useCallback((price: number) => {
     return chartApi.priceToCoordinate?.(price);
   }, [chartApi]);
-
-  const updatePositions = useCallback(() => {
-    const entryY = getY(tool.entryPrice);
-    const stopY = getY(tool.stopLoss);
-    const profitY = getY(tool.takeProfit);
-    const entryX = getX(tool.entryDate);
-
-    if (entryX !== undefined && entryY !== undefined && stopY !== undefined && profitY !== undefined) {
-      setPositions({
-        entry: { x: entryX, y: entryY },
-        stop: { x: entryX, y: stopY },
-        profit: { x: entryX, y: profitY }
-      });
-    }
-  }, [tool, getX, getY]);
-  
-  useEffect(() => {
-    updatePositions();
-    const chart = chartApi.chart;
-    if (chart) {
-      const timeScale = chart.timeScale();
-      timeScale.subscribeVisibleTimeRangeChange(updatePositions);
-      
-      const intervalId = setInterval(updatePositions, 100);
-
-      return () => {
-        timeScale.unsubscribeVisibleTimeRangeChange(updatePositions);
-        clearInterval(intervalId);
-      }
-    }
-  }, [chartApi, updatePositions]);
   
   const handleMouseDown = (e: React.MouseEvent, part: 'entry' | 'stop' | 'profit' | 'body' | 'left-edge' | 'right-edge') => {
     e.stopPropagation();
@@ -71,7 +38,7 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
     window.addEventListener('mouseup', handleMouseUp);
   };
 
-  const handleMouseMove = (e: MouseEvent) => {
+  const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!isDragging || !chartApi.coordinateToPrice || !chartApi.coordinateToTime || !chartApi.data) return;
 
     const dx = e.clientX - dragInfo.current.startX;
@@ -100,12 +67,14 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
         }
 
     } else if (isDragging === 'entry' || isDragging === 'stop' || isDragging === 'profit') {
-        const startPrice = dragInfo.current.startTool[isDragging];
+        const startPrice = dragInfo.current.startTool[isDragging === 'entry' ? 'entryPrice' : isDragging === 'stop' ? 'stopLoss' : 'takeProfit'];
         const startY = getY(startPrice);
         if(startY === undefined) return;
         const newPrice = chartApi.coordinateToPrice(startY + dy);
         if (newPrice !== null) {
-            newTool[isDragging] = newPrice;
+            if(isDragging === 'entry') newTool.entryPrice = newPrice;
+            else if(isDragging === 'stop') newTool.stopLoss = newPrice;
+            else newTool.takeProfit = newPrice;
         }
     } else if (isDragging === 'left-edge') {
         const startEntryX = getX(dragInfo.current.startTool.entryDate);
@@ -142,20 +111,25 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
     }
     
     onUpdate(newTool);
-  };
+  }, [isDragging, chartApi, dragInfo, onUpdate, getX, getY]);
 
-  const handleMouseUp = (e: MouseEvent) => {
+  const handleMouseUp = useCallback((e: MouseEvent) => {
     if (!isDragging) return;
-    
-    const finalTool = { ...tool }; // Grabs the latest state from the parent
-    onUpdateWithHistory(finalTool); // Saves the final state to history
-    
     setIsDragging(null);
+
+    // Call onUpdateWithHistory with the most up-to-date tool state from the parent
+    onUpdateWithHistory(tool);
+    
     window.removeEventListener('mousemove', handleMouseMove);
     window.removeEventListener('mouseup', handleMouseUp);
-  };
-  
-  if (!positions.entry.y || !positions.stop.y || !positions.profit.y || !positions.entry.x || !chartApi.data || chartApi.data.length === 0) return null;
+  }, [isDragging, onUpdateWithHistory, handleMouseMove, tool]);
+
+  const entryY = getY(tool.entryPrice);
+  const stopY = getY(tool.stopLoss);
+  const profitY = getY(tool.takeProfit);
+  const entryX = getX(tool.entryDate);
+
+  if (entryX === undefined || entryY === undefined || stopY === undefined || profitY === undefined || !chartApi.data || chartApi.data.length === 0) return null;
 
   const entryIndex = findClosestIndex(chartApi.data, tool.entryDate.getTime());
   if (entryIndex < 0) return null;
@@ -169,90 +143,49 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
   const endX = getX(endDate);
   if (endX === undefined) return null;
   
-  const boxWidth = endX - positions.entry.x;
+  const boxWidth = endX - entryX;
 
-  const isLong = tool.position === 'long';
-  const stopBoxTop = isLong ? positions.entry.y : positions.stop.y;
-  const profitBoxTop = isLong ? positions.profit.y : positions.entry.y;
-  const stopBoxHeight = Math.abs(positions.entry.y - positions.stop.y);
-  const profitBoxHeight = Math.abs(positions.entry.y - positions.profit.y);
+  const handleSize = 16;
+  const halfHandleSize = handleSize / 2;
 
-  const risk = Math.abs(tool.entryPrice - tool.stopLoss);
-  const reward = Math.abs(tool.takeProfit - tool.entryPrice);
-  const rrRatio = risk > 0 ? (reward / risk).toFixed(2) : '∞';
-
-  const riskInPips = (risk / pipValue).toFixed(1);
-  const rewardInPips = (reward / pipValue).toFixed(1);
-  
   return (
-    <div ref={toolRef} className="absolute top-0 left-0 pointer-events-none w-full h-full">
-      {/* Profit Box */}
-      <div
-        className={cn("absolute", isLong ? "bg-green-500/20" : "bg-red-500/20")}
-        style={{
-          left: positions.entry.x,
-          top: profitBoxTop,
-          width: boxWidth,
-          height: profitBoxHeight,
-        }}
-      >
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white text-xs whitespace-nowrap pointer-events-none">
-            <p>Take Profit: {rewardInPips} pips</p>
-            <p>Risk/Reward Ratio: {rrRatio}</p>
-        </div>
-      </div>
-      
-      {/* Stop Box */}
-      <div
-        className={cn("absolute", isLong ? "bg-red-500/20" : "bg-green-500/20")}
-        style={{
-          left: positions.entry.x,
-          top: stopBoxTop,
-          width: boxWidth,
-          height: stopBoxHeight,
-        }}
-      >
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white text-xs whitespace-nowrap pointer-events-none">
-            <p>Stop: {riskInPips} pips</p>
-        </div>
-      </div>
-
+    <div className="absolute top-0 left-0 pointer-events-none w-full h-full z-10">
        {/* Body Drag Handle */}
        <div
             className="absolute pointer-events-auto cursor-grab active:cursor-grabbing z-10"
             style={{
-                left: positions.entry.x,
-                top: Math.min(profitBoxTop, stopBoxTop),
+                left: entryX,
+                top: Math.min(profitY, stopY),
                 width: boxWidth,
-                height: stopBoxHeight + profitBoxHeight,
+                height: Math.abs(profitY - stopY),
             }}
             onMouseDown={(e) => handleMouseDown(e, 'body')}
         />
       
-       {/* Other Drag Handles */}
+       {/* Edge and corner handles */}
         <div
-            className="absolute h-full w-4 -ml-2 pointer-events-auto cursor-ew-resize z-20"
-            style={{ left: positions.entry.x, top: Math.min(positions.profit.y, positions.stop.y), height: profitBoxHeight + stopBoxHeight }}
+            className="absolute pointer-events-auto cursor-ew-resize z-20"
+            style={{ left: entryX - halfHandleSize, top: Math.min(profitY, stopY), width: handleSize, height: Math.abs(profitY - stopY) }}
             onMouseDown={(e) => handleMouseDown(e, 'left-edge')}
         />
         <div
-            className="absolute h-full w-4 -mr-2 pointer-events-auto cursor-ew-resize z-20"
-            style={{ left: positions.entry.x + boxWidth, top: Math.min(positions.profit.y, positions.stop.y), height: profitBoxHeight + stopBoxHeight }}
+            className="absolute pointer-events-auto cursor-ew-resize z-20"
+            style={{ left: endX - halfHandleSize, top: Math.min(profitY, stopY), width: handleSize, height: Math.abs(profitY - stopY) }}
             onMouseDown={(e) => handleMouseDown(e, 'right-edge')}
         />
         <div
-            className="absolute w-4 h-4 -translate-x-1/2 -translate-y-1/2 pointer-events-auto cursor-ns-resize z-20"
-            style={{ left: positions.entry.x + boxWidth / 2, top: positions.entry.y }}
+            className="absolute pointer-events-auto cursor-ns-resize z-20"
+            style={{ left: entryX + boxWidth / 2 - halfHandleSize, top: entryY - halfHandleSize, width: handleSize, height: handleSize }}
             onMouseDown={(e) => handleMouseDown(e, 'entry')}
         />
         <div
-            className="absolute w-4 h-4 -translate-x-1/2 -translate-y-1/2 pointer-events-auto cursor-ns-resize z-20"
-            style={{ left: positions.entry.x + boxWidth / 2, top: positions.stop.y }}
+            className="absolute pointer-events-auto cursor-ns-resize z-20"
+            style={{ left: entryX + boxWidth / 2 - halfHandleSize, top: stopY - halfHandleSize, width: handleSize, height: handleSize }}
             onMouseDown={(e) => handleMouseDown(e, 'stop')}
         />
         <div
-            className="absolute w-4 h-4 -translate-x-1/2 -translate-y-1/2 pointer-events-auto cursor-ns-resize z-20"
-            style={{ left: positions.entry.x + boxWidth / 2, top: positions.profit.y }}
+            className="absolute pointer-events-auto cursor-ns-resize z-20"
+            style={{ left: entryX + boxWidth / 2 - halfHandleSize, top: profitY - halfHandleSize, width: handleSize, height: handleSize }}
             onMouseDown={(e) => handleMouseDown(e, 'profit')}
         />
 
@@ -263,8 +196,8 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
             onMouseDown={(e) => e.stopPropagation()}
             className="absolute pointer-events-auto bg-destructive text-destructive-foreground rounded-full p-0.5 z-30 cursor-pointer"
             style={{
-                left: positions.entry.x + boxWidth + 5,
-                top: positions.entry.y - 8,
+                left: endX + 5,
+                top: entryY - 8,
             }}
         >
             <X className="h-3 w-3" />
@@ -272,5 +205,3 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
     </div>
   );
 }
-
-    
