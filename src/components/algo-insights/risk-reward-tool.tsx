@@ -53,12 +53,7 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
     if (chart) {
       const timeScale = chart.timeScale();
       timeScale.subscribeVisibleTimeRangeChange(updatePositions);
-      const priceScale = chart.priceScale('right');
       
-      const priceScaleSubscriber = () => updatePositions();
-      // lightweight-charts v4 doesn't have subscribeOptionsChange, so we use a workaround
-      // by checking for changes periodically. A better solution would be to use a library that
-      // exposes more events or use a ResizeObserver on the chart container.
       const intervalId = setInterval(updatePositions, 100);
 
       return () => {

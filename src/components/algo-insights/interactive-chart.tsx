@@ -16,6 +16,10 @@ import {
   Coordinate,
   LineStyle,
   PriceScaleMode,
+  ISeriesPrimitive,
+  SeriesPrimitivePaneView,
+  BitmapCoordinatesRenderingScope,
+  AutoscaleInfo,
 } from "lightweight-charts";
 import type { PriceData, Trade, RiskRewardTool as RRToolType, PriceMarker as PriceMarkerType, MeasurementTool as MeasurementToolType, MeasurementPoint, OpeningRange } from "@/types";
 import { RiskRewardTool } from "./risk-reward-tool";
@@ -354,21 +358,20 @@ export function InteractiveChart({
 
         const rect = chartElement.getBoundingClientRect();
         const y = e.clientY - rect.top;
-        const price = series.coordinateToPrice(y as Coordinate);
-        if (price === null) return;
+        const clickedPrice = series.coordinateToPrice(y as Coordinate);
+        if (clickedPrice === null) return;
         
         let markerToDelete: PriceMarkerType | null = null;
         let minDistance = Infinity;
 
         priceMarkers.forEach(marker => {
-             const priceCoord = series.priceToCoordinate(marker.price);
-             if (priceCoord === null) return;
-             
-             const distance = Math.abs(priceCoord - y);
-             if (distance < 10 && distance < minDistance) { // 10px tolerance
-                 minDistance = distance;
-                 markerToDelete = marker;
-             }
+            const priceDistance = Math.abs(marker.price - clickedPrice);
+            // Heuristic for "close enough": check if the price is within 0.5% of the marker's value
+            const tolerance = marker.price * 0.005; 
+            if (priceDistance < tolerance && priceDistance < minDistance) {
+                minDistance = priceDistance;
+                markerToDelete = marker;
+            }
         });
         
         if (markerToDelete) {
