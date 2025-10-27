@@ -99,19 +99,22 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onRemove, pipValue }:
         const newPrice = chartApi.coordinateToPrice(startY + dy);
         if (newPrice !== null) newTool.takeProfit = newPrice;
     } else if (isDragging === 'left-edge') {
-        const startX = getX(dragInfo.current.startTool.entryDate);
-        if (startX === undefined) return;
+        const startEntryX = getX(dragInfo.current.startTool.entryDate);
+        if(startEntryX === undefined) return;
+        
+        const newTime = chartApi.coordinateToTime(startEntryX + dx);
 
-        const timeAtOrigin = chartApi.coordinateToTime(startX + dx);
-        if (timeAtOrigin !== null && timeAtOrigin !== undefined && chartApi.data) {
-            const closestIndex = findClosestIndex(chartApi.data, timeAtOrigin * 1000);
+        if (newTime !== null && newTime !== undefined && chartApi.data) {
+             const closestIndex = findClosestIndex(chartApi.data, newTime * 1000);
             if (chartApi.data[closestIndex]) {
                 newTool.entryDate = chartApi.data[closestIndex].date;
+
                 const originalEntryX = getX(dragInfo.current.startTool.entryDate);
                 const newEntryX = getX(newTool.entryDate);
+
                 if (originalEntryX !== undefined && newEntryX !== undefined) {
-                    const widthChange = originalEntryX - newEntryX;
-                    newTool.widthInPoints += widthChange;
+                    const widthChangeInPixels = originalEntryX - newEntryX;
+                    newTool.widthInPoints = dragInfo.current.startTool.widthInPoints + widthChangeInPixels;
                 }
             }
         }
@@ -215,12 +218,12 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onRemove, pipValue }:
        {/* Drag Handles */}
         <div
             className="absolute w-2 h-full pointer-events-auto cursor-ew-resize"
-            style={{ left: positions.entry.x - 4, top: Math.min(positions.profit.y, positions.stop.y), height: profitBoxHeight + stopBoxHeight }}
+            style={{ left: positions.entry.x - 1, top: Math.min(positions.profit.y, positions.stop.y), height: profitBoxHeight + stopBoxHeight }}
             onMouseDown={(e) => handleMouseDown(e, 'left-edge')}
         />
         <div
             className="absolute w-2 h-full pointer-events-auto cursor-ew-resize"
-            style={{ left: positions.entry.x + boxWidth - 4, top: Math.min(positions.profit.y, positions.stop.y), height: profitBoxHeight + stopBoxHeight }}
+            style={{ left: positions.entry.x + boxWidth - 1, top: Math.min(positions.profit.y, positions.stop.y), height: profitBoxHeight + stopBoxHeight }}
             onMouseDown={(e) => handleMouseDown(e, 'right-edge')}
         />
         <div

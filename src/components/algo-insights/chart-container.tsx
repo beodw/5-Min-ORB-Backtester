@@ -288,6 +288,11 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     pushToHistory(drawingState);
     setDrawingState(prev => ({ ...prev, rrTools: updater(prev.rrTools) }));
   };
+  
+  const setPriceMarkers = (updater: (prev: PriceMarker[]) => PriceMarker[]) => {
+      pushToHistory(drawingState);
+      setDrawingState(prev => ({ ...prev, priceMarkers: updater(prev.priceMarkers)}));
+  };
 
   const setMeasurementTools = (updater: (prev: MeasurementToolType[]) => MeasurementToolType[]) => {
     pushToHistory(drawingState);
@@ -586,9 +591,8 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
       const stopLoss = placingToolType === 'long' ? entryPrice - stopLossOffset : entryPrice + stopLossOffset;
       const takeProfit = placingToolType === 'long' ? entryPrice + takeProfitOffset : entryPrice - takeProfitOffset;
       
-      const logicalRange = chartData.xDomain;
-      const visibleCandleCount = logicalRange[1] - logicalRange[0];
-      const defaultWidthInCandles = Math.max(20, Math.floor(visibleCandleCount * 0.25));
+      // A more robust initial width in pixels
+      const defaultWidthInPoints = 100;
 
       const newTool: RRToolType = {
         id: `rr-${Date.now()}`,
@@ -596,7 +600,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         stopLoss: stopLoss,
         takeProfit: takeProfit,
         entryDate: chartData.date,
-        widthInPoints: defaultWidthInCandles,
+        widthInPoints: defaultWidthInPoints, 
         position: placingToolType,
       };
       
