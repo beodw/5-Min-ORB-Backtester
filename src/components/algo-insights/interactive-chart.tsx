@@ -14,12 +14,127 @@ import {
   MouseEventParams,
   IPriceLine,
   Coordinate,
+  LineStyle,
+  PriceScaleMode,
+  ISeriesPrimitive,
+  SeriesAttachedParameter,
+  AutoscaleInfo,
+  SeriesPrimitivePaneView,
 } from "lightweight-charts";
 import type { PriceData, Trade, RiskRewardTool as RRToolType, PriceMarker as PriceMarkerType, MeasurementTool as MeasurementToolType, MeasurementPoint, OpeningRange } from "@/types";
 import { RiskRewardTool } from "./risk-reward-tool";
 import { MeasurementTool } from "./measurement-tool";
 import { useMemo, useRef, useState, useCallback, useEffect } from "react";
 import { findClosestIndex } from "@/lib/chart-utils";
+
+class RiskRewardPrimitive implements ISeriesPrimitive {
+    _param: SeriesAttachedParameter | undefined;
+    _tool: RRToolType;
+
+    constructor(tool: RRToolType) {
+        this._tool = tool;
+    }
+
+    attached(param: SeriesAttachedParameter): void {
+        this._param = param;
+    }
+
+    update(param: SeriesAttachedParameter): void {
+        this._param = param;
+    }
+    
+    autoscaleInfo(startTimePoint: number, endTimePoint: number): AutoscaleInfo | null {
+        if (!this._param) return null;
+        
+        const toolStartTime = Math.floor(this._tool.entryDate.getTime() / 1000);
+        const entryIndex = findClosestIndex(this._param.series.data(), toolStartTime);
+        const endIndex = Math.min(this._param.series.data().length - 1, entryIndex + this._tool.widthInCandles);
+
+        if (entryIndex < startTimePoint && endIndex < startTimePoint) {
+            return null;
+        }
+        if (entryIndex > endTimePoint && endIndex > endTimePoint) {
+            return null;
+        }
+
+        return {
+            priceRange: {
+                minValue: this._tool.position === 'long' ? this._tool.stopLoss : this._tool.takeProfit,
+                maxValue: this._tool.position === 'long' ? this._tool.takeProfit : this._tool.stopLoss,
+            },
+        };
+    }
+
+    paneViews(): readonly SeriesPrimitivePaneView[] {
+        if (!this._param) return [];
+
+        const series = this._param.series;
+        const timeScale = this._param.chart.timeScale();
+
+        const entryTime = Math.floor(this._tool.entryDate.getTime() / 1000) as UTCTimestamp;
+        const entryIndex = findClosestIndex(series.data(), entryTime);
+        const endIndex = Math.min(series.data().length - 1, entryIndex + this._tool.widthInCandles);
+
+        if (entryIndex >= series.data().length) return [];
+        
+        const startTime = series.data()[entryIndex].time;
+        const endTime = series.data()[endIndex]?.time || startTime;
+
+        const startX = timeScale.timeToCoordinate(startTime);
+        const endX = timeScale.timeToCoordinate(endTime);
+
+        if (startX === null || endX === null) return [];
+
+        const boxWidth = endX - startX;
+
+        const entryY = series.priceToCoordinate(this._tool.entryPrice);
+        const stopY = series.priceToCoordinate(this._tool.stopLoss);
+        const profitY = series.priceToCoordinate(this._tool.takeProfit);
+
+        if (entryY === null || stopY === null || profitY === null) return [];
+        
+        const isLong = this._tool.position === 'long';
+        const stopBoxHeight = Math.abs(entryY - stopY);
+        const profitBoxHeight = Math.abs(entryY - profitY);
+
+        const stopBoxTop = isLong ? entryY : stopY;
+        const profitBoxTop = isLong ? profitY : entryY;
+
+        return [
+            // Stop loss box
+            {
+                renderer: ({ ctx }) => {
+                    ctx.fillStyle = 'rgba(239, 68, 68, 0.3)'; // destructive/30
+                    ctx.fillRect(startX, stopBoxTop, boxWidth, stopBoxHeight);
+                },
+            },
+            // Take profit box
+            {
+                 renderer: ({ ctx }) => {
+                    ctx.fillStyle = 'rgba(34, 197, 94, 0.3)'; // accent/30
+                    ctx.fillRect(startX, profitBoxTop, boxWidth, profitBoxHeight);
+                },
+            },
+            // Price lines
+            {
+                renderer: ({ctx}) => {
+                    const drawLine = (y: number, color: string) => {
+                        ctx.beginPath();
+                        ctx.strokeStyle = color;
+                        ctx.lineWidth = 1;
+                        ctx.moveTo(startX, y);
+                        ctx.lineTo(endX, y);
+                        ctx.stroke();
+                    }
+                    drawLine(entryY, 'hsl(var(--foreground) / 0.5)');
+                    drawLine(stopY, 'hsl(var(--destructive))');
+                    drawLine(profitY, 'hsl(var(--accent))');
+                }
+            }
+        ];
+    }
+}
+
 
 export type ChartClickData = {
     price: number;
@@ -173,6 +288,7 @@ export function InteractiveChart({
             if (!param.point || !param.time || !series || !chartRef.current) return;
             
             const price = series.coordinateToPrice(param.point.y) as number;
+            if(price === null) return;
             
             const convertedData = convertToCandlestickData(displayData);
             const matchingCandles = convertedData.filter(d => d.time === param.time);
@@ -208,7 +324,7 @@ export function InteractiveChart({
             }
             candlestickSeriesRef.current = null;
         };
-    }, [displayData]); 
+    }, []); 
 
     useEffect(() => {
         if (candlestickSeriesRef.current) {
@@ -247,7 +363,7 @@ export function InteractiveChart({
                 }
             });
         }
-    }, [timeZone]);
+    }, [timeZone, chartData]);
 
     useEffect(() => {
         if (chartRef.current) {
@@ -343,6 +459,37 @@ export function InteractiveChart({
         });
     }, [priceMarkers, chartData]);
 
+    const rrToolPrimitives = useRef(new Map<string, ISeriesPrimitive>());
+
+    useEffect(() => {
+        const series = candlestickSeriesRef.current;
+        if (!series) return;
+
+        const currentToolIds = new Set(rrTools.map(t => t.id));
+
+        // Remove old primitives
+        rrToolPrimitives.current.forEach((primitive, id) => {
+            if (!currentToolIds.has(id)) {
+                series.removePrimitive(primitive);
+                rrToolPrimitives.current.delete(id);
+            }
+        });
+
+        // Add or update primitives
+        rrTools.forEach(tool => {
+            if (rrToolPrimitives.current.has(tool.id)) {
+                // The library doesn't have a native update method for primitives,
+                // so we remove and re-add.
+                series.removePrimitive(rrToolPrimitives.current.get(tool.id)!);
+            }
+            const newPrimitive = new RiskRewardPrimitive(tool);
+            series.addPrimitive(newPrimitive);
+            rrToolPrimitives.current.set(tool.id, newPrimitive);
+        });
+
+    }, [rrTools, chartData]);
+
+
     const handleContextMenu = (e: React.MouseEvent) => {
         e.preventDefault();
         const series = candlestickSeriesRef.current;
@@ -355,16 +502,18 @@ export function InteractiveChart({
         if (price === null) return;
         
         let markerToDelete: PriceMarkerType | null = null;
-        for (const marker of priceMarkers) {
-             const priceScale = chartRef.current?.priceScale('right');
-             if (!priceScale) continue;
-             const priceCoord = priceScale.priceToCoordinate(marker.price);
-             const clickCoord = y;
-             if (Math.abs(priceCoord - clickCoord) < 10) { // 10px tolerance
+        let minDistance = Infinity;
+
+        priceMarkers.forEach(marker => {
+            const priceCoord = series.priceToCoordinate(marker.price);
+            if (priceCoord === null) return;
+
+            const distance = Math.abs(priceCoord - y);
+            if (distance < 10 && distance < minDistance) { // 10px tolerance
+                minDistance = distance;
                 markerToDelete = marker;
-                break;
             }
-        }
+        });
         
         if (markerToDelete) {
             propsRef.current.onRemovePriceMarker(markerToDelete.id);
@@ -418,5 +567,3 @@ export function InteractiveChart({
         </div>
     );
 }
-
-    
