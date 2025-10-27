@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import {
@@ -16,7 +15,7 @@ import {
   IPriceLine,
   Coordinate,
 } from "lightweight-charts";
-import type { PriceData, Trade, RiskRewardTool as RRToolType, PriceMarker as PriceMarkerType, MeasurementTool as MeasurementToolType, MeasurementPoint, OpeningRange, MeasurementPoint } from "@/types";
+import type { PriceData, Trade, RiskRewardTool as RRToolType, PriceMarker as PriceMarkerType, MeasurementTool as MeasurementToolType, MeasurementPoint, OpeningRange } from "@/types";
 import { RiskRewardTool } from "./risk-reward-tool";
 import { MeasurementTool } from "./measurement-tool";
 import { useMemo, useRef, useState, useCallback, useEffect } from "react";
@@ -209,7 +208,7 @@ export function InteractiveChart({
             }
             candlestickSeriesRef.current = null;
         };
-    }, []); 
+    }, [displayData]); 
 
     useEffect(() => {
         if (candlestickSeriesRef.current) {

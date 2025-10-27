@@ -53,8 +53,12 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
     if (chart) {
       const timeScale = chart.timeScale();
       timeScale.subscribeVisibleTimeRangeChange(updatePositions);
+       const priceScale = chart.priceScale('right');
+       // This will not work as subscribeOptionsChange is not a function
+       // priceScale.subscribeOptionsChange(updatePositions);
       return () => {
         timeScale.unsubscribeVisibleTimeRangeChange(updatePositions);
+        // priceScale.unsubscribeOptionsChange(updatePositions);
       }
     }
   }, [chartApi, updatePositions]);
@@ -118,15 +122,15 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
 
     } else if (isDragging === 'right-edge') {
          const startEntryX = getX(dragInfo.current.startTool.entryDate);
-         if(startEntryX === undefined) return;
+         if(startEntryX === undefined || !chartApi.data) return;
 
-         const currentRightEdgeX = startEntryX + (toolRef.current?.offsetWidth || 0);
-         const newRightEdgeX = currentRightEdgeX + dx;
+         const entryIndex = findClosestIndex(chartApi.data, tool.entryDate.getTime());
+         
+         const newRightEdgeX = startEntryX + (toolRef.current?.offsetWidth || 0) + dx;
          const timeAtRightEdge = chartApi.coordinateToTime(newRightEdgeX);
          if(timeAtRightEdge === null) return;
          
          const newRightIndex = findClosestIndex(chartApi.data, timeAtRightEdge * 1000);
-         const entryIndex = findClosestIndex(chartApi.data, newTool.entryDate.getTime());
          
          newTool.widthInCandles = Math.max(1, newRightIndex - entryIndex);
     }
@@ -268,3 +272,5 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
     </div>
   );
 }
+
+    

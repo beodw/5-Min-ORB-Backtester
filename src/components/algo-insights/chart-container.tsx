@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
@@ -583,21 +582,13 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
       const stopLoss = placingToolType === 'long' ? entryPrice - stopLossOffset : entryPrice + stopLossOffset;
       const takeProfit = placingToolType === 'long' ? entryPrice + takeProfitOffset : entryPrice - takeProfitOffset;
       
-      // Calculate a sensible default width based on visible candles
-      const timeScale = chartApiRef.current?.chart?.timeScale();
-      const logicalRange = timeScale?.getVisibleLogicalRange();
-      let widthInCandles = 25; // default
-      if (logicalRange) {
-        widthInCandles = Math.round((logicalRange.to - logicalRange.from) * 0.25);
-      }
-
       const newTool: RRToolType = {
         id: `rr-${Date.now()}`,
         entryPrice: entryPrice,
         stopLoss: stopLoss,
         takeProfit: takeProfit,
         entryDate: chartData.date,
-        widthInCandles: widthInCandles, 
+        widthInCandles: 25, 
         position: placingToolType,
       };
       

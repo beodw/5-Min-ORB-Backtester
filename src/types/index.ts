@@ -1,5 +1,4 @@
 
-
 import type { Time, Coordinate, IChartApi, ISeriesApi } from 'lightweight-charts';
 
 export interface PriceData {
@@ -80,7 +79,5 @@ export interface ChartApi {
     chart: IChartApi | null;
     series: ISeriesApi<'Candlestick'> | null;
 }
-
-    
 
     
