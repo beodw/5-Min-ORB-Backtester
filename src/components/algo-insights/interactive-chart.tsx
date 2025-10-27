@@ -16,7 +16,7 @@ import {
   IPriceLine,
   Coordinate,
 } from "lightweight-charts";
-import type { PriceData, Trade, RiskRewardTool as RRToolType, PriceMarker as PriceMarkerType, MeasurementTool as MeasurementToolType, OpeningRange, MeasurementPoint } from "@/types";
+import type { PriceData, Trade, RiskRewardTool as RRToolType, PriceMarker as PriceMarkerType, MeasurementTool as MeasurementToolType, MeasurementPoint, OpeningRange, MeasurementPoint } from "@/types";
 import { RiskRewardTool } from "./risk-reward-tool";
 import { MeasurementTool } from "./measurement-tool";
 import { useMemo, useRef, useState, useCallback, useEffect } from "react";
@@ -35,12 +35,10 @@ interface InteractiveChartProps {
   data: PriceData[];
   trades: Trade[];
   onChartClick: (data: ChartClickData) => void;
-  onChartMouseMove: (data: ChartClickData) => void;
   rrTools: RRToolType[];
   onUpdateTool: (tool: RRToolType) => void;
+  onToolUpdateWithHistory: (tool: RRToolType) => void;
   onRemoveTool: (id: string) => void;
-  isPlacingRR: boolean;
-  isPlacingPriceMarker: boolean;
   priceMarkers: PriceMarkerType[];
   onRemovePriceMarker: (id: string) => void;
   onUpdatePriceMarker: (id: string, price: number) => void;
@@ -89,9 +87,9 @@ export function InteractiveChart({
     measurementTools,
     liveMeasurementTool,
     onChartClick,
-    onChartMouseMove,
     onAggregationChange,
     onUpdateTool,
+    onToolUpdateWithHistory,
     onRemoveTool,
     onRemovePriceMarker,
     onRemoveMeasurementTool,
@@ -106,8 +104,8 @@ export function InteractiveChart({
     const chartRef = useRef<IChartApi | null>(null);
     const candlestickSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
     
-    const propsRef = useRef({ onChartClick, onChartMouseMove, onUpdateTool, onRemoveTool, onRemovePriceMarker, onRemoveMeasurementTool, onUpdatePriceMarker });
-    propsRef.current = { onChartClick, onChartMouseMove, onUpdateTool, onRemoveTool, onRemovePriceMarker, onRemoveMeasurementTool, onUpdatePriceMarker };
+    const propsRef = useRef({ onChartClick, onUpdateTool, onToolUpdateWithHistory, onRemoveTool, onRemovePriceMarker, onRemoveMeasurementTool, onUpdatePriceMarker });
+    propsRef.current = { onChartClick, onUpdateTool, onToolUpdateWithHistory, onRemoveTool, onRemovePriceMarker, onRemoveMeasurementTool, onUpdatePriceMarker };
 
     const onAggregationChangeRef = useRef(onAggregationChange);
     useEffect(() => {
@@ -172,7 +170,7 @@ export function InteractiveChart({
         });
         candlestickSeriesRef.current = series;
         
-        const handleEvent = (param: MouseEventParams, callback: (data: ChartClickData) => void) => {
+        const handleChartClickEvent = (param: MouseEventParams) => {
             if (!param.point || !param.time || !series || !chartRef.current) return;
             
             const price = series.coordinateToPrice(param.point.y) as number;
@@ -187,7 +185,7 @@ export function InteractiveChart({
     
             const logicalRange = chart.timeScale().getVisibleLogicalRange();
     
-            callback({
+            propsRef.current.onChartClick({
                 price,
                 date: new Date((param.time as number) * 1000),
                 dataIndex,
@@ -196,12 +194,8 @@ export function InteractiveChart({
                 candle: candle.original,
             });
         };
-
-        const handleChartClickEvent = (param: MouseEventParams) => handleEvent(param, propsRef.current.onChartClick);
-        const handleChartMouseMoveEvent = (param: MouseEventParams) => handleEvent(param, propsRef.current.onChartMouseMove);
         
         chart.subscribeClick(handleChartClickEvent);
-        chart.subscribeCrosshairMove(handleChartMouseMoveEvent);
 
         const handleResize = () => chart.applyOptions({ width: chartContainerRef.current?.clientWidth, height: chartContainerRef.current?.clientHeight });
         window.addEventListener('resize', handleResize);
@@ -210,7 +204,6 @@ export function InteractiveChart({
             window.removeEventListener('resize', handleResize);
             if(chartRef.current) {
                 chartRef.current.unsubscribeClick(handleChartClickEvent);
-                chartRef.current.unsubscribeCrosshairMove(handleChartMouseMoveEvent);
                 chartRef.current.remove();
                 chartRef.current = null;
             }
@@ -321,9 +314,7 @@ export function InteractiveChart({
 
     useEffect(() => {
         const series = candlestickSeriesRef.current;
-        if (!series) {
-            return;
-        }
+        if (!series) return;
 
         const currentMarkerIds = new Set(priceMarkers.map(m => m.id));
 
@@ -335,17 +326,18 @@ export function InteractiveChart({
         });
 
         priceMarkers.forEach(marker => {
+            const lineOptions: PriceLineOptions = {
+                price: marker.price,
+                color: 'orange',
+                lineWidth: 2,
+                lineStyle: 1, // Dotted
+                axisLabelVisible: true,
+                title: marker.price.toFixed(5),
+            };
+
             if (priceMarkerLines.current.has(marker.id)) {
-                priceMarkerLines.current.get(marker.id)?.applyOptions({ price: marker.price });
+                priceMarkerLines.current.get(marker.id)?.applyOptions(lineOptions);
             } else {
-                const lineOptions: PriceLineOptions = {
-                    price: marker.price,
-                    color: 'orange',
-                    lineWidth: 2,
-                    lineStyle: 1, // Dotted
-                    axisLabelVisible: true,
-                    title: marker.price.toFixed(5),
-                };
                 const newLine = series.createPriceLine(lineOptions);
                 priceMarkerLines.current.set(marker.id, newLine);
             }
@@ -365,8 +357,11 @@ export function InteractiveChart({
         
         let markerToDelete: PriceMarkerType | null = null;
         for (const marker of priceMarkers) {
-            // Check if the click is within 0.5% of the line's price - a simple tolerance
-            if (Math.abs(marker.price - price) / marker.price < 0.005) {
+             const priceScale = chartRef.current?.priceScale('right');
+             if (!priceScale) continue;
+             const priceCoord = priceScale.priceToCoordinate(marker.price);
+             const clickCoord = y;
+             if (Math.abs(priceCoord - clickCoord) < 10) { // 10px tolerance
                 markerToDelete = marker;
                 break;
             }
@@ -391,6 +386,7 @@ export function InteractiveChart({
                     tool={tool}
                     chartApi={chartApi}
                     onUpdate={propsRef.current.onUpdateTool}
+                    onUpdateWithHistory={propsRef.current.onToolUpdateWithHistory}
                     onRemove={propsRef.current.onRemoveTool}
                     pipValue={pipValue}
                 />
@@ -423,3 +419,5 @@ export function InteractiveChart({
         </div>
     );
 }
+
+    

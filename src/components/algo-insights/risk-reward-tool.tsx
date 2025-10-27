@@ -11,19 +11,21 @@ interface RiskRewardToolProps {
   tool: RRToolType;
   chartApi: ChartApi;
   onUpdate: (tool: RRToolType) => void;
+  onUpdateWithHistory: (tool: RRToolType) => void;
   onRemove: (id: string) => void;
   pipValue: number;
 }
 
-export function RiskRewardTool({ tool, chartApi, onUpdate, onRemove, pipValue }: RiskRewardToolProps) {
+export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, onRemove, pipValue }: RiskRewardToolProps) {
   const [positions, setPositions] = useState({ entry: { x: 0, y: 0 }, stop: { x: 0, y: 0 }, profit: { x: 0, y: 0 } });
   const [isDragging, setIsDragging] = useState<null | 'entry' | 'stop' | 'profit' | 'body' | 'left-edge' | 'right-edge'>(null);
   const dragInfo = useRef({ startX: 0, startY: 0, startTool: tool });
+  const toolRef = useRef<HTMLDivElement>(null);
 
   const getX = useCallback((date: Date) => {
-    if (!date) return undefined;
+    if (!date || !chartApi.timeToCoordinate) return undefined;
     const time = Math.floor(date.getTime() / 1000) as any;
-    return chartApi.timeToCoordinate?.(time);
+    return chartApi.timeToCoordinate(time);
   }, [chartApi]);
 
   const getY = useCallback((price: number) => {
@@ -35,7 +37,7 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onRemove, pipValue }:
     const entryY = getY(tool.entryPrice);
     const stopY = getY(tool.stopLoss);
     const profitY = getY(tool.takeProfit);
-
+    
     if (entryX !== undefined && entryY !== undefined && stopY !== undefined && profitY !== undefined) {
       setPositions({
         entry: { x: entryX, y: entryY },
@@ -51,7 +53,12 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onRemove, pipValue }:
     if (chart) {
       const timeScale = chart.timeScale();
       timeScale.subscribeVisibleTimeRangeChange(updatePositions);
-      return () => timeScale.unsubscribeVisibleTimeRangeChange(updatePositions);
+      const priceScale = chart.priceScale('right');
+      priceScale.subscribeOptionsChange(updatePositions);
+      return () => {
+        timeScale.unsubscribeVisibleTimeRangeChange(updatePositions);
+        priceScale.unsubscribeOptionsChange(updatePositions);
+      }
     }
   }, [chartApi, updatePositions]);
   
@@ -69,75 +76,76 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onRemove, pipValue }:
     const dx = e.clientX - dragInfo.current.startX;
     const dy = e.clientY - dragInfo.current.startY;
 
-    let newTool = { ...dragInfo.current.startTool };
+    let newTool = { ...tool };
 
     if (isDragging === 'body') {
         const startEntryY = getY(dragInfo.current.startTool.entryPrice);
-        if(startEntryY === undefined) return;
+        const startEntryX = getX(dragInfo.current.startTool.entryDate);
+        if(startEntryY === undefined || startEntryX === undefined) return;
         
         const newEntryPrice = chartApi.coordinateToPrice(startEntryY + dy);
-        if (newEntryPrice === null) return;
+        const newTime = chartApi.coordinateToTime(startEntryX + dx);
         
-        const priceDiff = newTool.entryPrice - newEntryPrice;
-        newTool.entryPrice -= priceDiff;
+        if (newEntryPrice === null || newTime === null) return;
+        
+        const priceDiff = dragInfo.current.startTool.entryPrice - newEntryPrice;
+        newTool.entryPrice = newEntryPrice;
         newTool.stopLoss -= priceDiff;
         newTool.takeProfit -= priceDiff;
 
-    } else if (isDragging === 'entry') {
-        const startY = getY(dragInfo.current.startTool.entryPrice);
+        const closestIndex = findClosestIndex(chartApi.data, newTime * 1000);
+        if (chartApi.data[closestIndex]) {
+          newTool.entryDate = chartApi.data[closestIndex].date;
+        }
+
+    } else if (isDragging === 'entry' || isDragging === 'stop' || isDragging === 'profit') {
+        const startPrice = dragInfo.current.startTool[isDragging];
+        const startY = getY(startPrice);
         if(startY === undefined) return;
         const newPrice = chartApi.coordinateToPrice(startY + dy);
-        if (newPrice !== null) newTool.entryPrice = newPrice;
-    } else if (isDragging === 'stop') {
-        const startY = getY(dragInfo.current.startTool.stopLoss);
-        if(startY === undefined) return;
-        const newPrice = chartApi.coordinateToPrice(startY + dy);
-        if (newPrice !== null) newTool.stopLoss = newPrice;
-    } else if (isDragging === 'profit') {
-        const startY = getY(dragInfo.current.startTool.takeProfit);
-        if(startY === undefined) return;
-        const newPrice = chartApi.coordinateToPrice(startY + dy);
-        if (newPrice !== null) newTool.takeProfit = newPrice;
+        if (newPrice !== null) {
+            newTool[isDragging] = newPrice;
+        }
     } else if (isDragging === 'left-edge') {
         const startEntryX = getX(dragInfo.current.startTool.entryDate);
-        if(startEntryX === undefined) return;
-        
+        if (startEntryX === undefined) return;
         const newTime = chartApi.coordinateToTime(startEntryX + dx);
+        if (newTime === null || !chartApi.data) return;
 
-        if (newTime !== null && newTime !== undefined && chartApi.data) {
-             const closestIndex = findClosestIndex(chartApi.data, newTime * 1000);
-            if (chartApi.data[closestIndex]) {
-                const originalEntryX = getX(dragInfo.current.startTool.entryDate);
-                const newEntryX = getX(chartApi.data[closestIndex].date);
-                
-                if (originalEntryX !== undefined && newEntryX !== undefined) {
-                    const widthChangeInPixels = originalEntryX - newEntryX;
-                    newTool.widthInPoints = Math.max(20, dragInfo.current.startTool.widthInPoints + widthChangeInPixels);
-                    newTool.entryDate = chartApi.data[closestIndex].date;
-                }
-            }
-        }
+        const newEntryIndex = findClosestIndex(chartApi.data, newTime * 1000);
+        const originalEntryIndex = findClosestIndex(chartApi.data, dragInfo.current.startTool.entryDate.getTime());
+        
+        const candleDiff = originalEntryIndex - newEntryIndex;
+        newTool.widthInCandles = Math.max(1, dragInfo.current.startTool.widthInCandles + candleDiff);
+        newTool.entryDate = chartApi.data[newEntryIndex].date;
+
     } else if (isDragging === 'right-edge') {
-        newTool.widthInPoints = Math.max(20, dragInfo.current.startTool.widthInPoints + dx);
+         const startEntryX = getX(dragInfo.current.startTool.entryDate);
+         if(startEntryX === undefined) return;
+
+         const currentRightEdgeX = startEntryX + (toolRef.current?.offsetWidth || 0);
+         const newRightEdgeX = currentRightEdgeX + dx;
+         const timeAtRightEdge = chartApi.coordinateToTime(newRightEdgeX);
+         if(timeAtRightEdge === null) return;
+         
+         const newRightIndex = findClosestIndex(chartApi.data, timeAtRightEdge * 1000);
+         const entryIndex = findClosestIndex(chartApi.data, newTool.entryDate.getTime());
+         
+         newTool.widthInCandles = Math.max(1, newRightIndex - entryIndex);
     }
     
-     const startX = getX(dragInfo.current.startTool.entryDate);
-     if (startX === undefined) return;
-     
-     const timeAtOrigin = chartApi.coordinateToTime(startX + dx);
-
-     if ((isDragging === 'body' || isDragging === 'entry') && timeAtOrigin !== null && timeAtOrigin !== undefined && chartApi.data) {
-        const closestIndex = findClosestIndex(chartApi.data, timeAtOrigin * 1000);
-        if (chartApi.data[closestIndex]) {
-          const newDate = chartApi.data[closestIndex].date;
-          newTool.entryDate = newDate;
-        }
-     }
-
     onUpdate(newTool);
   };
 
-  const handleMouseUp = () => {
+  const handleMouseUp = (e: MouseEvent) => {
+    if (!isDragging) return;
+    
+    // We get the final state of the tool from the mouse move
+    const finalTool = { ...tool };
+
+    // Finalize the update and push to history
+    onUpdateWithHistory(finalTool);
+    
     setIsDragging(null);
     window.removeEventListener('mousemove', handleMouseMove);
     window.removeEventListener('mouseup', handleMouseUp);
@@ -155,13 +163,19 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onRemove, pipValue }:
   const isLong = tool.position === 'long';
   const stopBoxHeight = Math.abs(positions.entry.y - positions.stop.y);
   const profitBoxHeight = Math.abs(positions.entry.y - positions.profit.y);
-  const boxWidth = tool.widthInPoints;
+
+  // Calculate width in pixels based on candle count
+  const entryIndex = findClosestIndex(chartApi.data, tool.entryDate.getTime());
+  const endIndex = Math.min(chartApi.data.length - 1, entryIndex + tool.widthInCandles);
+  const endX = getX(chartApi.data[endIndex]?.date);
+  const boxWidth = endX !== undefined ? endX - positions.entry.x : 100;
+  
 
   const stopBoxTop = isLong ? positions.entry.y : positions.stop.y;
   const profitBoxTop = isLong ? positions.profit.y : positions.entry.y;
   
   return (
-    <div className="absolute top-0 left-0 pointer-events-none w-full h-full">
+    <div ref={toolRef} className="absolute top-0 left-0 pointer-events-none w-full h-full">
       {/* Stop Loss Box (Red) */}
       <div
         className={cn(
@@ -257,3 +271,5 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onRemove, pipValue }:
     </div>
   );
 }
+
+    

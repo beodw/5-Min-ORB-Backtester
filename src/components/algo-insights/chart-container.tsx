@@ -279,15 +279,17 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
 
   const { rrTools, priceMarkers, measurementTools } = drawingState;
 
-  const pushToHistory = (currentState: DrawingState) => {
+  const pushToHistory = useCallback((currentState: DrawingState) => {
     setHistory(prev => [...prev, currentState]);
     setRedoStack([]); // Clear redo stack on new action
-  };
+  }, []);
 
-  const setDrawingStateAndHistory = (updater: (prev: DrawingState) => DrawingState) => {
-    pushToHistory(drawingState);
-    setDrawingState(updater);
-  };
+  const setDrawingStateAndHistory = useCallback((updater: (prev: DrawingState) => DrawingState) => {
+    setDrawingState(prev => {
+      pushToHistory(prev);
+      return updater(prev);
+    });
+  }, [pushToHistory]);
   
   const handleUndo = () => {
     if (history.length === 0) return;
@@ -580,6 +582,14 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
 
       const stopLoss = placingToolType === 'long' ? entryPrice - stopLossOffset : entryPrice + stopLossOffset;
       const takeProfit = placingToolType === 'long' ? entryPrice + takeProfitOffset : entryPrice - takeProfitOffset;
+      
+      // Calculate a sensible default width based on visible candles
+      const timeScale = chartApiRef.current?.chart?.timeScale();
+      const logicalRange = timeScale?.getVisibleLogicalRange();
+      let widthInCandles = 25; // default
+      if (logicalRange) {
+        widthInCandles = Math.round((logicalRange.to - logicalRange.from) * 0.25);
+      }
 
       const newTool: RRToolType = {
         id: `rr-${Date.now()}`,
@@ -587,19 +597,24 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         stopLoss: stopLoss,
         takeProfit: takeProfit,
         entryDate: chartData.date,
-        widthInPoints: 100, 
+        widthInCandles: widthInCandles, 
         position: placingToolType,
       };
       
       setDrawingStateAndHistory(prev => ({ ...prev, rrTools: [...prev.rrTools, newTool] }));
       setPlacingToolType(null);
     } else if (isPlacingPriceMarker) {
+       toast({
+        title: "Marker Placed",
+        description: `Price marker added at ${chartData.price.toFixed(5)}`,
+      });
       const newMarker: PriceMarker = {
         id: `pm-${Date.now()}`,
         price: chartData.price,
         isDeletable: true,
       };
-      setDrawingStateAndHistory(prev => ({
+      pushToHistory(drawingState);
+      setDrawingState(prev => ({
         ...prev,
         priceMarkers: [...prev.priceMarkers, newMarker]
       }));
@@ -659,9 +674,24 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
         }
     };
   
-  const handleUpdateTool = (updatedTool: RRToolType) => {
-    setDrawingStateAndHistory(prev => ({ ...prev, rrTools: prev.rrTools.map(t => t.id === updatedTool.id ? updatedTool : t) }));
-  };
+  const handleUpdateTool = useCallback((updatedTool: RRToolType) => {
+    setDrawingState(prev => {
+        const toolExists = prev.rrTools.some(t => t.id === updatedTool.id);
+        if(!toolExists) return prev; // Do nothing if tool is gone (e.g. rapid undo)
+
+        return {
+            ...prev,
+            rrTools: prev.rrTools.map(t => t.id === updatedTool.id ? updatedTool : t)
+        };
+    });
+  }, []);
+
+  const handleToolUpdateWithHistory = useCallback((updatedTool: RRToolType) => {
+     setDrawingStateAndHistory(prev => ({
+        ...prev,
+        rrTools: prev.rrTools.map(t => t.id === updatedTool.id ? updatedTool : t)
+     }));
+  }, [setDrawingStateAndHistory]);
 
   const handleRemoveTool = (id: string) => {
     setDrawingStateAndHistory(prev => ({ ...prev, rrTools: prev.rrTools.filter(t => t.id !== id) }));
@@ -977,7 +1007,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                         stopLoss: trade.stopLoss,
                         takeProfit: takeProfit,
                         entryDate: new Date(trade.entryDateStr),
-                        widthInPoints: 100, // Default width, can be adjusted
+                        widthInCandles: 25, // Default width
                         position: trade.entryPrice > trade.stopLoss ? 'long' : 'short',
                     };
                 });
@@ -1310,6 +1340,39 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
           <div 
             className="absolute inset-0 z-20 cursor-crosshair"
             onClick={handleOverlayClick}
+            onMouseMove={(e) => {
+              if (isPlacingMeasurement && chartApiRef.current) {
+                  const chart = chartApiRef.current.chart;
+                  const series = chartApiRef.current.series;
+                  const chartElement = chartApiRef.current.chartElement;
+                  if (!chart || !series || !chartElement) return;
+
+                  const rect = chartElement.getBoundingClientRect();
+                  const x = e.clientX - rect.left;
+                  const y = e.clientY - rect.top;
+
+                  const price = series.coordinateToPrice(y);
+                  const time = chart.timeScale().coordinateToTime(x);
+
+                  if (price === null || time === null) return;
+    
+                  const data = chartApiRef.current.data;
+                  const matchingCandles = data.filter((d: any) => Math.floor(d.date.getTime() / 1000) === time);
+                  if (matchingCandles.length === 0) return;
+                  const candle = matchingCandles[0];
+                  const dataIndex = data.findIndex((d: any) => d.date.getTime() === candle.date.getTime());
+                  const logicalRange = chart.timeScale().getVisibleLogicalRange();
+
+                  handleChartMouseMove({
+                      price: price,
+                      date: new Date(time * 1000),
+                      dataIndex: dataIndex,
+                      closePrice: candle.close,
+                      xDomain: logicalRange ? [logicalRange.from, logicalRange.to] : [0, 0],
+                      candle: candle,
+                  });
+              }
+            }}
           />
         )}
 
@@ -1321,12 +1384,10 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                     onAggregationChange={handleSetTimeframe}
                     trades={journalTradesOnChart}
                     onChartClick={handleChartClick}
-                    onChartMouseMove={handleChartMouseMove}
                     rrTools={rrTools}
                     onUpdateTool={handleUpdateTool}
+                    onToolUpdateWithHistory={handleToolUpdateWithHistory}
                     onRemoveTool={handleRemoveTool}
-                    isPlacingRR={!!placingToolType}
-                    isPlacingPriceMarker={isPlacingPriceMarker}
                     priceMarkers={priceMarkers}
                     onRemovePriceMarker={handleRemovePriceMarker}
                     onUpdatePriceMarker={handleUpdatePriceMarker}
@@ -1416,3 +1477,5 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     </div>
   );
 }
+
+    

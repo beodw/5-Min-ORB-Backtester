@@ -32,7 +32,7 @@ export interface RiskRewardTool {
   stopLoss: number;
   takeProfit: number;
   entryDate: Date;
-  widthInPoints: number;
+  widthInCandles: number;
   position: 'long' | 'short';
 }
 
@@ -80,5 +80,7 @@ export interface ChartApi {
     chart: IChartApi | null;
     series: ISeriesApi<'Candlestick'> | null;
 }
+
+    
 
     
