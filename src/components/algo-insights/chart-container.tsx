@@ -1288,8 +1288,6 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
             </AlertDialogContent>
         </AlertDialog>
 
-        {isPlacingAnything && <div className="absolute inset-0 z-20 cursor-crosshair" style={{ pointerEvents: 'auto' }} />}
-
         <div className="absolute inset-0">
             {timeZone && (
                 <InteractiveChart
@@ -1393,6 +1391,3 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     </div>
   );
 }
-
-    
-    
