@@ -72,12 +72,12 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
   };
 
   const handleMouseMove = (e: MouseEvent) => {
-    if (!isDragging || !chartApi.coordinateToPrice || !chartApi.coordinateToTime) return;
+    if (!isDragging || !chartApi.coordinateToPrice || !chartApi.coordinateToTime || !chartApi.data) return;
 
     const dx = e.clientX - dragInfo.current.startX;
     const dy = e.clientY - dragInfo.current.startY;
-
-    let newTool = { ...tool };
+    
+    let newTool = { ...dragInfo.current.startTool };
 
     if (isDragging === 'body') {
         const startEntryY = getY(dragInfo.current.startTool.entryPrice);
@@ -111,7 +111,7 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
         const startEntryX = getX(dragInfo.current.startTool.entryDate);
         if (startEntryX === undefined) return;
         const newTime = chartApi.coordinateToTime(startEntryX + dx);
-        if (newTime === null || !chartApi.data) return;
+        if (newTime === null) return;
 
         const newEntryIndex = findClosestIndex(chartApi.data, newTime * 1000);
         const originalEntryIndex = findClosestIndex(chartApi.data, dragInfo.current.startTool.entryDate.getTime());
@@ -122,9 +122,9 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
 
     } else if (isDragging === 'right-edge') {
          const startEntryX = getX(dragInfo.current.startTool.entryDate);
-         if(startEntryX === undefined || !chartApi.data) return;
+         if(startEntryX === undefined) return;
 
-         const entryIndex = findClosestIndex(chartApi.data, tool.entryDate.getTime());
+         const entryIndex = findClosestIndex(chartApi.data, dragInfo.current.startTool.entryDate.getTime());
          
          const rightEdgeDate = chartApi.data[Math.min(chartApi.data.length - 1, entryIndex + dragInfo.current.startTool.widthInCandles)]?.date;
          if (!rightEdgeDate) return;
@@ -147,20 +147,21 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
   const handleMouseUp = (e: MouseEvent) => {
     if (!isDragging) return;
     
-    // This is the CRITICAL FIX: save the final state to history.
-    onUpdateWithHistory(tool);
+    const finalTool = { ...tool }; // Grabs the latest state from the parent
+    onUpdateWithHistory(finalTool); // Saves the final state to history
     
     setIsDragging(null);
     window.removeEventListener('mousemove', handleMouseMove);
     window.removeEventListener('mouseup', handleMouseUp);
   };
   
-  if (!positions.entry.y || !positions.stop.y || !positions.profit.y || !positions.entry.x) return null;
+  if (!positions.entry.y || !positions.stop.y || !positions.profit.y || !positions.entry.x || !chartApi.data || chartApi.data.length === 0) return null;
 
   const entryIndex = findClosestIndex(chartApi.data, tool.entryDate.getTime());
   if (entryIndex < 0) return null;
+
   const endIndex = Math.min(chartApi.data.length - 1, entryIndex + tool.widthInCandles);
-  if (endIndex < 0) return null;
+  if (endIndex < 0 || entryIndex > endIndex) return null;
   
   const endDate = chartApi.data[endIndex]?.date;
   if (!endDate) return null;
@@ -187,7 +188,7 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
     <div ref={toolRef} className="absolute top-0 left-0 pointer-events-none w-full h-full">
       {/* Profit Box */}
       <div
-        className={cn("absolute pointer-events-auto", isLong ? "bg-green-500/20" : "bg-red-500/20")}
+        className={cn("absolute", isLong ? "bg-green-500/20" : "bg-red-500/20")}
         style={{
           left: positions.entry.x,
           top: profitBoxTop,
@@ -195,7 +196,7 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
           height: profitBoxHeight,
         }}
       >
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white text-xs whitespace-nowrap">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white text-xs whitespace-nowrap pointer-events-none">
             <p>Take Profit: {rewardInPips} pips</p>
             <p>Risk/Reward Ratio: {rrRatio}</p>
         </div>
@@ -203,7 +204,7 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
       
       {/* Stop Box */}
       <div
-        className={cn("absolute pointer-events-auto", isLong ? "bg-red-500/20" : "bg-green-500/20")}
+        className={cn("absolute", isLong ? "bg-red-500/20" : "bg-green-500/20")}
         style={{
           left: positions.entry.x,
           top: stopBoxTop,
@@ -211,13 +212,14 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
           height: stopBoxHeight,
         }}
       >
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white text-xs whitespace-nowrap">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white text-xs whitespace-nowrap pointer-events-none">
             <p>Stop: {riskInPips} pips</p>
         </div>
       </div>
 
+       {/* Body Drag Handle */}
        <div
-            className="absolute pointer-events-auto cursor-grab active:cursor-grabbing"
+            className="absolute pointer-events-auto cursor-grab active:cursor-grabbing z-10"
             style={{
                 left: positions.entry.x,
                 top: Math.min(profitBoxTop, stopBoxTop),
@@ -227,29 +229,29 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
             onMouseDown={(e) => handleMouseDown(e, 'body')}
         />
       
-       {/* Drag Handles */}
+       {/* Other Drag Handles */}
         <div
-            className="absolute h-full w-4 -ml-2 pointer-events-auto cursor-ew-resize z-10"
+            className="absolute h-full w-4 -ml-2 pointer-events-auto cursor-ew-resize z-20"
             style={{ left: positions.entry.x, top: Math.min(positions.profit.y, positions.stop.y), height: profitBoxHeight + stopBoxHeight }}
             onMouseDown={(e) => handleMouseDown(e, 'left-edge')}
         />
         <div
-            className="absolute h-full w-4 -mr-2 pointer-events-auto cursor-ew-resize z-10"
+            className="absolute h-full w-4 -mr-2 pointer-events-auto cursor-ew-resize z-20"
             style={{ left: positions.entry.x + boxWidth, top: Math.min(positions.profit.y, positions.stop.y), height: profitBoxHeight + stopBoxHeight }}
             onMouseDown={(e) => handleMouseDown(e, 'right-edge')}
         />
         <div
-            className="absolute w-4 h-4 -translate-x-1/2 -translate-y-1/2 pointer-events-auto cursor-ns-resize z-10"
+            className="absolute w-4 h-4 -translate-x-1/2 -translate-y-1/2 pointer-events-auto cursor-ns-resize z-20"
             style={{ left: positions.entry.x + boxWidth / 2, top: positions.entry.y }}
             onMouseDown={(e) => handleMouseDown(e, 'entry')}
         />
         <div
-            className="absolute w-4 h-4 -translate-x-1/2 -translate-y-1/2 pointer-events-auto cursor-ns-resize z-10"
+            className="absolute w-4 h-4 -translate-x-1/2 -translate-y-1/2 pointer-events-auto cursor-ns-resize z-20"
             style={{ left: positions.entry.x + boxWidth / 2, top: positions.stop.y }}
             onMouseDown={(e) => handleMouseDown(e, 'stop')}
         />
         <div
-            className="absolute w-4 h-4 -translate-x-1/2 -translate-y-1/2 pointer-events-auto cursor-ns-resize z-10"
+            className="absolute w-4 h-4 -translate-x-1/2 -translate-y-1/2 pointer-events-auto cursor-ns-resize z-20"
             style={{ left: positions.entry.x + boxWidth / 2, top: positions.profit.y }}
             onMouseDown={(e) => handleMouseDown(e, 'profit')}
         />
@@ -259,7 +261,7 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
        <button
             onClick={() => onRemove(tool.id)}
             onMouseDown={(e) => e.stopPropagation()}
-            className="absolute pointer-events-auto bg-destructive text-destructive-foreground rounded-full p-0.5 z-10 cursor-pointer"
+            className="absolute pointer-events-auto bg-destructive text-destructive-foreground rounded-full p-0.5 z-30 cursor-pointer"
             style={{
                 left: positions.entry.x + boxWidth + 5,
                 top: positions.entry.y - 8,
@@ -270,3 +272,5 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
     </div>
   );
 }
+
+    
