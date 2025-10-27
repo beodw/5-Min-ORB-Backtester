@@ -98,22 +98,25 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onRemove, pipValue }:
         if(startY === undefined) return;
         const newPrice = chartApi.coordinateToPrice(startY + dy);
         if (newPrice !== null) newTool.takeProfit = newPrice;
-    } else if (isDragging === 'left-edge' || isDragging === 'right-edge') {
-       const startX = getX(dragInfo.current.startTool.entryDate);
-       if (startX === undefined) return;
-       const timeAtOrigin = chartApi.coordinateToTime(startX + dx);
+    } else if (isDragging === 'left-edge') {
+        const startX = getX(dragInfo.current.startTool.entryDate);
+        if (startX === undefined) return;
 
-       if (timeAtOrigin !== null && timeAtOrigin !== undefined && chartApi.data) {
-          const closestIndex = findClosestIndex(chartApi.data, timeAtOrigin * 1000);
-          if (chartApi.data[closestIndex]) {
-            const newDate = chartApi.data[closestIndex].date;
-            newTool.entryDate = newDate;
-          }
-       }
-        
-        const originalEndX = startX + dragInfo.current.startTool.widthInPoints;
-        const newWidth = dragInfo.current.startTool.widthInPoints + (isDragging === 'right-edge' ? dx : 0);
-        newTool.widthInPoints = Math.max(20, newWidth);
+        const timeAtOrigin = chartApi.coordinateToTime(startX + dx);
+        if (timeAtOrigin !== null && timeAtOrigin !== undefined && chartApi.data) {
+            const closestIndex = findClosestIndex(chartApi.data, timeAtOrigin * 1000);
+            if (chartApi.data[closestIndex]) {
+                newTool.entryDate = chartApi.data[closestIndex].date;
+                const originalEntryX = getX(dragInfo.current.startTool.entryDate);
+                const newEntryX = getX(newTool.entryDate);
+                if (originalEntryX !== undefined && newEntryX !== undefined) {
+                    const widthChange = originalEntryX - newEntryX;
+                    newTool.widthInPoints += widthChange;
+                }
+            }
+        }
+    } else if (isDragging === 'right-edge') {
+        newTool.widthInPoints = Math.max(20, dragInfo.current.startTool.widthInPoints + dx);
     }
     
      const startX = getX(dragInfo.current.startTool.entryDate);

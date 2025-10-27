@@ -289,11 +289,6 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     setDrawingState(prev => ({ ...prev, rrTools: updater(prev.rrTools) }));
   };
 
-  const setPriceMarkers = (updater: (prev: PriceMarker[]) => PriceMarker[]) => {
-    pushToHistory(drawingState);
-    setDrawingState(prev => ({ ...prev, priceMarkers: updater(prev.priceMarkers) }));
-  };
-  
   const setMeasurementTools = (updater: (prev: MeasurementToolType[]) => MeasurementToolType[]) => {
     pushToHistory(drawingState);
     setDrawingState(prev => ({ ...prev, measurementTools: updater(prev.measurementTools) }));
@@ -591,8 +586,9 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
       const stopLoss = placingToolType === 'long' ? entryPrice - stopLossOffset : entryPrice + stopLossOffset;
       const takeProfit = placingToolType === 'long' ? entryPrice + takeProfitOffset : entryPrice - takeProfitOffset;
       
-      // A default width based on a fraction of visible candles
-      const defaultWidthInCandles = 50;
+      const logicalRange = chartData.xDomain;
+      const visibleCandleCount = logicalRange[1] - logicalRange[0];
+      const defaultWidthInCandles = Math.max(20, Math.floor(visibleCandleCount * 0.25));
 
       const newTool: RRToolType = {
         id: `rr-${Date.now()}`,
@@ -607,10 +603,6 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
       setRrTools(prevTools => [...prevTools, newTool]);
       setPlacingToolType(null);
     } else if (isPlacingPriceMarker) {
-      toast({
-        title: "Chart Click Registered",
-        description: `Attempting to place marker at price: ${chartData.price.toFixed(5)}`,
-      });
       const newMarker: PriceMarker = {
         id: `pm-${Date.now()}`,
         price: chartData.price,
@@ -1439,5 +1431,3 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     </div>
   );
 }
-
-    
