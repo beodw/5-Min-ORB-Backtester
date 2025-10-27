@@ -1,7 +1,7 @@
 
 "use client";
 
-import React from "react";
+import React, { useMemo, useRef, useCallback, useEffect } from "react";
 import {
   createChart,
   IChartApi,
@@ -12,15 +12,10 @@ import {
   PriceLineOptions,
   MouseEventParams,
   IPriceLine,
-  ISeriesPrimitive,
-  SeriesPrimitivePaneView,
-  BitmapCoordinatesRenderingScope,
-  AutoscaleInfo,
 } from "lightweight-charts";
 import type { PriceData, Trade, RiskRewardTool as RRToolType, PriceMarker as PriceMarkerType, MeasurementTool as MeasurementToolType, OpeningRange } from "@/types";
 import { RiskRewardTool } from "./risk-reward-tool";
 import { MeasurementTool } from "./measurement-tool";
-import { useMemo, useRef, useCallback, useEffect } from "react";
 
 export type ChartClickData = {
     price: number;
@@ -68,137 +63,6 @@ const convertToCandlestickData = (priceData: PriceData[]): (CandlestickData & { 
         close: d.close,
         original: d
     }));
-}
-class RiskRewardPrimitive implements ISeriesPrimitive<Time> {
-    _tool: RRToolType;
-    _paneView: RiskRewardPaneView;
-    _chart: IChartApi | null = null;
-    _series: ISeriesApi<'Candlestick'> | null = null;
-
-    constructor(tool: RRToolType) {
-        this._tool = tool;
-        this._paneView = new RiskRewardPaneView(this);
-    }
-    
-    attached({ chart, series }: { chart: IChartApi, series: ISeriesApi<'Candlestick'> }) {
-        this._chart = chart;
-        this._series = series;
-    }
-
-    detached() {
-        this._chart = null;
-        this._series = null;
-    }
-
-    update(tool: RRToolType) {
-        this._tool = tool;
-        this.requestUpdate();
-    }
-
-    paneViews() {
-        return [this._paneView];
-    }
-    
-    autoscaleInfo(startTimePoint: number, endTimePoint: number): AutoscaleInfo | null {
-        const toolFirstTime = (this._tool.entryDate.getTime() / 1000) as UTCTimestamp;
-        const entryIndex = candlestickSeriesRef.current?.data().findIndex(d => d.time === toolFirstTime) ?? -1;
-        if(entryIndex === -1) return null;
-        
-        const seriesData = Array.from(candlestickSeriesRef.current?.data() ?? []);
-        const endIndex = Math.min(seriesData.length - 1, entryIndex + this._tool.widthInCandles);
-        const toolLastTime = seriesData[endIndex]?.time;
-        if(!toolLastTime) return null;
-
-        // Check if the tool is in the visible range
-        if (toolLastTime < startTimePoint || toolFirstTime > endTimePoint) {
-            return null;
-        }
-
-        const minPrice = Math.min(this._tool.entryPrice, this._tool.stopLoss, this._tool.takeProfit);
-        const maxPrice = Math.max(this._tool.entryPrice, this._tool.stopLoss, this._tool.takeProfit);
-        return {
-            priceRange: {
-                minValue: minPrice,
-                maxValue: maxPrice,
-            },
-        };
-    }
-    
-    requestUpdate: () => void = () => {};
-
-    chart() {
-        return this._chart;
-    }
-
-    series() {
-        return this._series;
-    }
-}
-
-class RiskRewardPaneView implements SeriesPrimitivePaneView {
-    _source: RiskRewardPrimitive;
-
-    constructor(source: RiskRewardPrimitive) {
-        this._source = source;
-    }
-
-    renderer() {
-        return null;
-    }
-
-    update(data: any, size: any) {
-        // no-op
-    }
-    
-    draw(target: BitmapCoordinatesRenderingScope) {
-        target.useBitmapCoordinateSpace(scope => {
-            const series = this._source.series();
-            if (!series) return;
-            
-            const tool = this._source._tool;
-            const chart = this._source.chart();
-            if(!chart) return;
-            
-            const timeScale = chart.timeScale();
-            const seriesData = Array.from(candlestickSeriesRef.current?.data() ?? []);
-            if (seriesData.length === 0) return;
-            
-            const entryTime = (tool.entryDate.getTime() / 1000) as UTCTimestamp;
-            const entryIndex = seriesData.findIndex(d => d.time === entryTime);
-            if(entryIndex === -1) return;
-
-            const endIndex = Math.min(seriesData.length - 1, entryIndex + tool.widthInCandles);
-            const endTime = seriesData[endIndex]?.time;
-            if(!endTime) return;
-
-            const entryX = timeScale.timeToCoordinate(entryTime);
-            const endX = timeScale.timeToCoordinate(endTime);
-            
-            const entryY = series.priceToCoordinate(tool.entryPrice);
-            const stopY = series.priceToCoordinate(tool.stopLoss);
-            const profitY = series.priceToCoordinate(tool.takeProfit);
-            
-            if (entryX === null || endX === null || entryY === null || stopY === null || profitY === null) {
-                return;
-            }
-
-            const isLong = tool.position === 'long';
-            const profitColor = isLong ? 'rgba(0, 255, 0, 0.2)' : 'rgba(255, 0, 0, 0.2)';
-            const stopColor = isLong ? 'rgba(255, 0, 0, 0.2)' : 'rgba(0, 255, 0, 0.2)';
-
-            // Draw profit box
-            const profitTop = Math.min(entryY, profitY);
-            const profitHeight = Math.abs(entryY - profitY);
-            scope.context.fillStyle = profitColor;
-            scope.context.fillRect(entryX, profitTop, endX - entryX, profitHeight);
-
-            // Draw stop box
-            const stopTop = Math.min(entryY, stopY);
-            const stopHeight = Math.abs(entryY - stopY);
-            scope.context.fillStyle = stopColor;
-            scope.context.fillRect(entryX, stopTop, endX - entryX, stopHeight);
-        });
-    }
 }
 
 const candlestickSeriesRef = React.createRef<ISeriesApi<'Candlestick'>>();
@@ -414,36 +278,6 @@ export function InteractiveChart({
     useEffect(() => {
       setChartApi(chartApi);
     }, [chartApi, setChartApi]);
-    
-    const rrToolPrimitives = useRef<Map<string, ISeriesPrimitive<Time>>>(new Map());
-    useEffect(() => {
-        const series = candlestickSeriesRef.current;
-        if (!series || !chartRef.current) return;
-
-        const currentToolIds = new Set(rrTools.map(t => t.id));
-
-        // Remove primitives for tools that no longer exist
-        rrToolPrimitives.current.forEach((primitive, id) => {
-            if (!currentToolIds.has(id)) {
-                series.removePrimitive(primitive);
-                rrToolPrimitives.current.delete(id);
-            }
-        });
-
-        // Add or update primitives for current tools
-        rrTools.forEach(tool => {
-            const existingPrimitive = rrToolPrimitives.current.get(tool.id) as RiskRewardPrimitive | undefined;
-            if (existingPrimitive) {
-                // If primitive exists, update it
-                existingPrimitive.update(tool);
-            } else {
-                const newPrimitive = new RiskRewardPrimitive(tool);
-                series.addPrimitive(newPrimitive);
-                rrToolPrimitives.current.set(tool.id, newPrimitive);
-            }
-        });
-
-    }, [rrTools, chartData]);
 
 
     const openingRangeLines = useRef<[IPriceLine?, IPriceLine?]>([undefined, undefined]);
@@ -592,3 +426,5 @@ export function InteractiveChart({
         </div>
     );
 }
+
+    

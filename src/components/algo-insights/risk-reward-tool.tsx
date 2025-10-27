@@ -19,16 +19,51 @@ interface RiskRewardToolProps {
 export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, onRemove, pipValue }: RiskRewardToolProps) {
   const [isDragging, setIsDragging] = useState<null | 'entry' | 'stop' | 'profit' | 'body' | 'left-edge' | 'right-edge'>(null);
   const dragInfo = useRef({ startX: 0, startY: 0, startTool: tool });
+  const [positions, setPositions] = useState<{
+    entryX?: number; entryY?: number;
+    stopY?: number; profitY?: number;
+    endX?: number;
+  }>({});
 
-  const getX = useCallback((date: Date) => {
-    if (!date || !chartApi.timeToCoordinate) return undefined;
-    const time = Math.floor(date.getTime() / 1000) as any;
-    return chartApi.timeToCoordinate(time);
-  }, [chartApi]);
+  const updatePositions = useCallback(() => {
+    if (!chartApi.timeToCoordinate || !chartApi.priceToCoordinate || !chartApi.data || chartApi.data.length === 0) return;
+    
+    const entryX = chartApi.timeToCoordinate(Math.floor(tool.entryDate.getTime() / 1000) as any);
 
-  const getY = useCallback((price: number) => {
-    return chartApi.priceToCoordinate?.(price);
-  }, [chartApi]);
+    const entryIndex = findClosestIndex(chartApi.data, tool.entryDate.getTime());
+    const endIndex = Math.min(chartApi.data.length - 1, entryIndex + tool.widthInCandles);
+    const endDate = chartApi.data[endIndex]?.date;
+    if (!endDate) return;
+
+    const endX = chartApi.timeToCoordinate(Math.floor(endDate.getTime() / 1000) as any);
+
+    setPositions({
+        entryX: entryX ?? undefined,
+        endX: endX ?? undefined,
+        entryY: chartApi.priceToCoordinate(tool.entryPrice) ?? undefined,
+        stopY: chartApi.priceToCoordinate(tool.stopLoss) ?? undefined,
+        profitY: chartApi.priceToCoordinate(tool.takeProfit) ?? undefined,
+    });
+  }, [tool, chartApi]);
+
+
+  useEffect(() => {
+    updatePositions();
+    const chart = chartApi.chart;
+    if (chart) {
+      const timeScale = chart.timeScale();
+      timeScale.subscribeVisibleTimeRangeChange(updatePositions);
+      const priceScale = chart.priceScale('right');
+      
+      const priceScaleUpdateHandler = () => updatePositions();
+      priceScale.subscribeOptionsChange(priceScaleUpdateHandler);
+      
+      return () => {
+        timeScale.unsubscribeVisibleTimeRangeChange(updatePositions);
+        priceScale.unsubscribeOptionsChange(priceScaleUpdateHandler);
+      };
+    }
+  }, [chartApi, updatePositions]);
   
   const handleMouseDown = (e: React.MouseEvent, part: 'entry' | 'stop' | 'profit' | 'body' | 'left-edge' | 'right-edge') => {
     e.stopPropagation();
@@ -44,11 +79,11 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
     const dx = e.clientX - dragInfo.current.startX;
     const dy = e.clientY - dragInfo.current.startY;
     
-    let newTool = { ...dragInfo.current.startTool };
+    let newTool = { ...tool };
 
     if (isDragging === 'body') {
-        const startEntryY = getY(dragInfo.current.startTool.entryPrice);
-        const startEntryX = getX(dragInfo.current.startTool.entryDate);
+        const startEntryY = positions.entryY;
+        const startEntryX = positions.entryX;
         if(startEntryY === undefined || startEntryX === undefined) return;
         
         const newEntryPrice = chartApi.coordinateToPrice(startEntryY + dy);
@@ -58,8 +93,8 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
         
         const priceDiff = dragInfo.current.startTool.entryPrice - newEntryPrice;
         newTool.entryPrice = newEntryPrice;
-        newTool.stopLoss -= priceDiff;
-        newTool.takeProfit -= priceDiff;
+        newTool.stopLoss = dragInfo.current.startTool.stopLoss - priceDiff;
+        newTool.takeProfit = dragInfo.current.startTool.takeProfit - priceDiff;
 
         const closestIndex = findClosestIndex(chartApi.data, newTime * 1000);
         if (chartApi.data[closestIndex]) {
@@ -68,7 +103,7 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
 
     } else if (isDragging === 'entry' || isDragging === 'stop' || isDragging === 'profit') {
         const startPrice = dragInfo.current.startTool[isDragging === 'entry' ? 'entryPrice' : isDragging === 'stop' ? 'stopLoss' : 'takeProfit'];
-        const startY = getY(startPrice);
+        const startY = chartApi.priceToCoordinate?.(startPrice);
         if(startY === undefined) return;
         const newPrice = chartApi.coordinateToPrice(startY + dy);
         if (newPrice !== null) {
@@ -77,7 +112,7 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
             else newTool.takeProfit = newPrice;
         }
     } else if (isDragging === 'left-edge') {
-        const startEntryX = getX(dragInfo.current.startTool.entryDate);
+        const startEntryX = positions.entryX;
         if (startEntryX === undefined) return;
         const newTime = chartApi.coordinateToTime(startEntryX + dx);
         if (newTime === null) return;
@@ -90,7 +125,7 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
         newTool.entryDate = chartApi.data[newEntryIndex].date;
 
     } else if (isDragging === 'right-edge') {
-         const startEntryX = getX(dragInfo.current.startTool.entryDate);
+         const startEntryX = positions.entryX;
          if(startEntryX === undefined) return;
 
          const entryIndex = findClosestIndex(chartApi.data, dragInfo.current.startTool.entryDate.getTime());
@@ -98,7 +133,7 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
          const rightEdgeDate = chartApi.data[Math.min(chartApi.data.length - 1, entryIndex + dragInfo.current.startTool.widthInCandles)]?.date;
          if (!rightEdgeDate) return;
 
-         const startRightEdgeX = getX(rightEdgeDate);
+         const startRightEdgeX = chartApi.timeToCoordinate?.(Math.floor(rightEdgeDate.getTime()/1000) as any);
          if (startRightEdgeX === undefined) return;
 
          const newRightEdgeX = startRightEdgeX + dx;
@@ -111,53 +146,63 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
     }
     
     onUpdate(newTool);
-  }, [isDragging, chartApi, dragInfo, onUpdate, getX, getY]);
+  }, [isDragging, chartApi, onUpdate, positions]);
 
-  const handleMouseUp = useCallback((e: MouseEvent) => {
+  const handleMouseUp = useCallback(() => {
     if (!isDragging) return;
     setIsDragging(null);
-
-    // Call onUpdateWithHistory with the most up-to-date tool state from the parent
     onUpdateWithHistory(tool);
-    
     window.removeEventListener('mousemove', handleMouseMove);
     window.removeEventListener('mouseup', handleMouseUp);
   }, [isDragging, onUpdateWithHistory, handleMouseMove, tool]);
 
-  const entryY = getY(tool.entryPrice);
-  const stopY = getY(tool.stopLoss);
-  const profitY = getY(tool.takeProfit);
-  const entryX = getX(tool.entryDate);
+  const { entryX, entryY, stopY, profitY, endX } = positions;
 
-  if (entryX === undefined || entryY === undefined || stopY === undefined || profitY === undefined || !chartApi.data || chartApi.data.length === 0) return null;
+  if (entryX === undefined || entryY === undefined || stopY === undefined || profitY === undefined || endX === undefined) return null;
 
-  const entryIndex = findClosestIndex(chartApi.data, tool.entryDate.getTime());
-  if (entryIndex < 0) return null;
-
-  const endIndex = Math.min(chartApi.data.length - 1, entryIndex + tool.widthInCandles);
-  if (endIndex < 0 || entryIndex > endIndex) return null;
-  
-  const endDate = chartApi.data[endIndex]?.date;
-  if (!endDate) return null;
-
-  const endX = getX(endDate);
-  if (endX === undefined) return null;
+  const isLong = tool.position === 'long';
+  const profitColor = isLong ? 'rgba(0, 255, 0, 0.2)' : 'rgba(255, 0, 0, 0.2)';
+  const stopColor = isLong ? 'rgba(255, 0, 0, 0.2)' : 'rgba(0, 255, 0, 0.2)';
   
   const boxWidth = endX - entryX;
 
-  const handleSize = 16;
+  const profitTop = Math.min(entryY, profitY);
+  const profitHeight = Math.abs(entryY - profitY);
+
+  const stopTop = Math.min(entryY, stopY);
+  const stopHeight = Math.abs(entryY - stopY);
+
+  const riskInPrice = Math.abs(tool.entryPrice - tool.stopLoss);
+  const rewardInPrice = Math.abs(tool.takeProfit - tool.entryPrice);
+  const riskRewardRatio = riskInPrice > 0 ? (rewardInPrice / riskInPrice).toFixed(2) : '∞';
+
+
+  const handleSize = 8;
   const halfHandleSize = handleSize / 2;
 
   return (
     <div className="absolute top-0 left-0 pointer-events-none w-full h-full z-10">
-       {/* Body Drag Handle */}
+       {/* Profit Box */}
        <div
             className="absolute pointer-events-auto cursor-grab active:cursor-grabbing z-10"
             style={{
                 left: entryX,
-                top: Math.min(profitY, stopY),
+                top: profitTop,
                 width: boxWidth,
-                height: Math.abs(profitY - stopY),
+                height: profitHeight,
+                backgroundColor: profitColor
+            }}
+            onMouseDown={(e) => handleMouseDown(e, 'body')}
+        />
+        {/* Stop Box */}
+       <div
+            className="absolute pointer-events-auto cursor-grab active:cursor-grabbing z-10"
+            style={{
+                left: entryX,
+                top: stopTop,
+                width: boxWidth,
+                height: stopHeight,
+                backgroundColor: stopColor
             }}
             onMouseDown={(e) => handleMouseDown(e, 'body')}
         />
@@ -174,17 +219,17 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
             onMouseDown={(e) => handleMouseDown(e, 'right-edge')}
         />
         <div
-            className="absolute pointer-events-auto cursor-ns-resize z-20"
+            className="absolute pointer-events-auto cursor-ns-resize z-20 rounded-full border bg-background"
             style={{ left: entryX + boxWidth / 2 - halfHandleSize, top: entryY - halfHandleSize, width: handleSize, height: handleSize }}
             onMouseDown={(e) => handleMouseDown(e, 'entry')}
         />
         <div
-            className="absolute pointer-events-auto cursor-ns-resize z-20"
+            className="absolute pointer-events-auto cursor-ns-resize z-20 rounded-full border bg-background"
             style={{ left: entryX + boxWidth / 2 - halfHandleSize, top: stopY - halfHandleSize, width: handleSize, height: handleSize }}
             onMouseDown={(e) => handleMouseDown(e, 'stop')}
         />
         <div
-            className="absolute pointer-events-auto cursor-ns-resize z-20"
+            className="absolute pointer-events-auto cursor-ns-resize z-20 rounded-full border bg-background"
             style={{ left: entryX + boxWidth / 2 - halfHandleSize, top: profitY - halfHandleSize, width: handleSize, height: handleSize }}
             onMouseDown={(e) => handleMouseDown(e, 'profit')}
         />
@@ -202,6 +247,15 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
         >
             <X className="h-3 w-3" />
         </button>
+
+        {/* Info Box */}
+        <div className="absolute pointer-events-none text-xs bg-background/70 p-1 rounded"
+             style={{ left: entryX + 5, top: isLong ? profitTop + 5 : stopTop + 5 }}
+        >
+          <div>Risk/Reward Ratio: {riskRewardRatio}</div>
+        </div>
     </div>
   );
 }
+
+    
