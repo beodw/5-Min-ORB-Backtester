@@ -147,8 +147,8 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
   const handleMouseUp = (e: MouseEvent) => {
     if (!isDragging) return;
     
-    const finalTool = { ...tool };
-    onUpdateWithHistory(finalTool);
+    // This is the CRITICAL FIX: save the final state to history.
+    onUpdateWithHistory(tool);
     
     setIsDragging(null);
     window.removeEventListener('mousemove', handleMouseMove);
@@ -157,73 +157,37 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
   
   if (!positions.entry.y || !positions.stop.y || !positions.profit.y || !positions.entry.x) return null;
 
-  const risk = Math.abs(tool.entryPrice - tool.stopLoss);
-  const reward = Math.abs(tool.takeProfit - tool.entryPrice);
-  const rrRatio = risk > 0 ? (reward / risk).toFixed(2) : '∞';
+  const entryIndex = findClosestIndex(chartApi.data, tool.entryDate.getTime());
+  if (entryIndex < 0) return null;
+  const endIndex = Math.min(chartApi.data.length - 1, entryIndex + tool.widthInCandles);
+  if (endIndex < 0) return null;
+  
+  const endDate = chartApi.data[endIndex]?.date;
+  if (!endDate) return null;
 
-  const riskPips = (risk / pipValue).toFixed(1);
-  const rewardPips = (reward / pipValue).toFixed(1);
+  const endX = getX(endDate);
+  if (endX === undefined) return null;
+  
+  const boxWidth = endX - positions.entry.x;
 
   const isLong = tool.position === 'long';
-  const stopBoxHeight = Math.abs(positions.entry.y - positions.stop.y);
-  const profitBoxHeight = Math.abs(positions.entry.y - positions.profit.y);
-
-  const entryIndex = findClosestIndex(chartApi.data, tool.entryDate.getTime());
-  const endIndex = Math.min(chartApi.data.length - 1, entryIndex + tool.widthInCandles);
-
-  if (entryIndex < 0 || endIndex < 0 || entryIndex >= chartApi.data.length || endIndex >= chartApi.data.length) return null;
-
-  const endX = getX(chartApi.data[endIndex]?.date);
-  const boxWidth = endX !== undefined ? endX - positions.entry.x : 100;
-  
   const stopBoxTop = isLong ? positions.entry.y : positions.stop.y;
   const profitBoxTop = isLong ? positions.profit.y : positions.entry.y;
+  const stopBoxHeight = Math.abs(positions.entry.y - positions.stop.y);
+  const profitBoxHeight = Math.abs(positions.entry.y - positions.profit.y);
   
   return (
     <div ref={toolRef} className="absolute top-0 left-0 pointer-events-none w-full h-full">
-        {/* Lines */}
-        <div className="absolute h-px bg-white/50" style={{ left: positions.entry.x, top: positions.entry.y, width: boxWidth }} />
-        <div className="absolute h-px bg-white/50" style={{ left: positions.entry.x, top: positions.stop.y, width: boxWidth }} />
-        <div className="absolute h-px bg-white/50" style={{ left: positions.entry.x, top: positions.profit.y, width: boxWidth }} />
-
-        {/* Stop loss box */}
-        <div
-            className="absolute pointer-events-auto cursor-grab active:cursor-grabbing bg-destructive/20"
+       <div
+            className="absolute pointer-events-auto cursor-grab active:cursor-grabbing"
             style={{
                 left: positions.entry.x,
-                top: stopBoxTop,
+                top: Math.min(profitBoxTop, stopBoxTop),
                 width: boxWidth,
-                height: stopBoxHeight,
+                height: stopBoxHeight + profitBoxHeight,
             }}
             onMouseDown={(e) => handleMouseDown(e, 'body')}
-        >
-            <div className="relative w-full h-full flex items-center justify-center text-white text-xs text-center p-1">
-                <div>
-                    <p>Stop</p>
-                    <p className="font-bold">{riskPips} pips</p>
-                </div>
-            </div>
-        </div>
-      
-        {/* Take profit box */}
-        <div
-            className="absolute pointer-events-auto cursor-grab active:cursor-grabbing bg-accent/20"
-            style={{
-                left: positions.entry.x,
-                top: profitBoxTop,
-                width: boxWidth,
-                height: profitBoxHeight,
-            }}
-            onMouseDown={(e) => handleMouseDown(e, 'body')}
-        >
-            <div className="relative w-full h-full flex items-center justify-center text-white text-xs text-center p-1">
-                <div>
-                    <p>Target</p>
-                    <p className="font-bold">{rrRatio} R</p>
-                    <p>{rewardPips} pips</p>
-                </div>
-            </div>
-        </div>
+        />
       
        {/* Drag Handles */}
         <div
