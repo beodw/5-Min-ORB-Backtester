@@ -52,15 +52,11 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
     const chart = chartApi.chart;
     if (chart) {
       const timeScale = chart.timeScale();
-      timeScale.subscribeVisibleTimeRangeChange(updatePositions);
-      const priceScale = chart.priceScale('right');
-      
-      const priceScaleUpdateHandler = () => updatePositions();
-      priceScale.subscribeOptionsChange(priceScaleUpdateHandler);
+      const logicalRangeChangeHandler = () => updatePositions();
+      timeScale.subscribeVisibleLogicalRangeChange(logicalRangeChangeHandler);
       
       return () => {
-        timeScale.unsubscribeVisibleTimeRangeChange(updatePositions);
-        priceScale.unsubscribeOptionsChange(priceScaleUpdateHandler);
+        timeScale.unsubscribeVisibleLogicalRangeChange(logicalRangeChangeHandler);
       };
     }
   }, [chartApi, updatePositions]);
@@ -82,8 +78,8 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
     let newTool = { ...tool };
 
     if (isDragging === 'body') {
-        const startEntryY = positions.entryY;
-        const startEntryX = positions.entryX;
+        const startEntryY = chartApi.priceToCoordinate?.(dragInfo.current.startTool.entryPrice);
+        const startEntryX = chartApi.timeToCoordinate?.(Math.floor(dragInfo.current.startTool.entryDate.getTime() / 1000) as any);
         if(startEntryY === undefined || startEntryX === undefined) return;
         
         const newEntryPrice = chartApi.coordinateToPrice(startEntryY + dy);
@@ -112,7 +108,7 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
             else newTool.takeProfit = newPrice;
         }
     } else if (isDragging === 'left-edge') {
-        const startEntryX = positions.entryX;
+        const startEntryX = chartApi.timeToCoordinate?.(Math.floor(dragInfo.current.startTool.entryDate.getTime() / 1000) as any);
         if (startEntryX === undefined) return;
         const newTime = chartApi.coordinateToTime(startEntryX + dx);
         if (newTime === null) return;
@@ -125,7 +121,7 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
         newTool.entryDate = chartApi.data[newEntryIndex].date;
 
     } else if (isDragging === 'right-edge') {
-         const startEntryX = positions.entryX;
+         const startEntryX = chartApi.timeToCoordinate?.(Math.floor(dragInfo.current.startTool.entryDate.getTime() / 1000) as any);
          if(startEntryX === undefined) return;
 
          const entryIndex = findClosestIndex(chartApi.data, dragInfo.current.startTool.entryDate.getTime());
@@ -146,7 +142,7 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
     }
     
     onUpdate(newTool);
-  }, [isDragging, chartApi, onUpdate, positions]);
+  }, [isDragging, chartApi, onUpdate, tool]);
 
   const handleMouseUp = useCallback(() => {
     if (!isDragging) return;
@@ -257,5 +253,3 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
     </div>
   );
 }
-
-    
