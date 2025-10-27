@@ -53,11 +53,8 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
     if (chart) {
       const timeScale = chart.timeScale();
       timeScale.subscribeVisibleTimeRangeChange(updatePositions);
-      const priceScale = chart.priceScale('right');
-      priceScale.subscribeOptionsChange(updatePositions);
       return () => {
         timeScale.unsubscribeVisibleTimeRangeChange(updatePositions);
-        priceScale.unsubscribeOptionsChange(updatePositions);
       }
     }
   }, [chartApi, updatePositions]);
@@ -271,5 +268,3 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
     </div>
   );
 }
-
-    
