@@ -53,12 +53,9 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
     if (chart) {
       const timeScale = chart.timeScale();
       timeScale.subscribeVisibleTimeRangeChange(updatePositions);
-       const priceScale = chart.priceScale('right');
-       // This will not work as subscribeOptionsChange is not a function
-       // priceScale.subscribeOptionsChange(updatePositions);
+      // The price scale does not have a direct equivalent subscription
       return () => {
         timeScale.unsubscribeVisibleTimeRangeChange(updatePositions);
-        // priceScale.unsubscribeOptionsChange(updatePositions);
       }
     }
   }, [chartApi, updatePositions]);
@@ -126,7 +123,13 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
 
          const entryIndex = findClosestIndex(chartApi.data, tool.entryDate.getTime());
          
-         const newRightEdgeX = startEntryX + (toolRef.current?.offsetWidth || 0) + dx;
+         const rightEdgeDate = chartApi.data[Math.min(chartApi.data.length - 1, entryIndex + dragInfo.current.startTool.widthInCandles)]?.date;
+         if (!rightEdgeDate) return;
+
+         const startRightEdgeX = getX(rightEdgeDate);
+         if (startRightEdgeX === undefined) return;
+
+         const newRightEdgeX = startRightEdgeX + dx;
          const timeAtRightEdge = chartApi.coordinateToTime(newRightEdgeX);
          if(timeAtRightEdge === null) return;
          
@@ -168,6 +171,9 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
   // Calculate width in pixels based on candle count
   const entryIndex = findClosestIndex(chartApi.data, tool.entryDate.getTime());
   const endIndex = Math.min(chartApi.data.length - 1, entryIndex + tool.widthInCandles);
+
+  if (entryIndex < 0 || endIndex < 0 || entryIndex >= chartApi.data.length || endIndex >= chartApi.data.length) return null;
+
   const endX = getX(chartApi.data[endIndex]?.date);
   const boxWidth = endX !== undefined ? endX - positions.entry.x : 100;
   
@@ -177,12 +183,9 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
   
   return (
     <div ref={toolRef} className="absolute top-0 left-0 pointer-events-none w-full h-full">
-      {/* Stop Loss Box (Red) */}
+      {/* Invisible containers for drag events and info text */}
       <div
-        className={cn(
-          'absolute pointer-events-auto cursor-grab active:cursor-grabbing',
-          'bg-destructive/30'
-        )}
+        className="absolute pointer-events-auto cursor-grab active:cursor-grabbing"
         style={{
           left: positions.entry.x,
           top: stopBoxTop,
@@ -191,20 +194,16 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
         }}
         onMouseDown={(e) => handleMouseDown(e, 'body')}
       >
-        <div className="relative w-full h-full flex items-center justify-center">
-          <div className="text-white text-xs text-center p-1">
-            <p>Stop</p>
-            <p className="font-bold">{riskPips} pips</p>
-          </div>
+        <div className="relative w-full h-full flex items-center justify-center text-white text-xs text-center p-1">
+            <div>
+                <p>Stop</p>
+                <p className="font-bold">{riskPips} pips</p>
+            </div>
         </div>
       </div>
       
-      {/* Take Profit Box (Green) */}
       <div
-        className={cn(
-          'absolute pointer-events-auto cursor-grab active:cursor-grabbing',
-          'bg-accent/30'
-        )}
+        className="absolute pointer-events-auto cursor-grab active:cursor-grabbing"
         style={{
           left: positions.entry.x,
           top: profitBoxTop,
@@ -213,22 +212,15 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
         }}
         onMouseDown={(e) => handleMouseDown(e, 'body')}
       >
-        <div className="relative w-full h-full flex items-center justify-center">
-          <div className="text-white text-xs text-center p-1">
-            <p>Target</p>
-            <p className="font-bold">{rrRatio} R</p>
-            <p>{rewardPips} pips</p>
-          </div>
+        <div className="relative w-full h-full flex items-center justify-center text-white text-xs text-center p-1">
+            <div>
+                <p>Target</p>
+                <p className="font-bold">{rrRatio} R</p>
+                <p>{rewardPips} pips</p>
+            </div>
         </div>
       </div>
       
-      {/* Lines */}
-      <div className="absolute w-full h-full top-0 left-0 -z-10">
-        <div className="absolute bg-foreground/50" style={{ left: positions.entry.x, top: positions.entry.y, width: boxWidth, height: 1 }} />
-        <div className="absolute bg-destructive" style={{ left: positions.entry.x, top: positions.stop.y, width: boxWidth, height: 1 }} />
-        <div className="absolute bg-accent" style={{ left: positions.entry.x, top: positions.profit.y, width: boxWidth, height: 1 }} />
-      </div>
-
        {/* Drag Handles */}
         <div
             className="absolute h-full w-4 -ml-2 pointer-events-auto cursor-ew-resize z-10"

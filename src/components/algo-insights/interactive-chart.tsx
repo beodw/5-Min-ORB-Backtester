@@ -361,20 +361,102 @@ export function InteractiveChart({
         let minDistance = Infinity;
 
         priceMarkers.forEach(marker => {
-            const priceCoord = series.priceToCoordinate(marker.price);
-            if (priceCoord === null) return;
-
-            const distance = Math.abs(priceCoord - y);
-            if (distance < 10 && distance < minDistance) { // 10px tolerance
-                minDistance = distance;
-                markerToDelete = marker;
-            }
+             const priceCoord = series.priceToCoordinate(marker.price);
+             if (priceCoord === null) return;
+             
+             const distance = Math.abs(priceCoord - y);
+             if (distance < 10 && distance < minDistance) { // 10px tolerance
+                 minDistance = distance;
+                 markerToDelete = marker;
+             }
         });
         
         if (markerToDelete) {
             propsRef.current.onRemovePriceMarker(markerToDelete.id);
         }
     };
+    
+    // --- RR Tool Drawing ---
+    const rrToolLines = useRef(new Map<string, IPriceLine[]>());
+
+    useEffect(() => {
+        const series = candlestickSeriesRef.current;
+        const chartData = displayData;
+
+        if (!series || chartData.length === 0) return;
+
+        const currentToolIds = new Set(rrTools.map(t => t.id));
+
+        // Remove lines for deleted tools
+        rrToolLines.current.forEach((lines, id) => {
+            if (!currentToolIds.has(id)) {
+                lines.forEach(line => series.removePriceLine(line));
+                rrToolLines.current.delete(id);
+            }
+        });
+        
+        // Create or update lines for current tools
+        rrTools.forEach(tool => {
+            if (rrToolLines.current.has(tool.id)) {
+                rrToolLines.current.get(tool.id)?.forEach(line => series.removePriceLine(line));
+            }
+
+            const newLines: IPriceLine[] = [];
+
+            const isLong = tool.position === 'long';
+            const stopColor = 'rgba(239, 83, 80, 0.3)'; // semi-transparent red
+            const profitColor = 'rgba(38, 166, 154, 0.3)'; // semi-transparent green
+
+            const startIndex = findClosestIndex(chartData, tool.entryDate.getTime());
+            const endIndex = Math.min(chartData.length - 1, startIndex + tool.widthInCandles);
+
+            if (startIndex < 0 || endIndex < 0 || startIndex >= chartData.length || endIndex >= chartData.length) {
+                return;
+            }
+
+            const startTime = chartData[startIndex].date.getTime() / 1000 as UTCTimestamp;
+            const endTime = chartData[endIndex].date.getTime() / 1000 as UTCTimestamp;
+
+            const createHorizontalLine = (price: number, color: string, width: number, style: LineStyle) => {
+                return series.createPriceLine({
+                    price,
+                    color,
+                    lineWidth: width,
+                    lineStyle: style,
+                    axisLabelVisible: false,
+                    lineVisible: true,
+                });
+            };
+
+            const createBox = (price1: number, price2: number, color: string) => {
+                const [top, bottom] = price1 > price2 ? [price1, price2] : [price2, price1];
+                const priceStep = (top - bottom) / 5; // Draw 5 lines to simulate a box
+                 for (let i = 0; i <= 5; i++) {
+                     const price = bottom + i * priceStep;
+                     const line = createHorizontalLine(price, color, 15, LineStyle.Solid);
+                     // The logic to limit line's horizontal span is not available in lightweight-charts' public API.
+                     // This is a limitation. The lines will span the entire chart width.
+                     newLines.push(line);
+                 }
+            };
+            
+             const entryLine = createHorizontalLine(tool.entryPrice, '#ffffff', 1, LineStyle.Dashed);
+             newLines.push(entryLine);
+             const stopLine = createHorizontalLine(tool.stopLoss, '#EF5350', 2, LineStyle.Solid);
+             newLines.push(stopLine);
+             const profitLine = createHorizontalLine(tool.takeProfit, '#26A69A', 2, LineStyle.Solid);
+             newLines.push(profitLine);
+
+
+            // This is a visual approximation. The library doesn't support limited-length price lines.
+            // These will draw across the whole chart. The invisible HTML drag handles provide the interaction bounds.
+            createBox(tool.entryPrice, tool.stopLoss, stopColor);
+            createBox(tool.entryPrice, tool.takeProfit, profitColor);
+
+            rrToolLines.current.set(tool.id, newLines);
+        });
+
+    }, [rrTools, displayData]);
 
 
     return (
@@ -423,3 +505,5 @@ export function InteractiveChart({
         </div>
     );
 }
+
+    
