@@ -33,11 +33,11 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
   }, [chartApi]);
 
   const updatePositions = useCallback(() => {
-    const entryX = getX(tool.entryDate);
     const entryY = getY(tool.entryPrice);
     const stopY = getY(tool.stopLoss);
     const profitY = getY(tool.takeProfit);
-    
+    const entryX = getX(tool.entryDate);
+
     if (entryX !== undefined && entryY !== undefined && stopY !== undefined && profitY !== undefined) {
       setPositions({
         entry: { x: entryX, y: entryY },
@@ -53,9 +53,17 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
     if (chart) {
       const timeScale = chart.timeScale();
       timeScale.subscribeVisibleTimeRangeChange(updatePositions);
-      // The price scale does not have a direct equivalent subscription
+      const priceScale = chart.priceScale('right');
+      
+      const priceScaleSubscriber = () => updatePositions();
+      // lightweight-charts v4 doesn't have subscribeOptionsChange, so we use a workaround
+      // by checking for changes periodically. A better solution would be to use a library that
+      // exposes more events or use a ResizeObserver on the chart container.
+      const intervalId = setInterval(updatePositions, 100);
+
       return () => {
         timeScale.unsubscribeVisibleTimeRangeChange(updatePositions);
+        clearInterval(intervalId);
       }
     }
   }, [chartApi, updatePositions]);
@@ -144,10 +152,7 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
   const handleMouseUp = (e: MouseEvent) => {
     if (!isDragging) return;
     
-    // We get the final state of the tool from the mouse move
     const finalTool = { ...tool };
-
-    // Finalize the update and push to history
     onUpdateWithHistory(finalTool);
     
     setIsDragging(null);
@@ -168,7 +173,6 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
   const stopBoxHeight = Math.abs(positions.entry.y - positions.stop.y);
   const profitBoxHeight = Math.abs(positions.entry.y - positions.profit.y);
 
-  // Calculate width in pixels based on candle count
   const entryIndex = findClosestIndex(chartApi.data, tool.entryDate.getTime());
   const endIndex = Math.min(chartApi.data.length - 1, entryIndex + tool.widthInCandles);
 
@@ -177,49 +181,54 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
   const endX = getX(chartApi.data[endIndex]?.date);
   const boxWidth = endX !== undefined ? endX - positions.entry.x : 100;
   
-
   const stopBoxTop = isLong ? positions.entry.y : positions.stop.y;
   const profitBoxTop = isLong ? positions.profit.y : positions.entry.y;
   
   return (
     <div ref={toolRef} className="absolute top-0 left-0 pointer-events-none w-full h-full">
-      {/* Invisible containers for drag events and info text */}
-      <div
-        className="absolute pointer-events-auto cursor-grab active:cursor-grabbing"
-        style={{
-          left: positions.entry.x,
-          top: stopBoxTop,
-          width: boxWidth,
-          height: stopBoxHeight,
-        }}
-        onMouseDown={(e) => handleMouseDown(e, 'body')}
-      >
-        <div className="relative w-full h-full flex items-center justify-center text-white text-xs text-center p-1">
-            <div>
-                <p>Stop</p>
-                <p className="font-bold">{riskPips} pips</p>
+        {/* Lines */}
+        <div className="absolute h-px bg-white/50" style={{ left: positions.entry.x, top: positions.entry.y, width: boxWidth }} />
+        <div className="absolute h-px bg-white/50" style={{ left: positions.entry.x, top: positions.stop.y, width: boxWidth }} />
+        <div className="absolute h-px bg-white/50" style={{ left: positions.entry.x, top: positions.profit.y, width: boxWidth }} />
+
+        {/* Stop loss box */}
+        <div
+            className="absolute pointer-events-auto cursor-grab active:cursor-grabbing bg-destructive/20"
+            style={{
+                left: positions.entry.x,
+                top: stopBoxTop,
+                width: boxWidth,
+                height: stopBoxHeight,
+            }}
+            onMouseDown={(e) => handleMouseDown(e, 'body')}
+        >
+            <div className="relative w-full h-full flex items-center justify-center text-white text-xs text-center p-1">
+                <div>
+                    <p>Stop</p>
+                    <p className="font-bold">{riskPips} pips</p>
+                </div>
             </div>
         </div>
-      </div>
       
-      <div
-        className="absolute pointer-events-auto cursor-grab active:cursor-grabbing"
-        style={{
-          left: positions.entry.x,
-          top: profitBoxTop,
-          width: boxWidth,
-          height: profitBoxHeight,
-        }}
-        onMouseDown={(e) => handleMouseDown(e, 'body')}
-      >
-        <div className="relative w-full h-full flex items-center justify-center text-white text-xs text-center p-1">
-            <div>
-                <p>Target</p>
-                <p className="font-bold">{rrRatio} R</p>
-                <p>{rewardPips} pips</p>
+        {/* Take profit box */}
+        <div
+            className="absolute pointer-events-auto cursor-grab active:cursor-grabbing bg-accent/20"
+            style={{
+                left: positions.entry.x,
+                top: profitBoxTop,
+                width: boxWidth,
+                height: profitBoxHeight,
+            }}
+            onMouseDown={(e) => handleMouseDown(e, 'body')}
+        >
+            <div className="relative w-full h-full flex items-center justify-center text-white text-xs text-center p-1">
+                <div>
+                    <p>Target</p>
+                    <p className="font-bold">{rrRatio} R</p>
+                    <p>{rewardPips} pips</p>
+                </div>
             </div>
         </div>
-      </div>
       
        {/* Drag Handles */}
         <div
@@ -264,5 +273,3 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
     </div>
   );
 }
-
-    
