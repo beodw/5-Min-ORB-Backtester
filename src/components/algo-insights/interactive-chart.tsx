@@ -90,7 +90,7 @@ export function InteractiveChart({
     rrTools,
     priceMarkers,
     measurementTools,
-    liveMeasurementTool,
+liveMeasurementTool,
     onChartClick,
     onAggregationChange,
     onUpdateTool,
@@ -365,12 +365,17 @@ export function InteractiveChart({
         let minDistance = Infinity;
 
         priceMarkers.forEach(marker => {
+            if (!marker.isDeletable) return;
             const priceDistance = Math.abs(marker.price - clickedPrice);
-            // Heuristic for "close enough": check if the price is within 0.5% of the marker's value
-            const tolerance = marker.price * 0.005; 
-            if (priceDistance < tolerance && priceDistance < minDistance) {
-                minDistance = priceDistance;
-                markerToDelete = marker;
+            // Heuristic for "close enough": check if the clicked price is within a small vertical distance
+            // Let's use a fixed pixel tolerance for simplicity
+            const yMarker = series.priceToCoordinate(marker.price);
+            if (yMarker !== null) {
+                const yDistance = Math.abs(y - yMarker);
+                if (yDistance < 10 && priceDistance < minDistance) { // 10 pixels tolerance
+                    minDistance = priceDistance;
+                    markerToDelete = marker;
+                }
             }
         });
         

@@ -175,9 +175,47 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
   const profitBoxTop = isLong ? positions.profit.y : positions.entry.y;
   const stopBoxHeight = Math.abs(positions.entry.y - positions.stop.y);
   const profitBoxHeight = Math.abs(positions.entry.y - positions.profit.y);
+
+  const risk = Math.abs(tool.entryPrice - tool.stopLoss);
+  const reward = Math.abs(tool.takeProfit - tool.entryPrice);
+  const rrRatio = risk > 0 ? (reward / risk).toFixed(2) : '∞';
+
+  const riskInPips = (risk / pipValue).toFixed(1);
+  const rewardInPips = (reward / pipValue).toFixed(1);
   
   return (
     <div ref={toolRef} className="absolute top-0 left-0 pointer-events-none w-full h-full">
+      {/* Profit Box */}
+      <div
+        className={cn("absolute pointer-events-auto", isLong ? "bg-green-500/20" : "bg-red-500/20")}
+        style={{
+          left: positions.entry.x,
+          top: profitBoxTop,
+          width: boxWidth,
+          height: profitBoxHeight,
+        }}
+      >
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white text-xs whitespace-nowrap">
+            <p>Take Profit: {rewardInPips} pips</p>
+            <p>Risk/Reward Ratio: {rrRatio}</p>
+        </div>
+      </div>
+      
+      {/* Stop Box */}
+      <div
+        className={cn("absolute pointer-events-auto", isLong ? "bg-red-500/20" : "bg-green-500/20")}
+        style={{
+          left: positions.entry.x,
+          top: stopBoxTop,
+          width: boxWidth,
+          height: stopBoxHeight,
+        }}
+      >
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white text-xs whitespace-nowrap">
+            <p>Stop: {riskInPips} pips</p>
+        </div>
+      </div>
+
        <div
             className="absolute pointer-events-auto cursor-grab active:cursor-grabbing"
             style={{
