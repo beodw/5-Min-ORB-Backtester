@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, useRef } from "react";
@@ -36,6 +37,9 @@ type TradeLogEntry = {
     CandleNumber: number;
     EntryPrice: number;
     StopLossPrice: number;
+    CurrentPrice_Open: number;
+    CurrentPrice_High: number;
+    CurrentPrice_Low: number;
     CurrentPrice_Close: number;
     MFE_R: number;
     MAE_R: number;
@@ -118,7 +122,7 @@ const generateTradeLog = (
         const mfeR = mfePriceMove / riskInPrice;
 
         const maePriceMove = Math.abs(maePointer - tool.entryPrice);
-        const maeR = Math.min(1, maePriceMove / riskInPrice); // Cap MAE_R at 1
+        const maeR = Math.min(1, maePriceMove / riskInPrice);
         
         const drawdownPriceMove = Math.abs(mfePrice - candle.close);
         const drawdownFromMfeR = drawdownPriceMove / riskInPrice;
@@ -129,6 +133,9 @@ const generateTradeLog = (
             CandleNumber: i - entryIndex + 1,
             EntryPrice: tool.entryPrice,
             StopLossPrice: tool.stopLoss,
+            CurrentPrice_Open: candle.open,
+            CurrentPrice_High: candle.high,
+            CurrentPrice_Low: candle.low,
             CurrentPrice_Close: candle.close,
             MFE_R: parseFloat(mfeR.toFixed(4)),
             MAE_R: parseFloat(maeR.toFixed(4)),
@@ -783,28 +790,15 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
           return;
       }
       
-      const headers = ["TradeID", "EntryPrice", "StopLossPrice", "Timestamp", "CandleNumber", "CurrentPrice_Close", "MFE_R", "MAE_R", "DrawdownFromMFE_R", "Trade Status"].join(',');
+      const headers = ["TradeID", "EntryPrice", "StopLossPrice", "Timestamp", "CandleNumber", "CurrentPrice_Open", "CurrentPrice_High", "CurrentPrice_Low", "CurrentPrice_Close", "MFE_R", "MAE_R", "DrawdownFromMFE_R", "Trade Status"].join(',');
       
       toast({ title: "Generating Report...", description: `Processing ${rrTools.length} trades. This may take a moment.` });
 
       setTimeout(() => {
           try {
               const allLogs = rrTools.flatMap(tool => {
-                  if (tool.position === 'long') {
-                      return generateTradeLog(tool, priceData);
-                  } else { // short position
-                      const shortLog = generateTradeLog(tool, askPriceData);
-                      
-                      // Create a map of timestamps to bid close prices for efficient lookup
-                      const bidCloseMap = new Map<string, number>();
-                      priceData.forEach(p => bidCloseMap.set(formatDateForCsvTimestamp(p.date), p.close));
-                      
-                      // Override CurrentPrice_Close with bid prices for consistent analysis
-                      return shortLog.map(logEntry => ({
-                          ...logEntry,
-                          CurrentPrice_Close: bidCloseMap.get(logEntry.Timestamp) || logEntry.CurrentPrice_Close
-                      }));
-                  }
+                  const dataSet = tool.position === 'long' ? priceData : askPriceData;
+                  return generateTradeLog(tool, dataSet);
               });
               
               if (allLogs.length === 0) {
@@ -813,7 +807,21 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
               }
 
               const rows = allLogs.map(logEntry => 
-                  [logEntry.TradeID, logEntry.EntryPrice, logEntry.StopLossPrice, logEntry.Timestamp, logEntry.CandleNumber, logEntry.CurrentPrice_Close, logEntry.MFE_R, logEntry.MAE_R, logEntry.DrawdownFromMFE_R, logEntry['Trade Status']].join(',')
+                  [
+                    logEntry.TradeID, 
+                    logEntry.EntryPrice, 
+                    logEntry.StopLossPrice, 
+                    logEntry.Timestamp, 
+                    logEntry.CandleNumber, 
+                    logEntry.CurrentPrice_Open,
+                    logEntry.CurrentPrice_High,
+                    logEntry.CurrentPrice_Low,
+                    logEntry.CurrentPrice_Close, 
+                    logEntry.MFE_R, 
+                    logEntry.MAE_R, 
+                    logEntry.DrawdownFromMFE_R, 
+                    logEntry['Trade Status']
+                  ].join(',')
               ).join('\n');
 
               const csvContent = `${headers}\n${rows}`;
@@ -1415,5 +1423,3 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     </div>
   );
 }
-
-    
