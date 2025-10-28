@@ -1026,9 +1026,6 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
             setHistory([]);
             setRedoStack([]);
 
-            // Also need to import the price data file to see the chart
-            handleImportClick('bid');
-
             toast({ title: "Journal Reconstructed", description: `${reconstructedTools.length} trades loaded. Please import the Bid price data to view them on the chart.` });
 
         } catch (error: any) {
@@ -1170,35 +1167,34 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
 
                     <div className="h-6 border-l border-border/50"></div>
                 
-                    {tab === 'backtester' ? (
-                      <>
-                        <TooltipProvider>
-                            <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button variant="ghost" size="icon" onClick={() => handleImportClick('bid')}>
-                                <FileUp className={cn("h-5 w-5", isDataImported ? "text-chart-2" : "text-muted-foreground")} />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent><p>{isDataImported ? `Bid: ${fileName}`: "Import Bid Data"}</p></TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                        <TooltipProvider>
-                            <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button variant="ghost" size="icon" onClick={() => handleImportClick('ask')}>
-                                <FileUp className={cn("h-5 w-5", isAskDataImported ? "text-chart-5" : "text-muted-foreground")} />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent><p>{isAskDataImported ? `Ask: ${askFileName}` : "Import Ask Data"}</p></TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                        <input type="file" ref={askFileInputRef} onChange={(e) => handleFileChange(e, 'ask')} accept=".csv" className="hidden" />
+                    <TooltipProvider>
+                        <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button variant="ghost" size="icon" onClick={() => handleImportClick('bid')}>
+                            <FileUp className={cn("h-5 w-5", isDataImported ? "text-chart-2" : "text-muted-foreground")} />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent><p>{isDataImported ? `Bid: ${fileName}`: "Import Bid Data"}</p></TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
 
-                         <Button variant="ghost" onClick={handleExportCsv} disabled={rrTools.length === 0 || !isDataImported || !isAskDataImported} className="text-foreground">
+                    <TooltipProvider>
+                        <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button variant="ghost" size="icon" onClick={() => handleImportClick('ask')}>
+                            <FileUp className={cn("h-5 w-5", isAskDataImported ? "text-chart-5" : "text-muted-foreground")} />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent><p>{isAskDataImported ? `Ask: ${askFileName}` : "Import Ask Data"}</p></TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    <input type="file" ref={askFileInputRef} onChange={(e) => handleFileChange(e, 'ask')} accept=".csv" className="hidden" />
+
+                    {tab === 'backtester' ? (
+                        <Button variant="ghost" onClick={handleExportCsv} disabled={rrTools.length === 0 || !isDataImported || !isAskDataImported} className="text-foreground">
                             <Download className="mr-2 h-4 w-4" />
                             Download Report
                         </Button>
-                      </>
                     ) : (
                         <>
                             <TooltipProvider>
@@ -1222,7 +1218,7 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                     <p className="text-xs text-muted-foreground/80">Bid Data: <span className="font-medium text-foreground/90">{fileName}</span></p>
                 </div>
             )}
-             {askFileName && tab === 'backtester' && (
+             {askFileName && (
                 <div className="bg-card/70 backdrop-blur-sm rounded-md px-2 py-1 shadow-md ml-8">
                     <p className="text-xs text-muted-foreground/80">Ask Data: <span className="font-medium text-foreground/90">{askFileName}</span></p>
                 </div>
