@@ -85,7 +85,6 @@ const generateTradeLog = (
     const riskInPrice = Math.abs(tool.entryPrice - tool.stopLoss);
     if (riskInPrice <= 0) return [];
     
-    let mfePointer = tool.entryPrice;
     let maePointer = tool.entryPrice;
     let mfePrice = tool.entryPrice;
 
@@ -100,9 +99,9 @@ const generateTradeLog = (
         }
 
         if (tool.position === 'long') {
-            mfePrice = Math.max(mfePrice, candle.close);
+            mfePrice = Math.max(mfePrice, candle.high);
         } else { // Short position
-            mfePrice = Math.min(mfePrice, candle.close);
+            mfePrice = Math.min(mfePrice, candle.low);
         }
         
         let currentMaePointer = maePointer;
@@ -1190,10 +1189,12 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                     </TooltipProvider>
                     <input type="file" ref={askFileInputRef} onChange={(e) => handleFileChange(e, 'ask')} accept=".csv" className="hidden" />
                     
-                    <Button variant="ghost" onClick={handleExportCsv} disabled={rrTools.length === 0 || !isDataImported || !isAskDataImported} className="text-foreground">
-                        <Download className="mr-2 h-4 w-4" />
-                        Download Report
-                    </Button>
+                    {(tab === 'backtester' || tab === 'journal') && (
+                        <Button variant="ghost" onClick={handleExportCsv} disabled={rrTools.length === 0 || !isDataImported || !isAskDataImported} className="text-foreground">
+                            <Download className="mr-2 h-4 w-4" />
+                            Download Report
+                        </Button>
+                    )}
 
                     {tab === 'journal' && (
                         <>
@@ -1419,3 +1420,5 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
     </div>
   );
 }
+
+    
