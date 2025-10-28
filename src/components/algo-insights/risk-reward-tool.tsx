@@ -25,6 +25,9 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
     endX?: number;
   }>({});
 
+  const propsRef = useRef({ onUpdate, onUpdateWithHistory });
+  propsRef.current = { onUpdate, onUpdateWithHistory };
+
   const updatePositions = useCallback(() => {
     if (!chartApi.timeToCoordinate || !chartApi.priceToCoordinate || !chartApi.data || chartApi.data.length === 0) return;
     
@@ -75,7 +78,8 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
     const dx = e.clientX - dragInfo.current.startX;
     const dy = e.clientY - dragInfo.current.startY;
     
-    let newTool = { ...tool };
+    const currentDragTool = { ...dragInfo.current.startTool };
+    let newTool = { ...currentDragTool };
 
     if (isDragging === 'body') {
         const startEntryY = chartApi.priceToCoordinate?.(dragInfo.current.startTool.entryPrice);
@@ -118,7 +122,9 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
         
         const candleDiff = originalEntryIndex - newEntryIndex;
         newTool.widthInCandles = Math.max(1, dragInfo.current.startTool.widthInCandles + candleDiff);
-        newTool.entryDate = chartApi.data[newEntryIndex].date;
+        if (chartApi.data[newEntryIndex]) {
+          newTool.entryDate = chartApi.data[newEntryIndex].date;
+        }
 
     } else if (isDragging === 'right-edge') {
          const startEntryX = chartApi.timeToCoordinate?.(Math.floor(dragInfo.current.startTool.entryDate.getTime() / 1000) as any);
@@ -141,16 +147,16 @@ export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, 
          newTool.widthInCandles = Math.max(1, newRightIndex - entryIndex);
     }
     
-    onUpdate(newTool);
-  }, [isDragging, chartApi, onUpdate, tool]);
+    propsRef.current.onUpdate(newTool);
+  }, [isDragging, chartApi]);
 
   const handleMouseUp = useCallback(() => {
     if (!isDragging) return;
     setIsDragging(null);
-    onUpdateWithHistory(tool);
+    propsRef.current.onUpdateWithHistory(tool);
     window.removeEventListener('mousemove', handleMouseMove);
     window.removeEventListener('mouseup', handleMouseUp);
-  }, [isDragging, onUpdateWithHistory, handleMouseMove, tool]);
+  }, [isDragging, handleMouseMove, tool]);
 
   const { entryX, entryY, stopY, profitY, endX } = positions;
 
