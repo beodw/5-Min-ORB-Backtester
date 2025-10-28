@@ -1,5 +1,4 @@
 
-import type { Time, Coordinate, IChartApi, ISeriesApi } from 'lightweight-charts';
 
 export interface PriceData {
   date: Date;
@@ -9,13 +8,6 @@ export interface PriceData {
   close: number;
   wick: [number, number];
 }
-
-export type AggregatedPriceData = {
-  '1m': PriceData[];
-  '15m': PriceData[];
-  '1h': PriceData[];
-  '1d': PriceData[];
-};
 
 // Added to fix a type error in InteractiveChart
 export interface Trade {
@@ -31,7 +23,7 @@ export interface RiskRewardTool {
   stopLoss: number;
   takeProfit: number;
   entryDate: Date;
-  widthInCandles: number;
+  widthInPoints: number;
   position: 'long' | 'short';
 }
 
@@ -68,16 +60,3 @@ export interface JournalTrade {
   originalOutcome: 'Win' | 'Loss';
   outcome: 'Win' | 'Loss';
 }
-
-export interface ChartApi {
-    timeToCoordinate: ((time: Time) => Coordinate | null) | undefined;
-    coordinateToTime: ((coord: number) => Time | null) | undefined;
-    priceToCoordinate: ((price: number) => Coordinate | null) | undefined;
-    coordinateToPrice: ((coord: number) => number | null) | undefined;
-    chartElement: HTMLDivElement | null;
-    data: PriceData[];
-    chart: IChartApi | null;
-    series: ISeriesApi<'Candlestick'> | null;
-}
-
-    

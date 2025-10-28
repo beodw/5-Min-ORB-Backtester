@@ -1,261 +1,305 @@
 
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import type { RiskRewardTool as RRToolType, ChartApi } from '@/types';
-import { cn } from '@/lib/utils';
-import { X } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import type { RiskRewardTool as RRToolType, PriceData } from '@/types';
 import { findClosestIndex } from '@/lib/chart-utils';
 
 interface RiskRewardToolProps {
   tool: RRToolType;
-  chartApi: ChartApi;
-  onUpdate: (tool: RRToolType) => void;
-  onUpdateWithHistory: (tool: RRToolType) => void;
+  onUpdateTool: (tool: RRToolType) => void;
   onRemove: (id: string) => void;
-  pipValue: number;
+  data: PriceData[];
+  xScale: ((date: number) => number) & { invert?: (x: number) => number };
+  yScale: ((price: number) => number) & { invert?: (y: number) => number };
+  plot: { width: number; height: number; top: number; left: number };
+  svgBounds: DOMRect;
 }
 
-export function RiskRewardTool({ tool, chartApi, onUpdate, onUpdateWithHistory, onRemove, pipValue }: RiskRewardToolProps) {
-  const [isDragging, setIsDragging] = useState<null | 'entry' | 'stop' | 'profit' | 'body' | 'left-edge' | 'right-edge'>(null);
-  const dragInfo = useRef({ startX: 0, startY: 0, startTool: tool });
-  const [positions, setPositions] = useState<{
-    entryX?: number; entryY?: number;
-    stopY?: number; profitY?: number;
-    endX?: number;
-  }>({});
-
-  const propsRef = useRef({ onUpdate, onUpdateWithHistory });
-  propsRef.current = { onUpdate, onUpdateWithHistory };
-
-  const updatePositions = useCallback(() => {
-    if (!chartApi.timeToCoordinate || !chartApi.priceToCoordinate || !chartApi.data || chartApi.data.length === 0) return;
-    
-    const entryX = chartApi.timeToCoordinate(Math.floor(tool.entryDate.getTime() / 1000) as any);
-
-    const entryIndex = findClosestIndex(chartApi.data, tool.entryDate.getTime());
-    const endIndex = Math.min(chartApi.data.length - 1, entryIndex + tool.widthInCandles);
-    const endDate = chartApi.data[endIndex]?.date;
-    if (!endDate) return;
-
-    const endX = chartApi.timeToCoordinate(Math.floor(endDate.getTime() / 1000) as any);
-
-    setPositions({
-        entryX: entryX ?? undefined,
-        endX: endX ?? undefined,
-        entryY: chartApi.priceToCoordinate(tool.entryPrice) ?? undefined,
-        stopY: chartApi.priceToCoordinate(tool.stopLoss) ?? undefined,
-        profitY: chartApi.priceToCoordinate(tool.takeProfit) ?? undefined,
-    });
-  }, [tool, chartApi]);
-
+export function RiskRewardTool({ tool, onUpdateTool, onRemove, data, xScale, yScale, plot, svgBounds }: RiskRewardToolProps) {
+  const [isDragging, setIsDragging] = useState<null | 'entry' | 'stop' | 'profit' | 'width'>(null);
+  const [isPopupOpen, setIsPopupOpen] = useState(false);
+  const [editedTool, setEditedTool] = useState<RRToolType>(tool);
 
   useEffect(() => {
-    updatePositions();
-    const chart = chartApi.chart;
-    if (chart) {
-      const timeScale = chart.timeScale();
-      const logicalRangeChangeHandler = () => updatePositions();
-      timeScale.subscribeVisibleLogicalRangeChange(logicalRangeChangeHandler);
-      
-      return () => {
-        timeScale.unsubscribeVisibleLogicalRangeChange(logicalRangeChangeHandler);
-      };
+    // Keep internal state in sync with external prop changes, but only if not editing.
+    if (!isPopupOpen) {
+      setEditedTool(tool);
     }
-  }, [chartApi, updatePositions]);
-  
-  const handleMouseDown = (e: React.MouseEvent, part: 'entry' | 'stop' | 'profit' | 'body' | 'left-edge' | 'right-edge') => {
+  }, [tool, isPopupOpen]);
+
+  const handleMouseDown = (e: React.MouseEvent, part: 'entry' | 'stop' | 'profit' | 'width') => {
+    // Prevent dragging when the popup is open
+    if (isPopupOpen) return;
+
+    e.preventDefault();
     e.stopPropagation();
     setIsDragging(part);
-    dragInfo.current = { startX: e.clientX, startY: e.clientY, startTool: { ...tool } };
+
+    const startToolState = { ...tool };
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      moveEvent.preventDefault();
+
+      if (!yScale.invert || !xScale.invert) return;
+
+      let newTool = { ...tool };
+      const mouseYInSvg = moveEvent.clientY - svgBounds.top;
+      const mouseXInSvg = moveEvent.clientX - svgBounds.left;
+      
+      if (part === 'entry') {
+        const mouseXInPlot = mouseXInSvg - plot.left;
+        const newEntryPrice = yScale.invert(mouseYInSvg);
+        const newTimestamp = xScale.invert(mouseXInPlot);
+        
+        if (newEntryPrice === undefined || newTimestamp === undefined) return;
+
+        const stopOffset = startToolState.entryPrice - startToolState.stopLoss;
+        const profitOffset = startToolState.takeProfit - startToolState.entryPrice;
+        
+        newTool.entryPrice = newEntryPrice;
+        newTool.stopLoss = newEntryPrice - stopOffset;
+        newTool.takeProfit = newEntryPrice + profitOffset;
+        
+        const newCandle = data.find(d => d.date.getTime() >= newTimestamp);
+        if (newCandle) {
+          newTool.entryDate = newCandle.date;
+        }
+
+      } else if (part === 'stop') {
+        const newPrice = yScale.invert(mouseYInSvg);
+        if (newPrice !== undefined) newTool.stopLoss = newPrice;
+      
+      } else if (part === 'profit') {
+        const newPrice = yScale.invert(mouseYInSvg);
+        if (newPrice !== undefined) newTool.takeProfit = newPrice;
+      
+      } else if (part === 'width') {
+        const mouseXInPlot = mouseXInSvg - plot.left;
+        const newTimestamp = xScale.invert(mouseXInPlot);
+        
+        if (newTimestamp !== undefined) {
+          const entryTimestamp = tool.entryDate.getTime();
+          if (entryTimestamp) {
+              const candleInterval = data.length > 1 ? data[1].date.getTime() - data[0].date.getTime() : 60000;
+              const newWidthInPoints = Math.round((newTimestamp - entryTimestamp) / candleInterval);
+
+              if (newWidthInPoints >= 5) {
+                newTool.widthInPoints = newWidthInPoints;
+              }
+          }
+        }
+      }
+      
+      onUpdateTool(newTool);
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(null);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
   };
 
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (!isDragging || !chartApi.coordinateToPrice || !chartApi.coordinateToTime || !chartApi.data) return;
+  const entryTimestamp = tool.entryDate.getTime();
 
-    const dx = e.clientX - dragInfo.current.startX;
-    const dy = e.clientY - dragInfo.current.startY;
-    
-    const currentDragTool = { ...dragInfo.current.startTool };
-    let newTool = { ...currentDragTool };
-
-    if (isDragging === 'body') {
-        const startEntryY = chartApi.priceToCoordinate?.(dragInfo.current.startTool.entryPrice);
-        const startEntryX = chartApi.timeToCoordinate?.(Math.floor(dragInfo.current.startTool.entryDate.getTime() / 1000) as any);
-        if(startEntryY === undefined || startEntryX === undefined) return;
-        
-        const newEntryPrice = chartApi.coordinateToPrice(startEntryY + dy);
-        const newTime = chartApi.coordinateToTime(startEntryX + dx);
-        
-        if (newEntryPrice === null || newTime === null) return;
-        
-        const priceDiff = dragInfo.current.startTool.entryPrice - newEntryPrice;
-        newTool.entryPrice = newEntryPrice;
-        newTool.stopLoss = dragInfo.current.startTool.stopLoss - priceDiff;
-        newTool.takeProfit = dragInfo.current.startTool.takeProfit - priceDiff;
-
-        const closestIndex = findClosestIndex(chartApi.data, newTime * 1000);
-        if (chartApi.data[closestIndex]) {
-          newTool.entryDate = chartApi.data[closestIndex].date;
-        }
-
-    } else if (isDragging === 'entry' || isDragging === 'stop' || isDragging === 'profit') {
-        const startPrice = dragInfo.current.startTool[isDragging === 'entry' ? 'entryPrice' : isDragging === 'stop' ? 'stopLoss' : 'takeProfit'];
-        const startY = chartApi.priceToCoordinate?.(startPrice);
-        if(startY === undefined) return;
-        const newPrice = chartApi.coordinateToPrice(startY + dy);
-        if (newPrice !== null) {
-            if(isDragging === 'entry') newTool.entryPrice = newPrice;
-            else if(isDragging === 'stop') newTool.stopLoss = newPrice;
-            else newTool.takeProfit = newPrice;
-        }
-    } else if (isDragging === 'left-edge') {
-        const startEntryX = chartApi.timeToCoordinate?.(Math.floor(dragInfo.current.startTool.entryDate.getTime() / 1000) as any);
-        if (startEntryX === undefined) return;
-        const newTime = chartApi.coordinateToTime(startEntryX + dx);
-        if (newTime === null) return;
-
-        const newEntryIndex = findClosestIndex(chartApi.data, newTime * 1000);
-        const originalEntryIndex = findClosestIndex(chartApi.data, dragInfo.current.startTool.entryDate.getTime());
-        
-        const candleDiff = originalEntryIndex - newEntryIndex;
-        newTool.widthInCandles = Math.max(1, dragInfo.current.startTool.widthInCandles + candleDiff);
-        if (chartApi.data[newEntryIndex]) {
-          newTool.entryDate = chartApi.data[newEntryIndex].date;
-        }
-
-    } else if (isDragging === 'right-edge') {
-         const startEntryX = chartApi.timeToCoordinate?.(Math.floor(dragInfo.current.startTool.entryDate.getTime() / 1000) as any);
-         if(startEntryX === undefined) return;
-
-         const entryIndex = findClosestIndex(chartApi.data, dragInfo.current.startTool.entryDate.getTime());
-         
-         const rightEdgeDate = chartApi.data[Math.min(chartApi.data.length - 1, entryIndex + dragInfo.current.startTool.widthInCandles)]?.date;
-         if (!rightEdgeDate) return;
-
-         const startRightEdgeX = chartApi.timeToCoordinate?.(Math.floor(rightEdgeDate.getTime()/1000) as any);
-         if (startRightEdgeX === undefined) return;
-
-         const newRightEdgeX = startRightEdgeX + dx;
-         const timeAtRightEdge = chartApi.coordinateToTime(newRightEdgeX);
-         if(timeAtRightEdge === null) return;
-         
-         const newRightIndex = findClosestIndex(chartApi.data, timeAtRightEdge * 1000);
-         
-         newTool.widthInCandles = Math.max(1, newRightIndex - entryIndex);
-    }
-    
-    propsRef.current.onUpdate(newTool);
-  }, [isDragging, chartApi]);
-
-  const handleMouseUp = useCallback(() => {
-    if (!isDragging) return;
-    setIsDragging(null);
-    propsRef.current.onUpdateWithHistory(tool);
-    window.removeEventListener('mousemove', handleMouseMove);
-    window.removeEventListener('mouseup', handleMouseUp);
-  }, [isDragging, handleMouseMove, tool]);
-
-  const { entryX, entryY, stopY, profitY, endX } = positions;
-
-  if (entryX === undefined || entryY === undefined || stopY === undefined || profitY === undefined || endX === undefined) return null;
-
-  const isLong = tool.position === 'long';
-  const profitColor = isLong ? 'rgba(0, 255, 0, 0.2)' : 'rgba(255, 0, 0, 0.2)';
-  const stopColor = isLong ? 'rgba(255, 0, 0, 0.2)' : 'rgba(0, 255, 0, 0.2)';
+  if (!entryTimestamp || !data || data.length === 0) {
+    return null;
+  }
   
-  const boxWidth = endX - entryX;
-
-  const profitTop = Math.min(entryY, profitY);
-  const profitHeight = Math.abs(entryY - profitY);
-
-  const stopTop = Math.min(entryY, stopY);
-  const stopHeight = Math.abs(entryY - stopY);
-
-  const riskInPrice = Math.abs(tool.entryPrice - tool.stopLoss);
-  const rewardInPrice = Math.abs(tool.takeProfit - tool.entryPrice);
-  const riskRewardRatio = riskInPrice > 0 ? (rewardInPrice / riskInPrice).toFixed(2) : '∞';
+  const interval = data.length > 1 ? data[1].date.getTime() - data[0].date.getTime() : 60000;
+  const endDate = entryTimestamp + tool.widthInPoints * interval;
 
 
-  const handleSize = 8;
-  const halfHandleSize = handleSize / 2;
+  const leftX = xScale(entryTimestamp);
+  const rightX = xScale(endDate);
+  const width = rightX - leftX;
+
+  const entryY = yScale(tool.entryPrice);
+  const profitY = yScale(tool.takeProfit);
+  const stopY = yScale(tool.stopLoss);
+  
+  if (isNaN(leftX) || isNaN(rightX) || isNaN(entryY) || isNaN(profitY) || isNaN(stopY)) {
+      return null;
+  }
+
+  const profitZoneY = tool.position === 'long' ? profitY : entryY;
+  const profitZoneHeight = Math.abs(entryY - profitY);
+  const lossZoneY = tool.position === 'long' ? entryY : stopY;
+  const lossZoneHeight = Math.abs(stopY - entryY);
+  
+  const rrRatio = tool.entryPrice - tool.stopLoss !== 0 ? Math.abs((tool.takeProfit - tool.entryPrice) / (tool.entryPrice - tool.stopLoss)) : Infinity;
+
+  const handleDelete = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onRemove(tool.id);
+  };
+
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditedTool(tool); // Reset to current tool state on open
+    setIsPopupOpen(true);
+  };
+
+  const handleApply = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onUpdateTool(editedTool);
+    setIsPopupOpen(false);
+  };
+
+  const handleClosePopup = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsPopupOpen(false);
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setEditedTool(prev => ({ ...prev, [name]: parseFloat(value) || 0 }));
+  };
+
+  // Popup positioning
+  const popupWidth = 180;
+  const popupHeight = 160;
+  let popupX = leftX + width / 2 - popupWidth / 2;
+  let popupY = entryY - popupHeight / 2;
+
+  // Ensure popup stays within plot bounds
+  if (popupX < plot.left) popupX = plot.left;
+  if (popupX + popupWidth > plot.left + plot.width) popupX = plot.left + plot.width - popupWidth;
+  if (popupY < plot.top) popupY = plot.top;
+  if (popupY + popupHeight > plot.top + plot.height) popupY = plot.top + plot.height - popupHeight;
+
 
   return (
-    <div className="absolute top-0 left-0 pointer-events-none w-full h-full z-10">
-       {/* Profit Box */}
-       <div
-            className="absolute pointer-events-auto cursor-grab active:cursor-grabbing z-10"
-            style={{
-                left: entryX,
-                top: profitTop,
-                width: boxWidth,
-                height: profitHeight,
-                backgroundColor: profitColor
-            }}
-            onMouseDown={(e) => handleMouseDown(e, 'body')}
-        />
-        {/* Stop Box */}
-       <div
-            className="absolute pointer-events-auto cursor-grab active:cursor-grabbing z-10"
-            style={{
-                left: entryX,
-                top: stopTop,
-                width: boxWidth,
-                height: stopHeight,
-                backgroundColor: stopColor
-            }}
-            onMouseDown={(e) => handleMouseDown(e, 'body')}
-        />
+    <g style={{ pointerEvents: 'all' }} onDoubleClick={handleDoubleClick}>
+      {/* Profit Zone */}
+      <rect
+        x={leftX}
+        y={profitZoneY}
+        width={width}
+        height={profitZoneHeight}
+        fill="hsla(120, 100%, 50%, 0.15)"
+        stroke="hsla(120, 100%, 50%, 0.7)"
+        strokeDasharray="3 3"
+        style={{ pointerEvents: 'none' }}
+      />
+      {/* Loss Zone */}
+      <rect
+        x={leftX}
+        y={lossZoneY}
+        width={width}
+        height={lossZoneHeight}
+        fill="hsla(0, 84.2%, 60.2%, 0.15)"
+        stroke="hsla(0, 84.2%, 60.2%, 0.7)"
+        strokeDasharray="3 3"
+        style={{ pointerEvents: 'none' }}
+      />
       
-       {/* Edge and corner handles */}
-        <div
-            className="absolute pointer-events-auto cursor-ew-resize z-20"
-            style={{ left: entryX - halfHandleSize, top: Math.min(profitY, stopY), width: handleSize, height: Math.abs(profitY - stopY) }}
-            onMouseDown={(e) => handleMouseDown(e, 'left-edge')}
-        />
-        <div
-            className="absolute pointer-events-auto cursor-ew-resize z-20"
-            style={{ left: endX - halfHandleSize, top: Math.min(profitY, stopY), width: handleSize, height: Math.abs(profitY - stopY) }}
-            onMouseDown={(e) => handleMouseDown(e, 'right-edge')}
-        />
-        <div
-            className="absolute pointer-events-auto cursor-ns-resize z-20 rounded-full border bg-background"
-            style={{ left: entryX + boxWidth / 2 - halfHandleSize, top: entryY - halfHandleSize, width: handleSize, height: handleSize }}
-            onMouseDown={(e) => handleMouseDown(e, 'entry')}
-        />
-        <div
-            className="absolute pointer-events-auto cursor-ns-resize z-20 rounded-full border bg-background"
-            style={{ left: entryX + boxWidth / 2 - halfHandleSize, top: stopY - halfHandleSize, width: handleSize, height: handleSize }}
-            onMouseDown={(e) => handleMouseDown(e, 'stop')}
-        />
-        <div
-            className="absolute pointer-events-auto cursor-ns-resize z-20 rounded-full border bg-background"
-            style={{ left: entryX + boxWidth / 2 - halfHandleSize, top: profitY - halfHandleSize, width: handleSize, height: handleSize }}
-            onMouseDown={(e) => handleMouseDown(e, 'profit')}
-        />
+      {/* Label Group */}
+      <g transform={`translate(${leftX + width / 2}, ${entryY})`} style={{ userSelect: 'none' }}>
+          <rect x={-40} y={-15} width={80} height={30} fill="hsla(0, 0%, 10%, 0.6)" rx="3" />
+          <text textAnchor="middle" x="0" y="-3" fill="white" fontSize="10">RR: {isFinite(rrRatio) ? rrRatio.toFixed(2) : '∞'}</text>
+          <text textAnchor="middle" x="0" y="10" fill="white" fontSize="10" style={{textTransform: 'capitalize'}}>{tool.position}</text>
+      </g>
+      
+      {/* Interactive Hitboxes */}
+      {/* Entry Drag Hitbox */}
+      <rect
+          x={leftX}
+          y={entryY - 5}
+          width={width}
+          height={10}
+          fill="transparent"
+          style={{ cursor: 'move' }}
+          onMouseDown={(e) => handleMouseDown(e, 'entry')}
+      />
+      {/* Stop Drag Hitbox */}
+      <rect
+          x={leftX}
+          y={stopY - 5}
+          width={width}
+          height={10}
+          fill="transparent"
+          style={{ cursor: 'ns-resize' }}
+          onMouseDown={(e) => handleMouseDown(e, 'stop')}
+      />
+      {/* Profit Drag Hitbox */}
+      <rect
+          x={leftX}
+          y={profitY - 5}
+          width={width}
+          height={10}
+          fill="transparent"
+          style={{ cursor: 'ns-resize' }}
+          onMouseDown={(e) => handleMouseDown(e, 'profit')}
+      />
+      {/* Width Drag Hitbox */}
+       <rect
+          x={rightX - 5}
+          y={Math.min(profitY, stopY)}
+          width={10}
+          height={Math.abs(profitY - stopY)}
+          fill="transparent"
+          style={{ cursor: 'ew-resize' }}
+          onMouseDown={(e) => handleMouseDown(e, 'width')}
+      />
 
 
-      {/* Remove button */}
-       <button
-            onClick={() => onRemove(tool.id)}
-            onMouseDown={(e) => e.stopPropagation()}
-            className="absolute pointer-events-auto bg-destructive text-destructive-foreground rounded-full p-0.5 z-30 cursor-pointer"
-            style={{
-                left: endX + 5,
-                top: entryY - 8,
-            }}
-        >
-            <X className="h-3 w-3" />
-        </button>
-
-        {/* Info Box */}
-        <div className="absolute pointer-events-none text-xs bg-background/70 p-1 rounded"
-             style={{ left: entryX + 5, top: isLong ? profitTop + 5 : stopTop + 5 }}
-        >
-          <div>Risk/Reward Ratio: {riskRewardRatio}</div>
-        </div>
-    </div>
+      {/* Delete Button */}
+      <g 
+          transform={`translate(${leftX + width / 2}, ${entryY - 25})`}
+          onMouseDown={handleDelete}
+          style={{ cursor: 'pointer' }}
+      >
+        <circle r={8} fill="hsl(var(--card))" stroke="hsl(var(--border))" />
+        <line x1={-3} y1={-3} x2={3} y2={3} stroke="hsl(var(--muted-foreground))" strokeWidth="1.5"/>
+        <line x1={-3} y1={3} x2={3} y2={-3} stroke="hsl(var(--muted-foreground))" strokeWidth="1.5"/>
+      </g>
+      
+      {/* Edit Popup */}
+      {isPopupOpen && (
+        <foreignObject x={popupX} y={popupY} width={popupWidth} height={popupHeight}>
+            <div 
+              xmlns="http://www.w3.org/1999/xhtml"
+              style={{
+                background: 'hsl(var(--popover))',
+                color: 'hsl(var(--popover-foreground))',
+                border: '1px solid hsl(var(--border))',
+                borderRadius: 'var(--radius)',
+                padding: '12px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+                fontFamily: 'sans-serif',
+                fontSize: '12px',
+                boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
+                userSelect: 'none'
+              }}
+              onMouseDown={(e) => e.stopPropagation()} // Prevent chart drag when interacting with popup
+            >
+                <div style={{display: 'grid', gridTemplateColumns: '70px 1fr', alignItems: 'center'}}>
+                    <label htmlFor="entryPrice">Entry</label>
+                    <input type="number" name="entryPrice" value={editedTool.entryPrice} onChange={handleInputChange} style={{width: '100%', background: 'hsl(var(--input))', border: '1px solid hsl(var(--border))', borderRadius: '3px', padding: '2px 4px', color: 'hsl(var(--foreground))'}} />
+                </div>
+                <div style={{display: 'grid', gridTemplateColumns: '70px 1fr', alignItems: 'center'}}>
+                    <label htmlFor="takeProfit">Take Profit</label>
+                    <input type="number" name="takeProfit" value={editedTool.takeProfit} onChange={handleInputChange} style={{width: '100%', background: 'hsl(var(--input))', border: '1px solid hsl(var(--border))', borderRadius: '3px', padding: '2px 4px', color: 'hsl(var(--foreground))'}} />
+                </div>
+                <div style={{display: 'grid', gridTemplateColumns: '70px 1fr', alignItems: 'center'}}>
+                    <label htmlFor="stopLoss">Stop Loss</label>
+                    <input type="number" name="stopLoss" value={editedTool.stopLoss} onChange={handleInputChange} style={{width: '100%', background: 'hsl(var(--input))', border: '1px solid hsl(var(--border))', borderRadius: '3px', padding: '2px 4px', color: 'hsl(var(--foreground))'}} />
+                </div>
+                <div style={{display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px'}}>
+                    <button onClick={handleClosePopup} style={{background: 'hsl(var(--secondary))', color: 'hsl(var(--secondary-foreground))', border: 'none', padding: '4px 8px', borderRadius: '3px', cursor: 'pointer'}}>Cancel</button>
+                    <button onClick={handleApply} style={{background: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))', border: 'none', padding: '4px 8px', borderRadius: '3px', cursor: 'pointer'}}>Apply</button>
+                </div>
+            </div>
+        </foreignObject>
+      )}
+    </g>
   );
 }
