@@ -1189,13 +1189,13 @@ export function ChartContainer({ tab }: { tab: 'backtester' | 'journal' }) {
                       </Tooltip>
                     </TooltipProvider>
                     <input type="file" ref={askFileInputRef} onChange={(e) => handleFileChange(e, 'ask')} accept=".csv" className="hidden" />
+                    
+                    <Button variant="ghost" onClick={handleExportCsv} disabled={rrTools.length === 0 || !isDataImported || !isAskDataImported} className="text-foreground">
+                        <Download className="mr-2 h-4 w-4" />
+                        Download Report
+                    </Button>
 
-                    {tab === 'backtester' ? (
-                        <Button variant="ghost" onClick={handleExportCsv} disabled={rrTools.length === 0 || !isDataImported || !isAskDataImported} className="text-foreground">
-                            <Download className="mr-2 h-4 w-4" />
-                            Download Report
-                        </Button>
-                    ) : (
+                    {tab === 'journal' && (
                         <>
                             <TooltipProvider>
                                 <Tooltip>
